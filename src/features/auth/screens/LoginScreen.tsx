@@ -1,0 +1,200 @@
+import React from 'react';
+import {
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { AuthStackScreenProps } from '../../../types/navigation.types';
+import { AuthRoutes } from '../../../navigation/routes';
+import { useTheme } from '../../../hooks/useTheme';
+import {
+  AppText,
+  AppView,
+  Button,
+  Divider,
+  Input,
+  useToast,
+} from '../../../components';
+import { useLogin } from '../hooks/useLogin';
+import { LoginFormValues, loginSchema } from '../utils/authValidation';
+
+type Props = AuthStackScreenProps<typeof AuthRoutes.LOGIN>;
+
+const LoginScreen: React.FC<Props> = () => {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Props['navigation']>();
+  const toast = useToast();
+
+  const { mutate: login, isPending } = useLogin();
+
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: 'sachinkumarq870@gmail.com',
+      password: 'Sachu_@#8700',
+    },
+  });
+
+  const onSubmit = (values: LoginFormValues) => {
+    login(values, {
+      onError: (err: any) =>
+        toast.error(err?.message ?? 'Login failed. Please try again.'),
+    });
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.flex, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Hero ── */}
+        <AppView style={[styles.hero, { paddingTop: insets.top + 40 }]}>
+          <AppView
+            style={[styles.logoBox, { backgroundColor: colors.primary + '18' }]}
+          >
+            {/* Replace with your logo SVG / Image */}
+            <AppText variant="title1">❤️</AppText>
+          </AppView>
+          <AppText variant="largeTitle" weight="bold" style={styles.title}>
+            Welcome back
+          </AppText>
+          <AppText variant="callout" align="center">
+            Sign in to continue tracking your health
+          </AppText>
+        </AppView>
+
+        {/* ── Form ── */}
+        <AppView px={5} mt={8}>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label="Email"
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                onChangeText={onChange}
+                onBlur={onBlur}
+                value={value}
+                error={errors.email?.message}
+              />
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label="Password"
+                placeholder="••••••••"
+                isPassword
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit(onSubmit)}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                value={value}
+                error={errors.password?.message}
+              />
+            )}
+          />
+
+          {/* Forgot password */}
+          <AppView row justify="flex-end" mb={6} style={{ marginTop: -8 }}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(AuthRoutes.FORGOT_PASSWORD)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <AppText variant="subhead" color={colors.primary}>
+                Forgot password?
+              </AppText>
+            </TouchableOpacity>
+          </AppView>
+
+          <Button
+            label="Sign In"
+            onPress={handleSubmit(onSubmit)}
+            loading={isPending}
+            fullWidth
+            size="lg"
+          />
+
+          <Divider label="or" my={6} />
+
+          {/* Social buttons placeholder */}
+          <Button
+            label="Continue with Apple"
+            variant="secondary"
+            onPress={() => {}}
+            fullWidth
+            size="lg"
+            style={styles.socialBtn}
+          />
+
+          <Button
+            label="Continue with Google"
+            variant="outline"
+            onPress={() => {}}
+            fullWidth
+            size="lg"
+          />
+        </AppView>
+
+        {/* ── Footer ── */}
+        <AppView row center mt={8} gap={1}>
+          <AppText variant="subhead" secondary>
+            Don't have an account?
+          </AppText>
+          <TouchableOpacity
+            onPress={() => navigation.navigate(AuthRoutes.SIGNUP)}
+          >
+            <AppText variant="subhead" color={colors.primary} weight="semiBold">
+              {' '}
+              Sign up
+            </AppText>
+          </TouchableOpacity>
+        </AppView>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1 },
+  hero: { alignItems: 'center', paddingHorizontal: 24 },
+  logoBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  title: { marginBottom: 8, marginTop: 4 },
+  socialBtn: { marginBottom: 12 },
+});
+
+export default LoginScreen;

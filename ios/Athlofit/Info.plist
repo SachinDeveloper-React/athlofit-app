@@ -33,8 +33,20 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
+	<string>Read and understand clinical health data.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Read and understand health data.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Share workout data with other apps.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>$(PRODUCT_NAME) needs access to your Camera.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>$(PRODUCT_NAME) needs access to your Bluetooth.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>$(PRODUCT_NAME) needs access to your Bluetooth.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

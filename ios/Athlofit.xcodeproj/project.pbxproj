@@ -15,6 +15,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		03F65BF02F6B2C5F003F88B4 /* Athlofit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = Athlofit.entitlements; path = Athlofit/Athlofit.entitlements; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Athlofit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Athlofit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Athlofit/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Athlofit/Info.plist; sourceTree = "<group>"; };
@@ -42,6 +43,7 @@
 		13B07FAE1A68108700A75B9A /* Athlofit */ = {
 			isa = PBXGroup;
 			children = (
+				03F65BF02F6B2C5F003F88B4 /* Athlofit.entitlements */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -259,9 +261,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Athlofit/Athlofit.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 78K4ML2KHZ;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Athlofit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Athlofit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -289,8 +295,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Athlofit/Athlofit.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 78K4ML2KHZ;
 				INFOPLIST_FILE = Athlofit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Athlofit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

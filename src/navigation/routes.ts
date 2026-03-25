@@ -1,0 +1,52 @@
+export const AuthRoutes = {
+  ONBOARDING: 'Onboarding',
+  LOGIN: 'Login',
+  SIGNUP: 'Signup',
+  FORGOT_PASSWORD: 'ForgotPassword',
+  OTP: 'Otp',
+  RESET_PASSWORD: 'ResetPassword',
+} as const;
+
+export const ProfileSetupRoutes = {
+  COMPLETE_PROFILE: 'CompleteProfile',
+} as const;
+
+export const TabRoutes = {
+  TRACKER: 'Tracker',
+  SHOP: 'Shop',
+  ACCOUNT: 'Account',
+} as const;
+
+export const HealthRoutes = {
+  TRACKER: 'TrackerScreen',
+  STEPS: 'StepsScreen',
+  CALORIES: 'CaloriesScreen',
+  HEART_RATE: 'HeartRateScreen',
+  BLOOD_PRESSURE: 'BloodPressureScreen',
+  HYDRATION: 'HydrationScreen',
+  ANALYTICS: 'HealthAnalyticsScreen',
+  STREAK: 'StreakScreen',
+} as const;
+
+export const ShopRoutes = {
+  SHOP: 'ShopScreen',
+  PRODUCT_DETAIL: 'ProductDetailScreen',
+  CART: 'CartScreen',
+  CHECKOUT: 'CheckoutScreen',
+  ORDER_HISTORY: 'OrderHistoryScreen',
+} as const;
+
+export const AccountRoutes = {
+  PROFILE: 'ProfileScreen',
+  SETTINGS: 'SettingsScreen',
+  EDIT_PROFILE: 'EditProfileScreen',
+  NOTIFICATIONS: 'NotificationsScreen',
+  PRIVACY: 'PrivacyScreen',
+} as const;
+
+export const RootRoutes = {
+  AUTH_STACK: 'AuthStack',
+  PROFILE_SETUP_STACK: 'ProfileSetupStack',
+  TAB_NAVIGATOR: 'TabNavigator',
+  HEALTH_NAVIGATOR: 'HealthStack',
+} as const;

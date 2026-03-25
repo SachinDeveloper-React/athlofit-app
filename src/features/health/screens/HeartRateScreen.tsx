@@ -1,0 +1,316 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import { Camera } from 'react-native-vision-camera';
+import { useHeartRate } from '../hooks/useHeartRate';
+import { Button, Header, Screen } from '../../../components';
+import { InstructionCard } from '../components/heart-rate/InstructionCard';
+import { ManualEntryModal } from '../components/heart-rate/ManualEntryModal';
+import { ProgressRing } from '../components/heart-rate/ProgressRing';
+import { PulseIndicator } from '../components/heart-rate/PulseIndicator';
+import { HeartRateResultCard } from '../components/heart-rate/HeartRateResultCard';
+import { SavedBanner } from '../components/heart-rate/SavedBanner';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export default function HeartRateScreen() {
+  const { bottom } = useSafeAreaInsets();
+  const {
+    measureState,
+    progress,
+    result,
+    error,
+    isSaving,
+    saved,
+    device,
+    format,
+    frameProcessor,
+    startMeasurement,
+    cancelMeasurement,
+    saveResult,
+  } = useHeartRate();
+
+  const [showManual, setShowManual] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+
+  useEffect(() => {
+    if (measureState !== 'measuring') {
+      setTorchOn(false);
+    }
+  }, [measureState]);
+
+  const handleManualSave = async (bpm: number) => {
+    await saveResult(bpm);
+    setShowManual(false);
+  };
+
+  if (measureState === 'idle' || measureState === 'requesting_permission') {
+    return (
+      <Screen
+        scroll
+        safeArea={false}
+        header={<Header title="Heart Rate" bordered showBack backLabel="" />}
+      >
+        <InstructionCard />
+        <Button
+          fullWidth
+          variant="primary"
+          label="Start Measuring"
+          onPress={startMeasurement}
+          loading={measureState === 'requesting_permission'}
+        />
+        <Button
+          fullWidth
+          variant="secondary"
+          label="Enter Manually"
+          onPress={() => setShowManual(true)}
+          style={{ marginTop: 10 }}
+        />
+
+        <ManualEntryModal
+          visible={showManual}
+          onClose={() => setShowManual(false)}
+          onSave={handleManualSave}
+        />
+      </Screen>
+    );
+  }
+
+  if (measureState === 'measuring') {
+    return (
+      <View
+        style={[
+          styles.fullScreen,
+          {
+            marginBottom: bottom,
+          },
+        ]}
+      >
+        <StatusBar hidden />
+
+        {device && format ? (
+          <Camera
+            style={StyleSheet.absoluteFill}
+            device={device}
+            format={format}
+            isActive={true}
+            torch={torchOn ? 'on' : 'off'}
+            fps={30}
+            photo={false}
+            video={true}
+            audio={false}
+            pixelFormat="yuv"
+            frameProcessor={frameProcessor}
+            onInitialized={() => {
+              console.log('Camera initialized, enabling torch');
+              setTorchOn(true);
+            }}
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.blackBg]} />
+        )}
+
+        <View style={styles.overlay}>
+          <View style={styles.topBanner}>
+            <Text style={styles.topTitle}>Keep finger on camera</Text>
+            <Text style={styles.topSub}>
+              Cover the lens and flash • Stay still
+            </Text>
+          </View>
+
+          <View style={styles.centerArea}>
+            <ProgressRing progress={progress} />
+            <PulseIndicator active />
+          </View>
+
+          <View style={styles.bottomArea}>
+            <Button
+              fullWidth
+              variant="destructive"
+              label="Cancel"
+              onPress={cancelMeasurement}
+            />
+            <Button
+              fullWidth
+              variant="secondary"
+              label="Enter Manually Instead"
+              onPress={() => {
+                cancelMeasurement();
+                setShowManual(true);
+              }}
+              style={{ marginTop: 10 }}
+            />
+          </View>
+        </View>
+
+        <ManualEntryModal
+          visible={showManual}
+          onClose={() => setShowManual(false)}
+          onSave={handleManualSave}
+        />
+      </View>
+    );
+  }
+
+  if (measureState === 'error') {
+    return (
+      <Screen
+        scroll
+        safeArea={false}
+        header={<Header title="Heart Rate" bordered showBack backLabel="" />}
+      >
+        <View style={styles.errorCard}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorTitle}>Measurement failed</Text>
+          <Text style={styles.errorMsg}>{error}</Text>
+        </View>
+
+        <Button
+          fullWidth
+          variant="primary"
+          label="Try Again"
+          onPress={startMeasurement}
+        />
+        <Button
+          fullWidth
+          variant="secondary"
+          label="Enter Manually"
+          onPress={() => setShowManual(true)}
+          style={{ marginTop: 10 }}
+        />
+
+        <ManualEntryModal
+          visible={showManual}
+          onClose={() => setShowManual(false)}
+          onSave={handleManualSave}
+        />
+      </Screen>
+    );
+  }
+
+  if (measureState === 'done' && result) {
+    return (
+      <Screen
+        scroll
+        safeArea={false}
+        header={<Header title="Heart Rate" bordered showBack backLabel="" />}
+      >
+        <Text style={styles.title}>Result</Text>
+        <HeartRateResultCard result={result} />
+        {saved ? (
+          <SavedBanner />
+        ) : (
+          <Button
+            fullWidth
+            variant="primary"
+            label="Save"
+            loading={isSaving}
+            onPress={() => saveResult()}
+          />
+        )}
+
+        <Button
+          fullWidth
+          variant="secondary"
+          label="Measure Again"
+          onPress={startMeasurement}
+          style={{ marginVertical: 10 }}
+        />
+        <Button
+          fullWidth
+          variant="secondary"
+          label="Enter Manually Instead"
+          onPress={() => setShowManual(true)}
+        />
+
+        <ManualEntryModal
+          visible={showManual}
+          onClose={() => setShowManual(false)}
+          onSave={handleManualSave}
+        />
+      </Screen>
+    );
+  }
+
+  return null;
+}
+
+const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  fullScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  blackBg: {
+    backgroundColor: '#000',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  topBanner: {
+    alignItems: 'center',
+  },
+  topTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  topSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  centerArea: {
+    alignItems: 'center',
+  },
+  bottomArea: {
+    width: '100%',
+  },
+  errorCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: '#FAECE7',
+    marginBottom: 20,
+  },
+  errorIcon: {
+    fontSize: 36,
+    marginBottom: 10,
+  },
+  errorTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#D85A30',
+    marginBottom: 8,
+  },
+  errorMsg: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+});
