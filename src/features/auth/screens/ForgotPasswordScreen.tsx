@@ -1,13 +1,9 @@
 import React, { useRef, useState } from 'react';
 import {
-  View,
-  Text,
   TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -24,7 +20,7 @@ import {
 } from '../utils/authValidation';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
-import { Header } from '../../../components';
+import { Header, AppView, AppText, Button } from '../../../components';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.FORGOT_PASSWORD>;
 
@@ -102,32 +98,32 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
       <Header showBack />
 
       {/* ── Content ── */}
-      <View style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
+      <AppView style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
         {/* ── Hero ── */}
-        <View style={s.hero}>
-          <View
+        <AppView style={s.hero}>
+          <AppView
             style={[s.iconWrap, { backgroundColor: colors.primary + '15' }]}
           >
-            <Text style={s.iconEmoji}>🔒</Text>
-          </View>
+            <AppText style={s.iconEmoji}>🔒</AppText>
+          </AppView>
 
-          <Text style={[s.title, { color: colors.foreground }]}>
+          <AppText style={[s.title, { color: colors.foreground }]}>
             Forgot password?
-          </Text>
-          <Text style={[s.subtitle, { color: colors.mutedForeground }]}>
+          </AppText>
+          <AppText style={[s.subtitle, { color: colors.mutedForeground }]}>
             No worries. Enter your email and we'll send you a 6-digit reset
             code.
-          </Text>
-        </View>
+          </AppText>
+        </AppView>
 
         {/* ── Email field ── */}
-        <View style={s.form}>
+        <AppView style={s.form}>
           <Controller
             control={control}
             name="email"
             render={({ field: { onChange, onBlur, value } }) => (
-              <View>
-                <Text
+              <AppView>
+                <AppText
                   style={[
                     s.label,
                     {
@@ -138,7 +134,7 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
                   ]}
                 >
                   Email address
-                </Text>
+                </AppText>
 
                 <Animated.View
                   style={[
@@ -172,16 +168,16 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
                 </Animated.View>
 
                 {!!errors.email && (
-                  <Text style={[s.errorText, { color: colors.destructive }]}>
+                  <AppText style={[s.errorText, { color: colors.destructive }]}>
                     {errors.email.message}
-                  </Text>
+                  </AppText>
                 )}
-              </View>
+              </AppView>
             )}
           />
 
           {/* ── Info card ── */}
-          <View
+          <AppView
             style={[
               s.infoCard,
               {
@@ -190,47 +186,34 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
               },
             ]}
           >
-            <Text style={[s.infoIcon]}>ℹ️</Text>
-            <Text style={[s.infoText, { color: colors.foreground }]}>
+            <AppText style={[s.infoIcon]}>ℹ️</AppText>
+            <AppText style={[s.infoText, { color: colors.foreground }]}>
               Check your spam folder if you don't receive the email within a few
               minutes.
-            </Text>
-          </View>
+            </AppText>
+          </AppView>
 
           {/* ── Submit ── */}
-          <TouchableOpacity
+          <Button
+            label="Send Reset Code"
             onPress={handleSubmit(onSubmit)}
-            disabled={isPending}
-            activeOpacity={0.8}
-            style={[
-              s.submitBtn,
-              { backgroundColor: colors.primary, opacity: isPending ? 0.7 : 1 },
-            ]}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={s.submitLabel}>Send Reset Code</Text>
-            )}
-          </TouchableOpacity>
+            loading={isPending}
+            fullWidth
+            size="lg"
+            style={{ marginTop: 20 }}
+          />
 
           {/* ── Back to login ── */}
-          <TouchableOpacity
+          <Button
+            label="Remembered your password? Sign in"
+            variant="ghost"
+            size="sm"
             onPress={() => navigation.goBack()}
             style={s.backToLogin}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[s.backToLoginText, { color: colors.mutedForeground }]}
-            >
-              Remembered your password?{' '}
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                Sign in
-              </Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            labelStyle={{ color: colors.mutedForeground, fontSize: 15 }}
+          />
+        </AppView>
+      </AppView>
     </KeyboardAvoidingView>
   );
 };
@@ -288,21 +271,7 @@ const s = StyleSheet.create({
   },
   infoIcon: { fontSize: 16, lineHeight: 20 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  submitBtn: {
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  submitLabel: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
   backToLogin: { alignItems: 'center', marginTop: 24 },
-  backToLoginText: { fontSize: 15, textAlign: 'center' },
 });
 
 export default ForgotPasswordScreen;

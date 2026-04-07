@@ -1,6 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { AppView } from '../../../../components';
+import { StyleSheet } from 'react-native';
+import { AppText, AppView, Button, Card } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
 import { InputMode } from '../../types/bloodpressure.types';
 
 interface ModeToggleProps {
@@ -13,35 +14,30 @@ const MODES: { key: InputMode; label: string }[] = [
   { key: 'device', label: '📡  Connected Device' },
 ];
 
-export const ModeToggle: React.FC<ModeToggleProps> = ({ value, onChange }) => (
-  <AppView style={styles.row}>
-    {MODES.map(({ key, label }) => (
-      <TouchableOpacity
-        key={key}
-        style={[styles.btn, value === key && styles.btnActive]}
-        onPress={() => onChange(key)}
-      >
-        <Text style={[styles.text, value === key && styles.textActive]}>
-          {label}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </AppView>
-);
+export const ModeToggle: React.FC<ModeToggleProps> = ({ value, onChange }) => {
+  const { colors } = useTheme();
+  return (
+    <AppView row gap={2} style={styles.row}>
+      {MODES.map(({ key, label }) => (
+        <Button
+          key={key}
+          label={label}
+          onPress={() => onChange(key)}
+          variant={value === key ? 'primary' : 'outline'}
+          size="sm"
+          style={styles.btn}
+        />
+      ))}
+    </AppView>
+  );
+};
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  row: {
+    marginBottom: 16,
+  },
   btn: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
-    alignItems: 'center',
+    alignSelf: 'stretch',
   },
-  btnActive: { backgroundColor: '#0f172a', borderColor: '#0f172a' },
-  text: { fontSize: 13, fontWeight: '600', color: '#64748b' },
-  textActive: { color: '#f8fafc' },
 });

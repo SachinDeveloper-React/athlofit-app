@@ -11,6 +11,7 @@ export function useVerifyOtp() {
   return useMutation({
     mutationFn: (body: VerifyOtpRequest) => authService.verifyOtp(body),
     onSuccess(response) {
+      console.log("response", response)
       const { success, data } = response;
       if (!success) return;
 

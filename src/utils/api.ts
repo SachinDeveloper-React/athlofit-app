@@ -4,10 +4,16 @@
 // and normalises errors. No axios dependency.
 
 import { tokenService } from '../features/auth/service/tokenService';
+import { useAuthStore } from '../features/auth/store/authStore';
 import { resetToAuth } from '../navigation/navigationRef';
 
-// const BASE_URL = process.env.API_BASE_URL ?? 'https://api.yourhealthapp.com/v1';
-const BASE_URL = 'https://fitness-five-amber.vercel.app/';
+import { Platform } from 'react-native';
+
+const BASE_URL =
+  Platform.OS === 'android'
+    ? 'http://192.168.0.129:5001/'
+    // ? 'http://192.168.1.14:5001/'
+    : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +55,7 @@ async function request<T>(
   // ── 401: attempt token refresh ─────────────────────────────────────────────
   if (response.status === 401 && !retry) {
     const refreshed = await tryRefresh();
+    console.log("refreshed", refreshed)
     if (refreshed) {
       return request<T>(endpoint, { ...options, retry: true });
     } else {
@@ -75,7 +82,7 @@ async function tryRefresh(): Promise<boolean> {
     const refreshToken = await tokenService.getRefreshToken();
     if (!refreshToken) return false;
 
-    const res = await fetch(`${BASE_URL}/auth/user/refresh-token`, {
+    const res = await fetch(`${BASE_URL}auth/user/refresh-token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -84,9 +91,17 @@ async function tryRefresh(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data = await res.json();
-    await tokenService.save(data.data.tokens);
+    console.log("refresh token data", data)
+    await tokenService.save({
+      accessToken: data?.data?.accessToken,
+      refreshToken: data?.data?.refreshToken,
+      expiresIn: 36000,
+    });
+    useAuthStore.getState().setAccessToken(data?.data?.accessToken);
+
     return true;
-  } catch {
+  } catch (error) {
+    console.log("refresh token error", error)
     return false;
   }
 }

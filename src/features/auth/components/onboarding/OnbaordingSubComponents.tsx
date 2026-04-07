@@ -1,11 +1,10 @@
 import React from 'react';
 import {
-  View,
-  Text,
   TouchableOpacity,
   Animated,
   StyleSheet,
 } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 import Svg, { Path } from 'react-native-svg';
 
 import type {
@@ -22,10 +21,10 @@ import { C } from '../../constant';
 // ─── StatCard ─────────────────────────────────────────────────────────────
 
 export const StatCard: React.FC<StatCardProps> = ({ stat }) => (
-  <View style={styles.statCard}>
-    <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
-    <Text style={styles.statLabel}>{stat.label}</Text>
-  </View>
+  <AppView style={styles.statCard}>
+    <AppText style={[styles.statValue, { color: stat.color }]}>{stat.value}</AppText>
+    <AppText style={styles.statLabel}>{stat.label}</AppText>
+  </AppView>
 );
 
 // ─── MacroRow ─────────────────────────────────────────────────────────────
@@ -37,22 +36,22 @@ export const MacroRow: React.FC<MacroRowProps> = ({ macro, widthAnim }) => {
   });
 
   return (
-    <View style={styles.macroRow}>
-      <View style={styles.macroHeader}>
-        <Text style={styles.macroLabel}>{macro.label}</Text>
-        <Text style={[styles.macroVal, { color: macro.color }]}>
+    <AppView style={styles.macroRow}>
+      <AppView style={styles.macroHeader}>
+        <AppText style={styles.macroLabel}>{macro.label}</AppText>
+        <AppText style={[styles.macroVal, { color: macro.color }]}>
           {macro.val}
-        </Text>
-      </View>
-      <View style={styles.barTrack}>
+        </AppText>
+      </AppView>
+      <AppView style={styles.barTrack}>
         <Animated.View
           style={[
             styles.barFill,
             { width: animatedWidth, backgroundColor: macro.color },
           ]}
         />
-      </View>
-    </View>
+      </AppView>
+    </AppView>
   );
 };
 
@@ -65,8 +64,8 @@ export const GoalRing: React.FC<GoalRingProps> = ({ goal }) => {
   const size = cx * 2 + 16;
 
   return (
-    <View style={{ alignItems: 'center' }}>
-      <View style={{ width: size, height: size }}>
+    <AppView style={{ alignItems: 'center' }}>
+      <AppView style={{ width: size, height: size }}>
         <Svg width={size} height={size}>
           {/* Track */}
           <Path
@@ -85,15 +84,15 @@ export const GoalRing: React.FC<GoalRingProps> = ({ goal }) => {
           />
         </Svg>
         {/* Centred label */}
-        <View style={[StyleSheet.absoluteFillObject, styles.ringCenter]}>
-          <Text style={[styles.ringPct, { color: goal.color }]}>
+        <AppView style={[StyleSheet.absoluteFillObject, styles.ringCenter]}>
+          <AppText style={[styles.ringPct, { color: goal.color }]}>
             {Math.round(goal.pct * 100)}%
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.ringGoalLabel}>{goal.label}</Text>
-      <Text style={styles.ringGoalCurr}>{goal.curr}</Text>
-    </View>
+          </AppText>
+        </AppView>
+      </AppView>
+      <AppText style={styles.ringGoalLabel}>{goal.label}</AppText>
+      <AppText style={styles.ringGoalCurr}>{goal.curr}</AppText>
+    </AppView>
   );
 };
 
@@ -124,20 +123,20 @@ function polarToCartesian(
 // ─── BpRow ────────────────────────────────────────────────────────────────
 
 export const BpRow: React.FC<BpRowProps> = ({ item }) => (
-  <View style={styles.bpRow}>
-    <View style={styles.bpHeader}>
-      <Text style={styles.bpLabel}>{item.label}</Text>
-      <Text style={[styles.bpVal, { color: item.color }]}>{item.val} mmHg</Text>
-    </View>
-    <View style={styles.barTrack}>
+  <AppView style={styles.bpRow}>
+    <AppView style={styles.bpHeader}>
+      <AppText style={styles.bpLabel}>{item.label}</AppText>
+      <AppText style={[styles.bpVal, { color: item.color }]}>{item.val} mmHg</AppText>
+    </AppView>
+    <AppView style={styles.barTrack}>
       <Animated.View
         style={[
           styles.barFill,
           { width: item.animatedWidth, backgroundColor: item.color },
         ]}
       />
-    </View>
-  </View>
+    </AppView>
+  </AppView>
 );
 
 // ─── ProgressBar ──────────────────────────────────────────────────────────
@@ -146,11 +145,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   color,
 }) => (
-  <View style={styles.progressTrack}>
+  <AppView style={styles.progressTrack}>
     <Animated.View
       style={[styles.progressFill, { width: progress, backgroundColor: color }]}
     />
-  </View>
+  </AppView>
 );
 
 // ─── Dots ─────────────────────────────────────────────────────────────────
@@ -161,14 +160,14 @@ export const Dots: React.FC<DotsProps> = ({
   accent,
   onPress,
 }) => (
-  <View style={styles.dots}>
+  <AppView style={styles.dots}>
     {slides.map((_, i) => (
       <TouchableOpacity
         key={i}
         onPress={() => onPress(i)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <View
+        <AppView
           style={[
             styles.dot,
             {
@@ -180,7 +179,7 @@ export const Dots: React.FC<DotsProps> = ({
         />
       </TouchableOpacity>
     ))}
-  </View>
+  </AppView>
 );
 
 // ─── NextButton ───────────────────────────────────────────────────────────
@@ -193,12 +192,12 @@ export const NextButton: React.FC<NextButtonProps> = ({
 }) => (
   <Animated.View style={{ transform: [{ scale }] }}>
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
-      <View
+      <AppView
         style={[styles.btn, { backgroundColor: accent, shadowColor: accent }]}
       >
-        <Text style={styles.btnText}>
+        <AppText style={styles.btnText}>
           {isLast ? 'Get Started 🚀' : 'Continue'}
-        </Text>
+        </AppText>
         {!isLast && (
           <Svg
             width={20}
@@ -216,7 +215,7 @@ export const NextButton: React.FC<NextButtonProps> = ({
             />
           </Svg>
         )}
-      </View>
+      </AppView>
     </TouchableOpacity>
   </Animated.View>
 );

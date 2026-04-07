@@ -1,8 +1,6 @@
 import React, { memo, useCallback, useMemo } from 'react';
 import {
-  Pressable,
   StyleSheet,
-  type PressableStateCallbackType,
   type ViewStyle,
 } from 'react-native';
 import { SCREEN_WIDTH } from '../../../../utils/measure';
@@ -18,6 +16,7 @@ import { useHydration } from '../../hooks/useHydration';
 type Props = {
   value?: number;
   max?: number;
+  onUpdate?: () => void;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -26,7 +25,7 @@ const CIRCLE_SIZE = SCREEN_WIDTH * 0.3;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const HydrationCard = memo(({ value = 1220, max = 2500 }: Props) => {
+export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props) => {
   const { consumed, addWater } = useHydration();
 
   const { colors } = useTheme();
@@ -49,30 +48,20 @@ export const HydrationCard = memo(({ value = 1220, max = 2500 }: Props) => {
     });
   }, []);
 
-  const handleAdd250 = useCallback(() => {
-    addWater?.(200);
-  }, [addWater]);
-  const handleAdd500 = useCallback(() => {
-    addWater?.(500);
-  }, [addWater]);
+  const handleAdd250 = useCallback(async () => {
+    await addWater?.(200);
+    onUpdate?.();
+  }, [addWater, onUpdate]);
+  const handleAdd500 = useCallback(async () => {
+    await addWater?.(500);
+    onUpdate?.();
+  }, [addWater, onUpdate]);
 
-  // ── Press style ────────────────────────────────────────────────────────────
-
-  const pressStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType): ViewStyle => ({
-      transform: [{ scale: pressed ? 0.99 : 1 }],
-      opacity: pressed ? 0.88 : 1,
-    }),
-    [],
-  );
+  // ── Press style is handled by Card's onPress ──────────────────────────
 
   return (
-    // Fragment removed — AppSectionHeader + AppCard can be wrapped in AppView
-    // without adding layout (flex column is the default), which avoids the
-    // unnecessary React element wrapper Fragment creates.
     <AppView>
-      <Pressable style={pressStyle} onPress={handleNavigate}>
-        <Card style={styles.card}>
+      <Card style={styles.card} onPress={handleNavigate}>
           {/* Circle progress */}
           <WaterCircleProgress size={CIRCLE_SIZE} value={value} max={max} />
 
@@ -104,8 +93,7 @@ export const HydrationCard = memo(({ value = 1220, max = 2500 }: Props) => {
               <Button size="sm" label="+500 ml" onPress={handleAdd500} />
             </AppView>
           </AppView>
-        </Card>
-      </Pressable>
+      </Card>
     </AppView>
   );
 });

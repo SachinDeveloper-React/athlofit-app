@@ -1,10 +1,15 @@
 import AppleHealthKit, {
   HealthKitPermissions,
   HealthUnit,
-  HealthValue,
 } from 'react-native-health';
 import { HealthData } from '../types/healthTypes';
 
+// ─── Derivation helper (mirrors healthConnect.service.ts) ─────────────────────
+const STEPS_PER_MINUTE = 100;
+const deriveActiveMinutes = (steps: number) =>
+  Math.round(steps / STEPS_PER_MINUTE);
+
+// ─── Permissions ──────────────────────────────────────────────────────────────
 const PERMISSIONS: HealthKitPermissions = {
   permissions: {
     read: [
@@ -17,6 +22,7 @@ const PERMISSIONS: HealthKitPermissions = {
       AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
       AppleHealthKit.Constants.Permissions.BodyMass,
       AppleHealthKit.Constants.Permissions.BloodGlucose,
+      AppleHealthKit.Constants.Permissions.Water, // ✅ WaterConsumption → Water
     ],
     write: [
       AppleHealthKit.Constants.Permissions.Steps,
@@ -24,10 +30,14 @@ const PERMISSIONS: HealthKitPermissions = {
       AppleHealthKit.Constants.Permissions.BloodPressureSystolic,
       AppleHealthKit.Constants.Permissions.BloodPressureDiastolic,
       AppleHealthKit.Constants.Permissions.BodyMass,
+      AppleHealthKit.Constants.Permissions.BloodGlucose, // ✅ added
+      AppleHealthKit.Constants.Permissions.SleepAnalysis, // ✅ added
+      AppleHealthKit.Constants.Permissions.Water, // ✅ added
     ],
   },
 };
 
+// ─── Init ─────────────────────────────────────────────────────────────────────
 export const initializeHealthKit = (): Promise<boolean> =>
   new Promise(resolve => {
     AppleHealthKit.initHealthKit(PERMISSIONS, error => {
@@ -35,6 +45,7 @@ export const initializeHealthKit = (): Promise<boolean> =>
     });
   });
 
+// ─── Time helpers ──────────────────────────────────────────────────────────────
 const todayRange = () => {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -44,7 +55,7 @@ const todayRange = () => {
   };
 };
 
-// ─── Steps ──────────────────────────────────────────────────
+// ─── Steps ──────────────────────────────────────────────────────────────────
 export const getSteps = (): Promise<number> =>
   new Promise(resolve => {
     const options = { ...todayRange(), includeManuallyAdded: true };
@@ -53,7 +64,7 @@ export const getSteps = (): Promise<number> =>
     });
   });
 
-// ─── Calories ───────────────────────────────────────────────
+// ─── Calories ───────────────────────────────────────────────────────────────
 export const getCalories = (): Promise<number> =>
   new Promise(resolve => {
     AppleHealthKit.getActiveEnergyBurned(todayRange(), (err, results) => {
@@ -63,7 +74,7 @@ export const getCalories = (): Promise<number> =>
     });
   });
 
-// ─── Heart Rate ─────────────────────────────────────────────
+// ─── Heart Rate ─────────────────────────────────────────────────────────────
 export const getHeartRate = (): Promise<{
   avg: number;
   min: number;
@@ -81,7 +92,7 @@ export const getHeartRate = (): Promise<{
     });
   });
 
-// ─── Blood Pressure ─────────────────────────────────────────
+// ─── Blood Pressure ─────────────────────────────────────────────────────────
 export const getBloodPressure = (): Promise<{
   systolic: number;
   diastolic: number;
@@ -91,7 +102,6 @@ export const getBloodPressure = (): Promise<{
       startDate: new Date(Date.now() - 7 * 86400000).toISOString(),
       endDate: new Date().toISOString(),
     };
-    // HealthKit returns systolic & diastolic as separate sample types
     AppleHealthKit.getBloodPressureSamples(range, (err, results) => {
       if (err || !results?.length)
         return resolve({ systolic: 0, diastolic: 0 });
@@ -103,7 +113,7 @@ export const getBloodPressure = (): Promise<{
     });
   });
 
-// ─── Sleep ──────────────────────────────────────────────────
+// ─── Sleep ──────────────────────────────────────────────────────────────────
 export const getSleep = (): Promise<number> =>
   new Promise(resolve => {
     const yesterday = new Date();
@@ -114,42 +124,45 @@ export const getSleep = (): Promise<number> =>
       { startDate: yesterday.toISOString(), endDate: new Date().toISOString() },
       (err, results) => {
         if (err || !results?.length) return resolve(0);
-        // Filter only "Asleep" states (value === 1)
         const asleep = results.filter(
           r => (r.value as unknown as string) === 'ASLEEP',
         );
-        const totalMs = asleep.reduce((sum, r) => {
-          return (
+        const totalMs = asleep.reduce(
+          (sum, r) =>
             sum +
-            (new Date(r.endDate).getTime() - new Date(r.startDate).getTime())
-          );
-        }, 0);
+            (new Date(r.endDate).getTime() - new Date(r.startDate).getTime()),
+          0,
+        );
         resolve(Math.round((totalMs / 3600000) * 10) / 10);
       },
     );
   });
 
-// ─── Distance ───────────────────────────────────────────────
+// ─── Distance ───────────────────────────────────────────────────────────────
 export const getDistance = (): Promise<number> =>
   new Promise(resolve => {
+    // ✅ 'kilometer' is the correct HealthUnit — 'km' is not in the union
     AppleHealthKit.getDistanceWalkingRunning(
-      { ...todayRange(), unit: 'km' },
+      { ...todayRange(), unit: 'kilometer' as HealthUnit },
       (err, result) => {
         resolve(err ? 0 : Math.round(result.value * 100) / 100);
       },
     );
   });
 
-// ─── Weight ─────────────────────────────────────────────────
+// ─── Weight ─────────────────────────────────────────────────────────────────
 export const getWeight = (): Promise<number> =>
   new Promise(resolve => {
-    AppleHealthKit.getLatestWeight({ unit: 'g' }, (err, result) => {
-      if (err) return resolve(0);
-      resolve(Math.round((result.value / 1000) * 10) / 10); // grams → kg
-    });
+    AppleHealthKit.getLatestWeight(
+      { unit: 'gram' as HealthUnit },
+      (err, result) => {
+        if (err) return resolve(0);
+        resolve(Math.round((result.value / 1000) * 10) / 10); // grams → kg
+      },
+    );
   });
 
-// ─── Blood Glucose ──────────────────────────────────────────
+// ─── Blood Glucose ──────────────────────────────────────────────────────────
 export const getBloodGlucose = (): Promise<number> =>
   new Promise(resolve => {
     const range = {
@@ -163,37 +176,63 @@ export const getBloodGlucose = (): Promise<number> =>
     });
   });
 
-// ─── Fetch All ──────────────────────────────────────────────
+// ─── Hydration ──────────────────────────────────────────────────────────────
+export const getHydration = (): Promise<number> =>
+  new Promise(resolve => {
+    AppleHealthKit.getWaterSamples(
+      { ...todayRange(), unit: 'ml' as HealthUnit },
+      (err, results) => {
+        if (err || !results?.length) return resolve(0);
+        const totalMl = results.reduce((sum, r) => sum + r.value, 0);
+        resolve(Math.round(totalMl));
+      },
+    );
+  });
+
+// ─── Fetch All ──────────────────────────────────────────────────────────────
 export const fetchAllHealthKitData = async (): Promise<HealthData> => {
-  const [steps, calories, hr, bp, sleepHours, distance, weight, bloodGlucose] =
-    await Promise.all([
-      getSteps(),
-      getCalories(),
-      getHeartRate(),
-      getBloodPressure(),
-      getSleep(),
-      getDistance(),
-      getWeight(),
-      getBloodGlucose(),
-    ]);
+  const [
+    steps,
+    calories,
+    hr,
+    bp,
+    sleepHours,
+    distance,
+    weight,
+    bloodGlucose,
+    hydration,
+  ] = await Promise.all([
+    getSteps(),
+    getCalories(),
+    getHeartRate(),
+    getBloodPressure(),
+    getSleep(),
+    getDistance(),
+    getWeight(),
+    getBloodGlucose(),
+    getHydration(), // ✅ added
+  ]);
 
   return {
     steps,
     calories,
+    distance,
+    activeMinutes: deriveActiveMinutes(steps), // ✅ added
     heartRate: hr.avg,
     heartRateMin: hr.min,
     heartRateMax: hr.max,
     bloodPressureSystolic: bp.systolic,
     bloodPressureDiastolic: bp.diastolic,
     sleepHours,
-    distance,
     weight,
     bloodGlucose,
+    hydration, // ✅ added
   };
 };
 
-// ─── Write helpers ──────────────────────────────────────────
-export const writeStepsHK = (count: number, date: Date) =>
+// ─── Write helpers ──────────────────────────────────────────────────────────
+
+export const writeStepsHK = (count: number, _date: Date) =>
   new Promise<void>((resolve, reject) => {
     AppleHealthKit.saveSteps({ value: count }, err => {
       err ? reject(err) : resolve();
@@ -203,7 +242,7 @@ export const writeStepsHK = (count: number, date: Date) =>
 export const writeWeightHK = (kg: number, date: Date) =>
   new Promise<void>((resolve, reject) => {
     AppleHealthKit.saveWeight(
-      { value: kg * 1000, unit: 'gram', date: date.toISOString() },
+      { value: kg * 1000, unit: 'gram' as HealthUnit, date: date.toISOString() } as any,
       err => {
         err ? reject(err) : resolve();
       },
@@ -215,10 +254,84 @@ export const writeHydrationHK = (ml: number, date: Date) =>
     AppleHealthKit.saveWater(
       {
         value: ml,
-        unit: 'literPerMinute',
+        unit: 'ml' as HealthUnit, // ✅ fixed: was 'literPerMinute'
         date: date.toISOString(),
+      } as any,
+      err => {
+        err ? reject(err) : resolve();
+      },
+    );
+  });
+
+// ✅ Write heart rate to HealthKit
+export const writeHeartRateHK = (bpm: number): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const now = new Date();
+    const start = new Date(now.getTime() - 60_000);
+    AppleHealthKit.saveHeartRateSample(
+      {
+        value: bpm,
+        startDate: start.toISOString(),
+        endDate: now.toISOString(),
       },
       err => {
+        err ? reject(err) : resolve();
+      },
+    );
+  });
+
+// ✅ Write blood pressure to HealthKit
+// Note: `saveBloodPressureSample` exists at runtime but is not yet typed in
+// the @types — casting via `as any` until the library types catch up.
+export const writeBloodPressureHK = (
+  systolic: number,
+  diastolic: number,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    (AppleHealthKit as any).saveBloodPressureSample(
+      {
+        systolicBloodPressure: systolic,
+        diastolicBloodPressure: diastolic,
+        startDate: now,
+        endDate: now,
+      },
+      (err: any) => {
+        err ? reject(err) : resolve();
+      },
+    );
+  });
+
+// ✅ Write blood glucose to HealthKit
+export const writeBloodGlucoseHK = (mmol: number): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    // HealthUnit 'mmoL/L' is the correct value for mmol/L
+    AppleHealthKit.saveBloodGlucoseSample(
+      {
+        value: mmol,
+        unit: 'mmoL/L' as HealthUnit,
+        startDate: now,
+        endDate: now,
+      },
+      err => {
+        err ? reject(err) : resolve();
+      },
+    );
+  });
+
+// ✅ Write sleep session to HealthKit
+// Note: `saveSleepSamples` exists at runtime but is not typed — casting via
+// `as any` until the library types catch up.
+export const writeSleepHK = (bedtime: Date, wakeTime: Date): Promise<void> =>
+  new Promise((resolve, reject) => {
+    (AppleHealthKit as any).saveSleepSamples(
+      {
+        value: 'ASLEEP',
+        startDate: bedtime.toISOString(),
+        endDate: wakeTime.toISOString(),
+      },
+      (err: any) => {
         err ? reject(err) : resolve();
       },
     );

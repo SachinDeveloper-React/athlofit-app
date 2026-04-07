@@ -1,5 +1,8 @@
 import React from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
+import { AppText } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 
 interface AmountDisplayProps {
   consumed: number;
@@ -12,27 +15,29 @@ export const AmountDisplay: React.FC<AmountDisplayProps> = ({
   dailyGoal,
   percentage,
 }) => {
+  const { colors } = useTheme();
+  
   const amountColor =
-    percentage >= 100 ? '#4ade80' : percentage >= 50 ? '#38bdf8' : '#7dd3fc';
+    percentage >= 100 ? colors.success : percentage >= 50 ? colors.primary : withOpacity(colors.primary, 0.7);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>ml consumed</Text>
+      <AppText style={[styles.label, { color: colors.mutedForeground }]}>ml consumed</AppText>
 
-      <Text style={[styles.value, { color: amountColor }]}>{consumed}</Text>
+      <AppText style={[styles.value, { color: amountColor }]}>{consumed}</AppText>
 
-      <Text style={styles.goalText}>/ {dailyGoal} ml</Text>
+      <AppText style={[styles.goalText, { color: colors.secondaryForeground }]}>/ {dailyGoal} ml</AppText>
 
       {/* Circular ring indicator */}
-      <View style={styles.ringOuter}>
+      <View style={[styles.ringOuter, { borderColor: withOpacity(colors.primary, 0.15) }]}>
         <View
           style={[
             styles.ringFill,
-            { transform: [{ rotate: `${(percentage / 100) * 360}deg` }] },
+            { borderColor: colors.primary, transform: [{ rotate: `${(percentage / 100) * 360}deg` }] },
           ]}
         />
         <View style={styles.ringInner}>
-          <Text style={styles.ringPct}>{Math.round(percentage)}%</Text>
+          <AppText style={[styles.ringPct, { color: colors.primary }]}>{Math.round(percentage)}%</AppText>
         </View>
       </View>
     </View>
@@ -46,7 +51,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    color: '#64748b',
     letterSpacing: 2,
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -58,7 +62,6 @@ const styles = StyleSheet.create({
   },
   goalText: {
     fontSize: 13,
-    color: '#334155',
     marginBottom: 16,
   },
   ringOuter: {
@@ -66,7 +69,6 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
     borderWidth: 5,
-    borderColor: 'rgba(56,189,248,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
@@ -77,7 +79,6 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
     borderWidth: 5,
-    borderColor: '#0ea5e9',
     borderTopColor: 'transparent',
     borderRightColor: 'transparent',
   },
@@ -88,6 +89,5 @@ const styles = StyleSheet.create({
   ringPct: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#38bdf8',
   },
 });

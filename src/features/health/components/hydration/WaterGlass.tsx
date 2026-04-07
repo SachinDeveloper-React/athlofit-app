@@ -1,7 +1,10 @@
 // ─── WaterGlass Component ─────────────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { AppText } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 
 interface WaterGlassProps {
   percentage: number;
@@ -12,6 +15,8 @@ export const WaterGlass: React.FC<WaterGlassProps> = ({
   percentage,
   dailyGoal,
 }) => {
+  const { colors } = useTheme();
+  
   const fillAnim = useRef(new Animated.Value(0)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -69,7 +74,7 @@ export const WaterGlass: React.FC<WaterGlassProps> = ({
 
   const fillColor = fillAnim.interpolate({
     inputRange: [0, 50, 100],
-    outputRange: ['#38bdf8', '#0ea5e9', '#0284c7'],
+    outputRange: [colors.primary, withOpacity(colors.primary, 0.8), withOpacity(colors.primary, 0.6)],
   });
 
   const waveTranslate = waveAnim.interpolate({
@@ -108,13 +113,13 @@ export const WaterGlass: React.FC<WaterGlassProps> = ({
             key={mark}
             style={[styles.markLine, { bottom: `${mark}%` as any }]}
           >
-            <Text style={styles.markText}>{(dailyGoal * mark) / 100}ml</Text>
+            <AppText style={[styles.markText, { color: withOpacity(colors.primary, 0.5) }]}>{(dailyGoal * mark) / 100}ml</AppText>
           </View>
         ))}
       </View>
 
       {/* Glass base */}
-      <View style={styles.base} />
+      <View style={[styles.base, { backgroundColor: withOpacity(colors.primary, 0.3) }]} />
     </View>
   );
 };
@@ -142,10 +147,10 @@ const styles = StyleSheet.create({
     width: 90,
     height: 200,
     borderWidth: 2,
-    borderColor: 'rgba(148,210,255,0.5)',
+    borderColor: 'rgba(148,210,255,0.2)',
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: 'rgba(14,50,80,0.3)',
+    backgroundColor: 'rgba(14,50,80,0.1)',
     zIndex: 1,
     position: 'relative',
   },
@@ -203,13 +208,11 @@ const styles = StyleSheet.create({
   },
   markText: {
     fontSize: 8,
-    color: 'rgba(148,210,255,0.5)',
     marginLeft: 4,
   },
   base: {
     width: 100,
     height: 8,
-    backgroundColor: 'rgba(56,189,248,0.3)',
     borderRadius: 4,
     marginTop: 2,
   },

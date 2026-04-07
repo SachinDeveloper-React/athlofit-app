@@ -13,7 +13,7 @@ export interface HealthData {
   sleepHours: number;
   weight: number; // kg
   bloodGlucose: number; // mmol/L
-  hydration: number; // mmol/L
+  hydration: number; // ml
 }
 
 export const defaultHealthData: HealthData = {

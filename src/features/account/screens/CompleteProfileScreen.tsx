@@ -1,14 +1,12 @@
 import React, { useState, useRef } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Animated,
 } from 'react-native';
+import { AppView, AppText, Button } from '../../../components';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -92,37 +90,34 @@ const CompleteProfileScreen: React.FC<Props> = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* ── Top bar ── */}
-      <View
+      <AppView
         style={[
           s.topBar,
           { paddingTop: insets.top + 12, borderBottomColor: colors.border },
         ]}
       >
         {step > 1 && (
-          <TouchableOpacity
+          <Button
+            label="‹ Back"
+            variant="ghost"
+            size="sm"
             onPress={() => setStep(s => s - 1)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            labelStyle={{ color: colors.primary, fontSize: 17, fontWeight: '400' }}
             style={s.backBtn}
-          >
-            <Text style={[s.backText, { color: colors.primary }]}>‹ Back</Text>
-          </TouchableOpacity>
+          />
         )}
-        <View style={s.stepLabel}>
-          <Text style={[s.stepCounter, { color: colors.mutedForeground }]}>
+        <AppView style={s.stepLabel}>
+          <AppText style={[s.stepCounter, { color: colors.mutedForeground }]}>
             Step {step} of {TOTAL_STEPS}
-          </Text>
-        </View>
+          </AppText>
+        </AppView>
         {/* Skip (optional) */}
-        <TouchableOpacity
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[s.skipText, { color: colors.mutedForeground }]}> </Text>
-        </TouchableOpacity>
-      </View>
+        <AppText style={[s.skipText, { color: colors.mutedForeground }]}> </AppText>
+      </AppView>
 
       {/* ── Progress bar ── */}
-      <View style={[s.progressTrack, { backgroundColor: colors.secondary }]}>
-        <View
+      <AppView style={[s.progressTrack, { backgroundColor: colors.secondary }]}>
+        <AppView
           style={[
             s.progressFill,
             {
@@ -131,7 +126,7 @@ const CompleteProfileScreen: React.FC<Props> = () => {
             },
           ]}
         />
-      </View>
+      </AppView>
 
       <ScrollView
         contentContainerStyle={[
@@ -141,7 +136,7 @@ const CompleteProfileScreen: React.FC<Props> = () => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={s.form}>
+        <AppView style={s.form}>
           {step === 1 && <Step1Personal onNext={handleStep1} colors={colors} />}
           {step === 2 && (
             <Step2Body
@@ -150,7 +145,7 @@ const CompleteProfileScreen: React.FC<Props> = () => {
               colors={colors}
             />
           )}
-        </View>
+        </AppView>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -165,8 +160,7 @@ const s = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {},
-  backText: { fontSize: 17, fontWeight: '400', minWidth: 60 },
+  backBtn: { width: 60 },
   stepLabel: { flex: 1, alignItems: 'center' },
   stepCounter: { fontSize: 13, fontWeight: '500' },
   skipText: { fontSize: 15, minWidth: 60, textAlign: 'right' },

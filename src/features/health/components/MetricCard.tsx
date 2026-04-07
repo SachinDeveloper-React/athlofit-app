@@ -1,8 +1,5 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo } from 'react';
 import {
-  Pressable,
-  type PressableProps,
-  type PressableStateCallbackType,
   StyleSheet,
   type ViewStyle,
 } from 'react-native';
@@ -14,7 +11,7 @@ import { AppText, AppView, Card } from '../../../components';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type MetricCardProps = PressableProps & {
+export type MetricCardProps = {
   iconName: LucideName;
   iconColor: string;
   iconBg: string;
@@ -26,6 +23,8 @@ export type MetricCardProps = PressableProps & {
 
   width?: number;
   height?: number;
+  onPress?: () => void;
+  style?: ViewStyle;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -46,39 +45,18 @@ const MetricCard = memo(
     unit,
     width = DEFAULT_WIDTH,
     height = DEFAULT_HEIGHT,
+    onPress,
     style,
-    ...rest
   }: MetricCardProps) => {
     const { colors } = useTheme();
 
-    // Inline press feedback — stable reference, no recreation on re-render
-    const pressStyle = useCallback(
-      ({ pressed }: PressableStateCallbackType): ViewStyle => ({
-        opacity: pressed ? 0.99 : 1,
-        transform: [{ scale: pressed ? 0.97 : 1 }],
-      }),
-      [],
-    );
-
-    const cardStyle = useMemo(
-      () => [{ width, height }, styles.card],
-      [width, height],
-    );
-
-    const iconWrapStyle = useMemo(
-      () => [styles.iconWrap, { backgroundColor: iconBg }],
-      [iconBg],
-    );
-
-    const muted = useMemo(
-      () => withOpacity(colors.foreground, 0.6),
-      [colors.foreground],
-    );
+    const cardStyle = [{ width, height }, styles.card, style];
+    const iconWrapStyle = [styles.iconWrap, { backgroundColor: iconBg }];
+    const muted = withOpacity(colors.foreground, 0.6);
 
     return (
-      <Pressable style={pressStyle} {...rest}>
-        <Card style={cardStyle}>
-          {/* Left column */}
+      <Card style={cardStyle} onPress={onPress}>
+        {/* Left column */}
           <AppView style={styles.leftCol}>
             <AppView style={iconWrapStyle}>
               <Icon name={iconName} color={iconColor} />
@@ -111,10 +89,10 @@ const MetricCard = memo(
             </AppView>
           )}
         </Card>
-      </Pressable>
     );
   },
 );
+
 
 MetricCard.displayName = 'MetricCard';
 

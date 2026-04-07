@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTheme } from '../../../../hooks/useTheme';
 import { DateFieldProps } from '../../types/completeProfile.types';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 
 export const DateField: React.FC<DateFieldProps> = ({
   value,
@@ -27,20 +28,20 @@ export const DateField: React.FC<DateFieldProps> = ({
   const borderCol = error ? colors.destructive : colors.border;
 
   return (
-    <View style={dt.wrapper}>
-      <Text
+    <AppView style={dt.wrapper}>
+      <AppText
         style={[
           dt.label,
           { color: error ? colors.destructive : colors.foreground },
         ]}
       >
         Date of birth
-      </Text>
-      <Text style={[dt.hint, { color: colors.mutedForeground }]}>
+      </AppText>
+      <AppText style={[dt.hint, { color: colors.mutedForeground }]}>
         DD / MM / YYYY
-      </Text>
+      </AppText>
 
-      <View style={dt.row}>
+      <AppView style={dt.row}>
         {/* Day */}
         <TextInput
           style={[
@@ -66,7 +67,7 @@ export const DateField: React.FC<DateFieldProps> = ({
           textAlign="center"
           selectionColor={colors.primary}
         />
-        <Text style={[dt.sep, { color: colors.mutedForeground }]}>/</Text>
+        <AppText style={[dt.sep, { color: colors.mutedForeground }]}>/</AppText>
 
         {/* Month */}
         <TextInput
@@ -94,7 +95,7 @@ export const DateField: React.FC<DateFieldProps> = ({
           textAlign="center"
           selectionColor={colors.primary}
         />
-        <Text style={[dt.sep, { color: colors.mutedForeground }]}>/</Text>
+        <AppText style={[dt.sep, { color: colors.mutedForeground }]}>/</AppText>
 
         {/* Year */}
         <TextInput
@@ -121,11 +122,11 @@ export const DateField: React.FC<DateFieldProps> = ({
           textAlign="center"
           selectionColor={colors.primary}
         />
-      </View>
+      </AppView>
       {!!error && (
-        <Text style={[dt.error, { color: colors.destructive }]}>{error}</Text>
+        <AppText style={[dt.error, { color: colors.destructive }]}>{error}</AppText>
       )}
-    </View>
+    </AppView>
   );
 };
 

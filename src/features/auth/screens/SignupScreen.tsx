@@ -1,14 +1,10 @@
 import React, { useRef } from 'react';
 import {
-  View,
-  Text,
   TextInput,
-  TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +20,7 @@ import {
 } from '../utils/authValidation';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
-import { Header, Input } from '../../../components';
+import { Header, Input, AppView, AppText, Button } from '../../../components';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.SIGNUP>;
 
@@ -106,22 +102,22 @@ const SignupScreen: React.FC<Props> = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero ── */}
-        <View style={s.hero}>
-          <View
+        <AppView style={s.hero}>
+          <AppView
             style={[s.iconWrap, { backgroundColor: colors.primary + '15' }]}
           >
-            <Text style={s.iconEmoji}>👤</Text>
-          </View>
-          <Text style={[s.title, { color: colors.foreground }]}>
+            <AppText style={s.iconEmoji}>👤</AppText>
+          </AppView>
+          <AppText style={[s.title, { color: colors.foreground }]}>
             Create account
-          </Text>
-          <Text style={[s.subtitle, { color: colors.mutedForeground }]}>
+          </AppText>
+          <AppText style={[s.subtitle, { color: colors.mutedForeground }]}>
             Start your health journey today
-          </Text>
-        </View>
+          </AppText>
+        </AppView>
 
         {/* ── Form ── */}
-        <View style={s.form}>
+        <AppView style={s.form}>
           <Controller
             control={control}
             name="name"
@@ -176,58 +172,52 @@ const SignupScreen: React.FC<Props> = () => {
           />
 
           {/* ── Password rules hint ── */}
-          <View style={[s.rulesBox, { backgroundColor: colors.secondary }]}>
-            <Text style={[s.rulesTitle, { color: colors.foreground }]}>
+          <AppView style={[s.rulesBox, { backgroundColor: colors.secondary }]}>
+            <AppText style={[s.rulesTitle, { color: colors.foreground }]}>
               Password must have:
-            </Text>
-            <Text style={[s.rulesItem, { color: colors.mutedForeground }]}>
+            </AppText>
+            <AppText style={[s.rulesItem, { color: colors.mutedForeground }]}>
               • At least 8 characters
-            </Text>
-            <Text style={[s.rulesItem, { color: colors.mutedForeground }]}>
+            </AppText>
+            <AppText style={[s.rulesItem, { color: colors.mutedForeground }]}>
               • One uppercase letter (A–Z)
-            </Text>
-            <Text style={[s.rulesItem, { color: colors.mutedForeground }]}>
+            </AppText>
+            <AppText style={[s.rulesItem, { color: colors.mutedForeground }]}>
               • One number (0–9)
-            </Text>
-          </View>
+            </AppText>
+          </AppView>
 
           {/* ── Terms ── */}
-          <Text style={[s.terms, { color: colors.mutedForeground }]}>
+          <AppText style={[s.terms, { color: colors.mutedForeground }]}>
             By creating an account you agree to our{' '}
-            <Text style={{ color: colors.primary }}>Terms of Service</Text> and{' '}
-            <Text style={{ color: colors.primary }}>Privacy Policy</Text>
-          </Text>
+            <AppText style={{ color: colors.primary }}>Terms of Service</AppText> and{' '}
+            <AppText style={{ color: colors.primary }}>Privacy Policy</AppText>
+          </AppText>
 
           {/* ── Submit ── */}
-          <TouchableOpacity
+          <Button
+            label="Create Account"
             onPress={handleSubmit(onSubmit)}
-            disabled={isPending}
-            activeOpacity={0.8}
-            style={[
-              s.submitBtn,
-              { backgroundColor: colors.primary, opacity: isPending ? 0.7 : 1 },
-            ]}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={s.submitLabel}>Create Account</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            loading={isPending}
+            fullWidth
+            size="lg"
+            style={{ marginBottom: 12 }}
+          />
+        </AppView>
 
         {/* ── Footer ── */}
-        <View style={s.footer}>
-          <Text style={[s.footerText, { color: colors.mutedForeground }]}>
+        <AppView style={s.footer}>
+          <AppText style={[s.footerText, { color: colors.mutedForeground }]}>
             Already have an account?
-          </Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={[s.footerLink, { color: colors.primary }]}>
-              {' '}
-              Sign in
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </AppText>
+          <Button
+            label="Sign in"
+            variant="ghost"
+            size="sm"
+            onPress={() => navigation.goBack()}
+            labelStyle={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}
+          />
+        </AppView>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -274,18 +264,6 @@ const s = StyleSheet.create({
     marginBottom: 20,
     marginTop: 4,
   },
-  submitBtn: {
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitLabel: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -294,7 +272,6 @@ const s = StyleSheet.create({
     paddingBottom: 8,
   },
   footerText: { fontSize: 15 },
-  footerLink: { fontSize: 15, fontWeight: '600' },
 });
 
 export default SignupScreen;

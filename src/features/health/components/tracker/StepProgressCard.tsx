@@ -1,5 +1,9 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  StyleSheet,
+  type ViewStyle,
+} from 'react-native';
 import Svg, {
   Path,
   Circle,
@@ -16,18 +20,24 @@ import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
   withTiming,
+  withSpring,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-import { AppText } from '../../../../components';
+import { AppText, AppView, Icon, Button, IconButton } from '../../../../components';
+import { Skeleton } from '../../../../components/SkeletonLoader';
 import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { WeeklyStepEntry } from '../../types/healthTypes';
+import { navigate } from '../../../../navigation/navigationRef';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CX = 130;
-const CY = 130;
-const R = 100;
+const SVG_W = 360;   // matches typical screen width; SVG uses width="100%"
+const CX = SVG_W / 2;  // 180
+const CY = 150;
+const R = 130;
+
 const START_DEG = 160;
 const END_DEG = 380; // 280° sweep
 const SWEEP = END_DEG - START_DEG;
@@ -42,6 +52,10 @@ type Props = {
   weekData: WeeklyStepEntry[];
   todayIndex?: number;
   style?: ViewStyle;
+  isWeekPending?: boolean;
+  onClaim?: (coinsToAdd: number) => void;
+  claimPending?: boolean;
+  claimedToday?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -95,10 +109,19 @@ type SpeedometerProps = {
   muted: string;
   border: string;
   bg: string;
+  onEditGoal: () => void;
 };
 
 const Speedometer = memo(
-  ({ steps, goal, foreground, muted, border, bg }: SpeedometerProps) => {
+  ({
+    steps,
+    goal,
+    foreground,
+    muted,
+    border,
+    bg,
+    onEditGoal,
+  }: SpeedometerProps) => {
     const progress = useSharedValue(0);
 
     // Arc path lives in React state — plain string, no Reanimated involvement.
@@ -126,16 +149,16 @@ const Speedometer = memo(
       });
     }, [steps, goal]);
 
-    // Needle — plain number prop, Reanimated passes it through to RNSVG safely
-    const needleRotationProps = useAnimatedProps(() => ({
-      rotation: NEEDLE_MIN + (NEEDLE_MAX - NEEDLE_MIN) * progress.value,
-    }));
+    // // Needle — plain number prop, Reanimated passes it through to RNSVG safely
+    // const needleRotationProps = useAnimatedProps(() => ({
+    //   rotation: NEEDLE_MIN + (NEEDLE_MAX - NEEDLE_MIN) * progress.value,
+    // }));
 
     const pct = Math.min(Math.round((steps / goal) * 100), 100);
 
     return (
-      <View style={styles.speedoContainer}>
-        <Svg width={260} height={150} viewBox="0 0 260 150">
+      <AppView style={styles.speedoContainer}>
+        <Svg width="100%" height={180} viewBox={`0 0 ${SVG_W} 180`}>
           <Defs>
             <LinearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
               <Stop offset="0%" stopColor="#378ADD" />
@@ -195,19 +218,25 @@ const Speedometer = memo(
         </Svg>
 
         {/* Centre overlay text */}
-        <View style={styles.speedoCenterInfo} pointerEvents="none">
-          <AppText variant="title2" weight="medium" style={styles.stepsVal}>
+        <AppView style={[styles.speedoCenterInfo, { bottom: 4 }]}>
+          <AppView style={styles.goalRow}>
+          <AppText variant="title1" weight="medium" style={styles.stepsVal}>
             {steps.toLocaleString()}/
-            <AppText variant="caption1">{goal}</AppText>
           </AppText>
+           <AppView style={styles.goalRow} pointerEvents="auto">
+              <AppText variant="caption1">{goal}</AppText>
+              <IconButton name='Pencil'  borderColor={border} borderRadius={10} onPress={onEditGoal} />
+            </AppView>
+
+</AppView>
           <AppText variant="caption1" style={styles.stepsLbl}>
-            steps today
+            Steps Today
           </AppText>
           <AppText variant="caption2" style={styles.pctLbl}>
             {steps >= goal ? 'Goal reached!' : `${pct}% of goal`}
           </AppText>
-        </View>
-      </View>
+        </AppView>
+      </AppView>
     );
   },
 );
@@ -249,19 +278,19 @@ const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
   const barColor = met ? '#1D9E75' : isToday ? '#378ADD' : colors.muted;
 
   return (
-    <View style={styles.dayCol}>
+    <AppView style={styles.dayCol}>
       {/* Goal indicator dot */}
-      <View
+      <AppView
         style={[
           styles.checkmark,
           { backgroundColor: met ? '#1D9E75' : colors.border },
         ]}
       >
         {met && <AppText style={styles.checkIcon}>✓</AppText>}
-      </View>
+      </AppView>
 
       {/* Bar */}
-      <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
+      <AppView style={[styles.barTrack, { backgroundColor: colors.border }]}>
         {/* ✅ Animated.View only handles height; barColor style is separate */}
         <Animated.View
           style={[
@@ -272,8 +301,8 @@ const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
         />
 
         {/* Goal reference line */}
-        <View style={[styles.goalLine, { bottom: goalLineY }]} />
-      </View>
+        <AppView style={[styles.goalLine, { bottom: goalLineY }]} />
+      </AppView>
 
       <AppText variant="caption2" style={styles.daySteps}>
         {(data.steps / 1000).toFixed(1)}k
@@ -284,16 +313,103 @@ const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
       >
         {data.date}
       </AppText>
-    </View>
+    </AppView>
   );
 });
 
 DayBar.displayName = 'DayBar';
 
+// ─── ClaimCoinsButton ─────────────────────────────────────────────────────────
+
+type ClaimProps = {
+  steps: number;
+  goal: number;
+  onClaim?: (coinsToAdd: number) => void;
+  claimPending?: boolean;
+  claimedToday?: boolean;
+};
+
+const COINS_FOR_GOAL = 50;
+const COINS_PARTIAL = 10;
+
+const ClaimCoinsButton = memo(({ steps, goal, onClaim, claimPending, claimedToday }: ClaimProps) => {
+  const { colors } = useTheme();
+  const pct = steps / goal;
+  const goalMet = pct >= 1;
+  const partialMet = pct >= 0.5 && !goalMet;
+  const coinsAvailable = goalMet ? COINS_FOR_GOAL : COINS_PARTIAL;
+  const visible = (goalMet || partialMet) && !claimedToday;
+
+  const scale = useSharedValue(1);
+  const shimmer = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      // Gentle pulse to draw attention
+      scale.value = withSpring(1.03, { damping: 6 }, () => {
+        scale.value = withSpring(1, { damping: 6 });
+      });
+    }
+  }, [visible]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  if (!visible && !claimedToday) return null;
+
+  const goldFrom = '#F5C518';
+  const goldTo = '#E8970A';
+  const claimedBg = withOpacity(colors.primary, 0.12);
+
+  if (claimedToday) {
+    return (
+      <AppView style={styles.claimWrap}>
+        <AppView style={[styles.claimedBadge, { backgroundColor: claimedBg }]}>
+          <AppText style={[styles.claimedText, { color: colors.primary }]}>
+            ✓ Coins claimed today!
+          </AppText>
+        </AppView>
+      </AppView>
+    );
+  }
+
+  return (
+    <Animated.View style={[styles.claimWrap, animStyle]}>
+      <Button
+        label={claimPending ? 'Claiming…' : `Claim ${coinsAvailable} Coins`}
+        onPress={() => onClaim?.(coinsAvailable)}
+        variant="tinted"
+        size="lg"
+        fullWidth
+        disabled={claimPending}
+        loading={claimPending}
+        leftIcon={
+          <AppText style={styles.coinEmoji}>🪙</AppText>
+        }
+        style={styles.claimBtn}
+        labelStyle={styles.claimTitle}
+      />
+    </Animated.View>
+  );
+});
+
+ClaimCoinsButton.displayName = 'ClaimCoinsButton';
+
 // ─── StepProgressCard ─────────────────────────────────────────────────────────
 
 export const StepProgressCard = memo(
-  ({ steps, goal = 10000, weekData, todayIndex, style }: Props) => {
+  ({
+    steps,
+    goal = 10000,
+    weekData,
+    todayIndex,
+    style,
+    isWeekPending,
+    onClaim,
+    claimPending,
+    claimedToday,
+  }: Props) => {
     const { colors, radius } = useTheme();
 
     const todayIdx = todayIndex ?? weekData.length - 1;
@@ -303,8 +419,14 @@ export const StepProgressCard = memo(
       [weekData, goal],
     );
 
+    const onEditGoal = useCallback(() => {
+      navigate('HealthStack', {
+        screen: 'EditStepsGoalScreen',
+      });
+    }, []);
+
     return (
-      <View style={[styles.card, { borderRadius: radius.lg }, style]}>
+      <AppView style={[styles.card, { borderRadius: radius.lg }, style]}>
         <Speedometer
           steps={steps}
           goal={goal}
@@ -312,27 +434,51 @@ export const StepProgressCard = memo(
           muted={colors.muted}
           border={colors.border}
           bg={colors.background}
+          onEditGoal={onEditGoal}
         />
 
-        <AppText
-          variant="caption1"
-          style={[styles.weekLabel, { color: colors.muted }]}
-        >
-          This week
-        </AppText>
+        {/* Claim Coins Button */}
+        <ClaimCoinsButton
+          steps={steps}
+          goal={goal}
+          onClaim={onClaim}
+          claimPending={claimPending}
+          claimedToday={claimedToday}
+        />
 
-        <View style={styles.weekGrid}>
-          {weekData.map((day, i) => (
-            <DayBar
-              key={`${day.date}-${i}`}
-              data={day}
-              goal={goal}
-              maxSteps={maxSteps}
-              isToday={i === todayIdx}
-            />
-          ))}
-        </View>
-      </View>
+        {isWeekPending ? (
+          <AppView style={{ marginTop: 24 }}>
+            <Skeleton width={80} height={14} style={{ marginBottom: 12 }} />
+            <AppView style={styles.weekGrid}>
+              {Array.from({ length: 7 }).map((_, i) => (
+                <AppView key={i} style={styles.dayCol}>
+                  <Skeleton width={16} height={16} radius="full" />
+                  <Skeleton width={22} height={80} radius="full" />
+                  <Skeleton width={20} height={10} />
+                  <Skeleton width={22} height={12} />
+                </AppView>
+              ))}
+            </AppView>
+          </AppView>
+        ) : weekData && weekData.length > 0 ? (
+          <AppView style={{ marginTop: 24 }}>
+            <AppText variant="caption1" style={[styles.weekLabel]}>
+              This week
+            </AppText>
+            <AppView style={styles.weekGrid}>
+              {weekData.map((day, i) => (
+                <DayBar
+                  key={`${day.date}-${i}`}
+                  data={day}
+                  goal={goal}
+                  maxSteps={maxSteps}
+                  isToday={i === todayIdx}
+                />
+              ))}
+            </AppView>
+          </AppView>
+        ) : null}
+      </AppView>
     );
   },
 );
@@ -343,14 +489,17 @@ StepProgressCard.displayName = 'StepProgressCard';
 
 const styles = StyleSheet.create({
   card: {
-    padding: 20,
+    paddingVertical: 20,
+      paddingHorizontal: 0, 
   },
 
   // Speedometer
-  speedoContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
+speedoContainer: {
+  alignItems: 'center',
+  marginBottom: 24,
+  width: '100%',      // ← add this
+  alignSelf: 'stretch',
+},
   speedoCenterInfo: {
     position: 'absolute',
     bottom: 0,
@@ -370,10 +519,12 @@ const styles = StyleSheet.create({
   // Week grid
   weekLabel: {
     marginBottom: 12,
+     paddingHorizontal: 20, 
   },
   weekGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  paddingHorizontal: 20,
   },
 
   // Day bar
@@ -427,5 +578,51 @@ const styles = StyleSheet.create({
   dayNameToday: {
     opacity: 1,
     fontWeight: '500',
+  },
+  goalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+
+  editBtn: {
+    marginLeft: 4,
+    padding: 0,
+  },
+
+  // Claim Coins Button
+  claimWrap: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  claimBtn: {
+    borderRadius: 16,
+    shadowColor: '#F5C518',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
+    alignSelf: 'stretch',
+  },
+  coinEmoji: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  claimTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#F5C518',
+    letterSpacing: 0.2,
+  },
+  claimedBadge: {
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  claimedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

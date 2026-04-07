@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
+import { useTheme } from '../../../hooks/useTheme';
+import { withOpacity } from '../../../utils/withOpacity';
 
 import { useHydration } from '../hooks/useHydration';
 import { StatsCard } from '../components/hydration/StatsCard';
@@ -29,6 +31,7 @@ const HydrationScreen = (_props: Props) => {
     addWater,
     resetDay,
   } = useHydration();
+  const { colors } = useTheme();
   const [scheduleVisible, setScheduleVisible] = useState(false);
   const scheduledCount = useHydrationScheduleStore(
     s => s.scheduledTimes.length,
@@ -51,7 +54,7 @@ const HydrationScreen = (_props: Props) => {
             >
               <AppText style={styles.bellIcon}>🔔</AppText>
               {scheduledCount > 0 && (
-                <AppView style={styles.badge}>
+                <AppView style={[styles.badge, { backgroundColor: colors.destructive }]}>
                   <AppText style={styles.badgeText}>{scheduledCount}</AppText>
                 </AppView>
               )}
@@ -63,16 +66,16 @@ const HydrationScreen = (_props: Props) => {
       <StatusBar barStyle="light-content" />
 
       {/* Background layers */}
-      <View style={styles.bgLayer1} />
-      <View style={styles.bgLayer2} />
+
+      <View style={[styles.bgLayer2, { backgroundColor: withOpacity(colors.primary, 0.06) }]} />
 
       {/* Status / sync message */}
       <View style={styles.headerRow}>
-        <AppText style={styles.statusMsg}>{statusMessage}</AppText>
+        <AppText style={[styles.statusMsg, { color: colors.primary }]}>{statusMessage}</AppText>
         {isSyncing && (
-          <AppText style={styles.syncingText}>↻ Syncing health data…</AppText>
+          <AppText style={[styles.syncingText, { color: colors.mutedForeground }]}>↻ Syncing health data…</AppText>
         )}
-        {error && <AppText style={styles.errorText}>⚠ {error}</AppText>}
+        {error && <AppText style={[styles.errorText, { color: colors.destructive }]}>⚠ {error}</AppText>}
       </View>
 
       {/* Stats card with glass + amount */}
@@ -109,10 +112,6 @@ const HydrationScreen = (_props: Props) => {
 export default HydrationScreen;
 
 const styles = StyleSheet.create({
-  bgLayer1: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#020c18',
-  },
   bgLayer2: {
     position: 'absolute',
     top: -100,
@@ -120,25 +119,21 @@ const styles = StyleSheet.create({
     width: 400,
     height: 400,
     borderRadius: 200,
-    backgroundColor: 'rgba(14,165,233,0.06)',
   },
   headerRow: {
     marginBottom: 16,
     gap: 4,
   },
   statusMsg: {
-    color: '#38bdf8',
     marginTop: 16,
     fontWeight: '500',
   },
   syncingText: {
     fontSize: 11,
-    color: '#475569',
     letterSpacing: 0.5,
   },
   errorText: {
     fontSize: 12,
-    color: '#f87171',
   },
   glassRow: {
     flexDirection: 'row',
@@ -156,7 +151,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    backgroundColor: '#0ea5e9',
     borderRadius: 8,
     minWidth: 16,
     height: 16,

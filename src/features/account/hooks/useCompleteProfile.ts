@@ -11,6 +11,7 @@ export function useCompleteProfile() {
       accountService.completeProfile(body),
 
     onSuccess: response => {
+      console.log("response", response)
       if (response.success && response.data?.user) {
         // Sync updated user (with isProfileComplete: true) into auth store
         updateUser(response?.data?.user);

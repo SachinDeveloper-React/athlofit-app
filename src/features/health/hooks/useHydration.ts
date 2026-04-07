@@ -32,6 +32,7 @@ export const useHydration = () => {
     data,
     isReady,
     isLoading: healthLoading,
+    platform,
   } = useHealth();
 
   // ── On mount: load history + sync health platform ──────────────────────────
@@ -67,13 +68,16 @@ export const useHydration = () => {
 
   // ── resetDay ───────────────────────────────────────────────────────────────
   const resetDay = useCallback(async () => {
-    await Promise.allSettled([
-      storeResetDay(),
-      deleteRecordsByTimeRange('Hydration', buildTodayFilter()).catch(e =>
-        console.warn('[HC] Previous days hydration delete failed:', e),
-      ),
-    ]);
-  }, [storeResetDay, writeHydration]);
+    const promises: Promise<any>[] = [storeResetDay()];
+    if (platform === 'healthconnect') {
+      promises.push(
+        deleteRecordsByTimeRange('Hydration', buildTodayFilter()).catch(e =>
+          console.warn('[HC] Previous days hydration delete failed:', e),
+        ),
+      );
+    }
+    await Promise.allSettled(promises);
+  }, [storeResetDay, platform]);
 
   return {
     // Data

@@ -1,13 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
   TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../../hooks/useTheme';
 import { useToast } from '../../../components/Toast';
+import { AppView, AppText, Button, Loader } from '../../../components';
 import { useVerifyOtp, useResendOtp } from '../hooks/useOtp';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
@@ -203,42 +200,43 @@ const OtpScreen: React.FC<Props> = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* ── Nav bar ── */}
-      <View
+      <AppView
         style={[
           s.navbar,
           { paddingTop: insets.top + 8, borderBottomColor: colors.border },
         ]}
       >
-        <TouchableOpacity
+        <Button
+          label="‹ Back"
+          variant="ghost"
+          size="sm"
           onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[s.backText, { color: colors.primary }]}>‹ Back</Text>
-        </TouchableOpacity>
-      </View>
+          labelStyle={{ color: colors.primary, fontSize: 17, fontWeight: '400' }}
+        />
+      </AppView>
 
-      <View style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
+      <AppView style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
         {/* ── Hero ── */}
-        <View style={s.hero}>
-          <View
+        <AppView style={s.hero}>
+          <AppView
             style={[s.iconWrap, { backgroundColor: colors.primary + '15' }]}
           >
-            <Text style={s.iconEmoji}>✉️</Text>
-          </View>
+            <AppText style={s.iconEmoji}>✉️</AppText>
+          </AppView>
 
-          <Text style={[s.title, { color: colors.foreground }]}>
+          <AppText style={[s.title, { color: colors.foreground }]}>
             Check your email
-          </Text>
-          <Text style={[s.subtitle, { color: colors.mutedForeground }]}>
+          </AppText>
+          <AppText style={[s.subtitle, { color: colors.mutedForeground }]}>
             We sent a 6-digit code to
-          </Text>
-          <Text style={[s.emailText, { color: colors.foreground }]}>
+          </AppText>
+          <AppText style={[s.emailText, { color: colors.foreground }]}>
             {maskedEmail}
-          </Text>
-        </View>
+          </AppText>
+        </AppView>
 
         {/* ── OTP Boxes ── */}
-        <View style={s.otpRow}>
+        <AppView style={s.otpRow}>
           {digits.map((digit, i) => {
             const isActive = activeIdx === i;
             const isFilled = !!digit;
@@ -290,12 +288,12 @@ const OtpScreen: React.FC<Props> = () => {
               </Animated.View>
             );
           })}
-        </View>
+        </AppView>
 
         {/* ── Progress dots ── */}
-        <View style={s.progressRow}>
+        <AppView style={s.progressRow}>
           {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-            <View
+            <AppView
               key={i}
               style={[
                 s.progressDot,
@@ -307,86 +305,67 @@ const OtpScreen: React.FC<Props> = () => {
               ]}
             />
           ))}
-        </View>
+        </AppView>
 
         {/* ── Verify button ── */}
-        <TouchableOpacity
+        <Button
+          label="Verify Code"
           onPress={() => handleVerify(digits.join(''))}
           disabled={!isComplete || verifying}
-          activeOpacity={0.8}
-          style={[
-            s.submitBtn,
-            {
-              backgroundColor: colors.primary,
-              opacity: !isComplete || verifying ? 0.45 : 1,
-            },
-          ]}
-        >
-          {verifying ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={s.submitLabel}>Verify Code</Text>
-          )}
-        </TouchableOpacity>
+          loading={verifying}
+          fullWidth
+          size="lg"
+          style={{ marginBottom: 28 }}
+        />
 
         {/* ── Resend section ── */}
-        <View style={s.resendRow}>
-          <Text style={[s.resendPrompt, { color: colors.mutedForeground }]}>
+        <AppView style={s.resendRow}>
+          <AppText style={[s.resendPrompt, { color: colors.mutedForeground }]}>
             Didn't receive the code?
-          </Text>
+          </AppText>
 
           {countdown > 0 ? (
-            <View style={s.countdownWrap}>
-              <Text
+            <AppView style={s.countdownWrap}>
+              <AppText
                 style={[s.countdownText, { color: colors.mutedForeground }]}
               >
                 {' '}
                 Resend in{' '}
-              </Text>
-              <View
+              </AppText>
+              <AppView
                 style={[
                   s.countdownBadge,
                   { backgroundColor: colors.secondary },
                 ]}
               >
-                <Text style={[s.countdownTimer, { color: colors.foreground }]}>
+                <AppText style={[s.countdownTimer, { color: colors.foreground }]}>
                   {formatCountdown(countdown)}
-                </Text>
-              </View>
-            </View>
+                </AppText>
+              </AppView>
+            </AppView>
           ) : (
-            <TouchableOpacity
+            <Button
+              label={resending ? 'Sending...' : ' Resend code'}
               onPress={handleResend}
               disabled={resending}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {resending ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.primary}
-                  style={{ marginLeft: 6 }}
-                />
-              ) : (
-                <Text style={[s.resendLink, { color: colors.primary }]}>
-                  {' '}
-                  Resend code
-                </Text>
-              )}
-            </TouchableOpacity>
+              variant="ghost"
+              size="sm"
+              loading={resending}
+              labelStyle={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}
+            />
           )}
-        </View>
+        </AppView>
 
         {/* ── Wrong email hint ── */}
-        <TouchableOpacity
+        <Button
+          label="Wrong email address? Change it"
           onPress={() => navigation.goBack()}
+          variant="ghost"
+          size="sm"
           style={s.wrongEmailBtn}
-        >
-          <Text style={[s.wrongEmailText, { color: colors.mutedForeground }]}>
-            Wrong email address?{' '}
-            <Text style={{ color: colors.primary }}>Change it</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
+          labelStyle={{ color: colors.mutedForeground, fontSize: 14 }}
+        />
+      </AppView>
     </KeyboardAvoidingView>
   );
 };
@@ -406,7 +385,6 @@ const s = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backText: { fontSize: 17, fontWeight: '400' },
 
   // Layout
   content: { flex: 1, paddingHorizontal: 24 },
@@ -465,21 +443,6 @@ const s = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // Submit
-  submitBtn: {
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
-  },
-  submitLabel: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-
   // Resend
   resendRow: {
     flexDirection: 'row',
@@ -502,11 +465,9 @@ const s = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
-  resendLink: { fontSize: 15, fontWeight: '600' },
 
   // Wrong email
   wrongEmailBtn: { alignItems: 'center', marginTop: 8 },
-  wrongEmailText: { fontSize: 14, textAlign: 'center' },
 });
 
 export default OtpScreen;

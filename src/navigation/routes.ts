@@ -24,24 +24,37 @@ export const HealthRoutes = {
   HEART_RATE: 'HeartRateScreen',
   BLOOD_PRESSURE: 'BloodPressureScreen',
   HYDRATION: 'HydrationScreen',
+  EDIT_STEPS_GOAL: 'EditStepsGoalScreen',
   ANALYTICS: 'HealthAnalyticsScreen',
   STREAK: 'StreakScreen',
+  HEALTH_ANALYTICS: 'HealthAnalyticsScreen',
+  COINS: 'CoinsScreen',
+  // Nutrition Phase 2
+  FOOD_CATALOG: 'FoodCatalogScreen',
+  FOOD_DETAIL: 'FoodDetailScreen',
+  // BMI
+  BMI_CALCULATOR: 'BmiCalculatorScreen',
 } as const;
 
 export const ShopRoutes = {
   SHOP: 'ShopScreen',
+  SHOP_SEARCH: 'ShopSearchScreen',
   PRODUCT_DETAIL: 'ProductDetailScreen',
   CART: 'CartScreen',
   CHECKOUT: 'CheckoutScreen',
   ORDER_HISTORY: 'OrderHistoryScreen',
+  ADDRESSES: 'AddressesScreen',
+  ADD_EDIT_ADDRESS: 'AddEditAddressScreen',
 } as const;
 
 export const AccountRoutes = {
-  PROFILE: 'ProfileScreen',
+  ACCOUNT: 'AccountScreen',
   SETTINGS: 'SettingsScreen',
   EDIT_PROFILE: 'EditProfileScreen',
   NOTIFICATIONS: 'NotificationsScreen',
   PRIVACY: 'PrivacyScreen',
+  TERMS: 'TermsScreen',
+  HELP_SUPPORT: 'HelpSupportScreen',
 } as const;
 
 export const RootRoutes = {
@@ -49,4 +62,6 @@ export const RootRoutes = {
   PROFILE_SETUP_STACK: 'ProfileSetupStack',
   TAB_NAVIGATOR: 'TabNavigator',
   HEALTH_NAVIGATOR: 'HealthStack',
+  ACCOUNT_NAVIGATOR: 'AccountStack',
+  SHOP_NAVIGATOR: 'ShopStack',
 } as const;

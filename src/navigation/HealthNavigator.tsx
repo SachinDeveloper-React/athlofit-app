@@ -6,6 +6,12 @@ import type { HealthStackParamList } from '../types/navigation.types';
 import HeartRateScreen from '../features/health/screens/HeartRateScreen';
 import BloodPressureScreen from '../features/health/screens/BloodPressureScreen';
 import HydrationScreen from '../features/health/screens/HydrationScreen';
+import EditStepsGoalScreen from '../features/health/screens/EditStepsGoalScreen';
+import HealthAnalyticsScreen from '../features/health/screens/HealthAnalyticsScreen';
+import CoinScreen from '../features/health/screens/CoinScreen';
+import FoodCatalogScreen from '../features/health/screens/FoodCatalogScreen';
+import FoodDetailScreen from '../features/health/screens/FoodDetailScreen';
+import BmiCalculatorScreen from '../features/health/screens/BmiCalculatorScreen';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
 
@@ -25,6 +31,36 @@ const HealthNavigator: React.FC = () => {
       <Stack.Screen
         name={HealthRoutes.HYDRATION}
         component={HydrationScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.EDIT_STEPS_GOAL}
+        component={EditStepsGoalScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.HEALTH_ANALYTICS}
+        component={HealthAnalyticsScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.COINS}
+        component={CoinScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.FOOD_CATALOG}
+        component={FoodCatalogScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.FOOD_DETAIL}
+        component={FoodDetailScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.BMI_CALCULATOR}
+        component={BmiCalculatorScreen}
         options={{ animation: 'ios_from_right' }}
       />
     </Stack.Navigator>

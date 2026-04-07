@@ -20,12 +20,12 @@ export const authService = {
     });
 
     return {
-      success: response.accessToken && response.refreshToken && response.user,
+      success: response?.data?.accessToken && response?.data?.refreshToken && response?.data?.user,
       message: response.message,
       data: {
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        user: response.user,
+        accessToken: response?.data?.accessToken,
+        refreshToken: response?.data?.refreshToken,
+        user: response?.data?.user,
       },
     };
   },
@@ -34,21 +34,21 @@ export const authService = {
     api.post<SignUpResponse>('auth/user/signup', body, { auth: false }),
 
   forgotPassword: (body: ForgotPasswordRequest) =>
-    api.post<ApiResponse>('/auth/forgot-password', body, { auth: false }),
+    api.post<ApiResponse>('auth/forgot-password', body, { auth: false }),
 
   verifyOtp: async (body: VerifyOtpRequest) => {
     const response = await api.post<OtpResponse>(
-      '/auth/user/signup-verify',
+      'auth/user/signup-verify',
       body,
       { auth: false },
     );
     return {
-      success: response.status === 'success',
+      success: response?.data?.status === 'success',
       message: response.message,
       data: {
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        user: response.user,
+        accessToken: response?.data?.accessToken,
+        refreshToken: response?.data?.refreshToken,
+        user: response?.data?.user,
       },
     };
   },

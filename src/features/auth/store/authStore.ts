@@ -15,6 +15,12 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       isAuthenticated: false,
 
+      setAccessToken: (accessToken: string) => {
+        set(state => {
+          state.accessToken = accessToken;
+          state.isAuthenticated = true;
+        });
+      },
       // ── Called on successful login / register ───────────────────────────────
       setAuth: (user: User, tokens: AuthTokens) => {
         tokenService.save(tokens);
@@ -39,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
         // Fetch current user profile
         try {
           const res = await authService.me();
+          console.log("me", res);
 
           set(state => {
             state.user = res.data;

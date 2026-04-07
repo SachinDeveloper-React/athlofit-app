@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  TouchableOpacity,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -123,14 +122,13 @@ const LoginScreen: React.FC<Props> = () => {
 
           {/* Forgot password */}
           <AppView row justify="flex-end" mb={6} style={{ marginTop: -8 }}>
-            <TouchableOpacity
+            <Button
+              label="Forgot password?"
+              variant="ghost"
+              size="sm"
               onPress={() => navigation.navigate(AuthRoutes.FORGOT_PASSWORD)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <AppText variant="subhead" color={colors.primary}>
-                Forgot password?
-              </AppText>
-            </TouchableOpacity>
+              labelStyle={{ color: colors.primary }}
+            />
           </AppView>
 
           <Button
@@ -167,14 +165,13 @@ const LoginScreen: React.FC<Props> = () => {
           <AppText variant="subhead" secondary>
             Don't have an account?
           </AppText>
-          <TouchableOpacity
+          <Button
+            label="Sign up"
+            variant="ghost"
+            size="sm"
             onPress={() => navigation.navigate(AuthRoutes.SIGNUP)}
-          >
-            <AppText variant="subhead" color={colors.primary} weight="semiBold">
-              {' '}
-              Sign up
-            </AppText>
-          </TouchableOpacity>
+            labelStyle={{ color: colors.primary, fontWeight: '600' }}
+          />
         </AppView>
       </ScrollView>
     </KeyboardAvoidingView>

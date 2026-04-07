@@ -146,6 +146,7 @@ const AppTabsInner = <V extends number | string>({
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const paddingH = spacing[1];
+  const marginT = spacing[2];
 
   const tabW = useMemo(() => {
     if (!containerW || !tabs.length) return 0;
@@ -228,6 +229,7 @@ const AppTabsInner = <V extends number | string>({
         styles.container,
         {
           backgroundColor: withOpacity(colors.accent, 0.4),
+          marginTop: marginT,
           padding: paddingH,
           borderRadius: radius.sm,
         },

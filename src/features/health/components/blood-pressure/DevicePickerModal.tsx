@@ -1,14 +1,8 @@
 import React from 'react';
-import {
-  Modal,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { FlatList, Modal, StyleSheet } from 'react-native';
 import { Device } from 'react-native-ble-plx';
-import { AppView } from '../../../../components';
+import { AppText, AppView, Button, Loader } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
 
 interface DevicePickerModalProps {
   visible: boolean;
@@ -24,47 +18,60 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
   devices,
   onSelect,
   onClose,
-}) => (
-  <Modal
-    visible={visible}
-    transparent
-    animationType="slide"
-    onRequestClose={onClose}
-  >
-    <AppView style={styles.overlay}>
-      <AppView style={styles.sheet}>
-        <AppView style={styles.handle} />
-        <Text style={styles.title}>Nearby Devices</Text>
+}) => {
+  const { colors } = useTheme();
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <AppView style={styles.overlay}>
+        <AppView style={[styles.sheet, { backgroundColor: colors.card }]}>
+          <AppView style={[styles.handle, { backgroundColor: colors.border }]} />
+          <AppText variant="title3" style={styles.title}>Nearby Devices</AppText>
 
-        {scanning && (
-          <AppView style={styles.scanRow}>
-            <ActivityIndicator color="#3b82f6" size="small" />
-            <Text style={styles.scanText}>Scanning…</Text>
-          </AppView>
-        )}
-
-        {!devices.length && !scanning && (
-          <Text style={styles.empty}>No blood pressure devices found nearby.</Text>
-        )}
-
-        <FlatList
-          data={devices}
-          keyExtractor={d => d.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.item} onPress={() => onSelect(item)}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemId}>{item.id}</Text>
-            </TouchableOpacity>
+          {scanning && (
+            <AppView row align="center" gap={2} style={styles.scanRow}>
+              <Loader size="small" />
+              <AppText variant="footnote" secondary>Scanning…</AppText>
+            </AppView>
           )}
-        />
 
-        <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
+          {!devices.length && !scanning && (
+            <AppText variant="footnote" secondary align="center" style={styles.empty}>
+              No blood pressure devices found nearby.
+            </AppText>
+          )}
+
+          <FlatList
+            data={devices}
+            keyExtractor={d => d.id}
+            renderItem={({ item }) => (
+              <Button
+                variant="ghost"
+                label={`${item.name}\n${item.id}`}
+                onPress={() => onSelect(item)}
+                fullWidth
+                style={styles.item}
+              />
+            )}
+          />
+
+          <Button
+            label="Cancel"
+            onPress={onClose}
+            variant="outline"
+            size="md"
+            fullWidth
+            style={styles.cancelBtn}
+          />
+        </AppView>
       </AppView>
-    </AppView>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   overlay: {
@@ -73,7 +80,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
@@ -82,25 +88,13 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    backgroundColor: '#e2e8f0',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 20,
   },
-  title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 16 },
-  scanRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  scanText: { fontSize: 14, color: '#64748b' },
-  empty: { fontSize: 14, color: '#94a3b8', textAlign: 'center', paddingVertical: 32 },
-  item: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
-  itemId: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  cancelBtn: {
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  cancelText: { color: '#0f172a', fontSize: 15, fontWeight: '600' },
+  title: { marginBottom: 16 },
+  scanRow: { marginBottom: 12 },
+  empty: { paddingVertical: 32 },
+  item: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  cancelBtn: { marginTop: 12 },
 });

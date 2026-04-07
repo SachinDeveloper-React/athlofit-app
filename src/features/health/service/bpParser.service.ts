@@ -1,6 +1,8 @@
 import { toByteArray } from 'react-native-quick-base64';
 import type { ParsedBPMeasurement } from '../types/bloodpressure.types';
 import { writeBloodPressureHC } from './healthConnect.service';
+import { writeBloodPressureHK } from './healthkit.service';
+import type { HealthPlatform } from '../hooks/useHealth';
 
 /**
  * Parse a BLE Blood Pressure Measurement characteristic value.
@@ -45,6 +47,21 @@ export function parseBPMeasurement(base64: string): ParsedBPMeasurement | null {
   }
 }
 
+/**
+ * Save a blood pressure reading to the correct health platform.
+ * ✅ Routes to HealthKit on iOS, Health Connect on Android.
+ */
+export const saveBloodPressureToHealthPlatform = async (
+  systolic: number,
+  diastolic: number,
+  platform: HealthPlatform,
+): Promise<void> => {
+  if (platform === 'healthkit')
+    return writeBloodPressureHK(systolic, diastolic);
+  return writeBloodPressureHC(systolic, diastolic);
+};
+
+/** @deprecated Use `saveBloodPressureToHealthPlatform` instead. */
 export const saveBloodPressureToHealthConnect = async (
   systolic: number,
   diastolic: number,

@@ -4,10 +4,14 @@ import { AppView } from '../../../../components';
 import { StepProgressCard } from './StepProgressCard';
 import MetricCard, { type MetricCardProps } from '../MetricCard';
 import { HydrationCard } from './HydrationCard';
-import { TrackerStreaksBadges } from './TrackerStreaksBadges';
+import { TrackerStreaksBadges, TrackerStreaksSkeleton } from './TrackerStreaksBadges';
 import { TrackerMotivation } from './TrackerMotivation';
+
 import { navigate } from '../../../../navigation/navigationRef';
 import { WeeklyStepEntry } from '../../types/healthTypes';
+import type { StreaksResponseData } from '../../types/gamification.type';
+import { useEarnCoins } from '../../hooks/useEarnCoins';
+import { useBmiHistory } from '../../hooks/useBmi';
 
 export type MetricRow = [MetricCardProps, MetricCardProps];
 
@@ -16,6 +20,7 @@ type Props = {
   steps: number;
   goal?: number;
   weekData: WeeklyStepEntry[];
+  isWeekPending?: boolean;
   todayIndex?: number;
   metricRows: MetricRow[];
   stats: {
@@ -26,6 +31,11 @@ type Props = {
     bloodPressureSystolic: number;
     hydration: number;
   };
+  streakData?: StreaksResponseData | null;
+  isStreakPending: boolean;
+  streakDays: number;
+  syncDailyProgress: (coinsEarnedThisDay: number, metGoal: boolean) => void;
+  onUpdate?: () => void;
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -44,7 +54,17 @@ MetricRowPair.displayName = 'MetricRowPair';
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const DailyStatsSection = memo(
-  ({ hidden, steps, goal, weekData, todayIndex, metricRows, stats }: Props) => {
+  ({ hidden, steps, goal, weekData, isWeekPending, todayIndex, metricRows, stats, streakData, isStreakPending, streakDays, syncDailyProgress, onUpdate }: Props) => {
+    const { earnCoins, isPending: claimPending, claimedToday } = useEarnCoins();
+    const { data: bmiHistory } = useBmiHistory(1);
+    const latestBmi = bmiHistory?.[0];
+
+    const handleClaim = useCallback((coinsToAdd: number) => {
+      earnCoins(coinsToAdd);
+      // Also update local streak/coin progress
+      syncDailyProgress(coinsToAdd, (steps >= (goal ?? 10000)));
+    }, [earnCoins, syncDailyProgress, steps, goal]);
+
     const goToHeartRate = useCallback(() => {
       navigate('HealthStack', {
         screen: 'HeartRateScreen',
@@ -56,20 +76,30 @@ const DailyStatsSection = memo(
         screen: 'BloodPressureScreen',
       });
     }, []);
+
+    const goToBmiCalculator = useCallback(() => {
+      navigate('HealthStack', {
+        screen: 'BmiCalculatorScreen',
+      });
+    }, []);
     return (
       <AppView style={[styles.container, hidden && styles.hidden]}>
         <StepProgressCard
           steps={steps}
           goal={goal}
           weekData={weekData}
+          isWeekPending={isWeekPending}
           todayIndex={todayIndex}
+          onClaim={handleClaim}
+          claimPending={claimPending}
+          claimedToday={claimedToday}
         />
 
         {metricRows.map((row, i) => (
           <MetricRowPair key={i} row={row} />
         ))}
 
-        <HydrationCard value={stats.hydration} max={5000} />
+        <HydrationCard value={stats.hydration} max={5000} onUpdate={onUpdate} />
 
         <AppView style={{ flexDirection: 'row', gap: 18 }}>
           <MetricCard
@@ -94,34 +124,46 @@ const DailyStatsSection = memo(
           />
         </AppView>
 
-        <TrackerStreaksBadges
-          streakDays={3}
-          bestStreakDays={14}
-          nextBadgeAt={7}
-          badges={[
-            { key: 'starter', title: 'Starter', rule: '1 day', unlocked: true },
-            {
-              key: 'consistent',
-              title: 'Consistent',
-              rule: '7 days',
-              unlocked: false,
-            },
-            {
-              key: 'finisher',
-              title: 'Finisher',
-              rule: '15 days',
-              unlocked: false,
-            },
-            { key: 'elite', title: 'Elite', rule: '30 days', unlocked: false },
-          ]}
-        />
+        <AppView style={{ flexDirection: 'row', gap: 18 }}>
+          <MetricCard
+            iconName="Activity"
+            iconColor="#8B5CF6"
+            iconBg="#F5F3FF"
+            value={latestBmi?.bmi ?? '—'}
+            valueSuffix=""
+            label="BMI"
+            unit=""
+            onPress={goToBmiCalculator}
+          />
+          <MetricCard
+            iconName="Scale"
+            iconColor="#3B82F6"
+            iconBg="#EFF6FF"
+            value={latestBmi?.weight ?? '—'}
+            valueSuffix=""
+            label="WEIGHT"
+            unit="KG"
+            onPress={goToBmiCalculator}
+          />
+        </AppView>
+
+        {isStreakPending ? (
+          <TrackerStreaksSkeleton />
+        ) : streakData ? (
+          <TrackerStreaksBadges
+            streakDays={streakData.streakDays}
+            bestStreakDays={streakData.bestStreakDays}
+            nextBadgeAt={streakData.nextBadgeAt}
+            badges={streakData.badges}
+          />
+        ) : null}
 
         <TrackerMotivation
-          steps={5000}
-          goalSteps={10000}
-          streakDays={10}
+          steps={steps}
+          goalSteps={goal || 10000}
+          streakDays={streakDays}
           onComputed={({ coinsToday, streakWillContinue }) => {
-            // later connect store
+             syncDailyProgress(coinsToday, streakWillContinue);
           }}
         />
       </AppView>

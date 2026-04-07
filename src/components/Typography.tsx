@@ -1,13 +1,15 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import React, { memo } from 'react';
+import AppView from './AppView';
+import AppText from './AppText';
 
 type Props = {};
 
 const Typography = memo((props: Props) => {
   return (
-    <View>
-      <Text>Typography</Text>
-    </View>
+    <AppView>
+      <AppText>Typography</AppText>
+    </AppView>
   );
 });
 

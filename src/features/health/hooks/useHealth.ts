@@ -8,6 +8,10 @@ import {
   writeStepsHK,
   writeWeightHK,
   writeHydrationHK,
+  writeHeartRateHK,       // ✅ new
+  writeBloodPressureHK,   // ✅ new
+  writeBloodGlucoseHK,    // ✅ new
+  writeSleepHK,           // ✅ new
 } from '../service/healthkit.service';
 
 import {
@@ -145,8 +149,8 @@ export function useHealth(options: UseHealthOptions = {}) {
   };
 
   // ── Load data ─────────────────────────────────────────────────────────────
-  const loadData = async (p: HealthPlatform) => {
-    setIsLoading(true);
+  const loadData = async (p: HealthPlatform, silent: boolean = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const result =
         p === 'healthkit'
@@ -155,30 +159,39 @@ export function useHealth(options: UseHealthOptions = {}) {
       setData(result);
       setLastUpdated(new Date());
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to load health data');
+      if (!silent) setError(e?.message ?? 'Failed to load health data');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   // ── Manual refresh ────────────────────────────────────────────────────────
-  const refresh = useCallback(() => {
-    if (!isReadyRef.current) return;
-    stopAutoRefresh();
-    loadData(platformRef.current).then(() => startAutoRefresh());
-  }, [refreshInterval]);
+  const refresh = useCallback(
+    (silent: boolean = false) => {
+      if (!isReadyRef.current) return;
+      stopAutoRefresh();
+      loadData(platformRef.current, silent).then(() => startAutoRefresh());
+    },
+    [refreshInterval],
+  );
 
-  // ── Manual log methods ────────────────────────────────────────────────────
+  // ── Manual log methods — routed by platform ───────────────────────────────
 
-  const logHeartRate = useCallback(async (bpm: number) => {
-    await writeHeartRateHC(bpm);
-    setData(prev => ({ ...prev, heartRate: bpm }));
-    setLastUpdated(new Date());
-  }, []);
+  const logHeartRate = useCallback(
+    async (bpm: number) => {
+      if (platform === 'healthkit') await writeHeartRateHK(bpm); // ✅ iOS
+      else await writeHeartRateHC(bpm);                          // Android
+      setData(prev => ({ ...prev, heartRate: bpm }));
+      setLastUpdated(new Date());
+    },
+    [platform],
+  );
 
   const logBloodPressure = useCallback(
     async (systolic: number, diastolic: number) => {
-      await writeBloodPressureHC(systolic, diastolic);
+      if (platform === 'healthkit')
+        await writeBloodPressureHK(systolic, diastolic); // ✅ iOS
+      else await writeBloodPressureHC(systolic, diastolic);      // Android
       setData(prev => ({
         ...prev,
         bloodPressureSystolic: systolic,
@@ -186,7 +199,7 @@ export function useHealth(options: UseHealthOptions = {}) {
       }));
       setLastUpdated(new Date());
     },
-    [],
+    [platform],
   );
 
   const logWeight = useCallback(
@@ -199,22 +212,33 @@ export function useHealth(options: UseHealthOptions = {}) {
     [platform],
   );
 
-  const logBloodGlucose = useCallback(async (mmol: number) => {
-    await writeBloodGlucoseHC(mmol);
-    setData(prev => ({ ...prev, bloodGlucose: mmol }));
-    setLastUpdated(new Date());
-  }, []);
+  const logBloodGlucose = useCallback(
+    async (mmol: number) => {
+      if (platform === 'healthkit') await writeBloodGlucoseHK(mmol); // ✅ iOS
+      else await writeBloodGlucoseHC(mmol);                          // Android
+      setData(prev => ({ ...prev, bloodGlucose: mmol }));
+      setLastUpdated(new Date());
+    },
+    [platform],
+  );
 
-  const logSleep = useCallback(async (bedtime: Date, wakeTime: Date) => {
-    await writeSleepHC(bedtime, wakeTime);
-    const sleepHours =
-      Math.round(((wakeTime.getTime() - bedtime.getTime()) / 3_600_000) * 10) /
-      10;
-    setData(prev => ({ ...prev, sleepHours }));
-    setLastUpdated(new Date());
-  }, []);
+  const logSleep = useCallback(
+    async (bedtime: Date, wakeTime: Date) => {
+      if (platform === 'healthkit')
+        await writeSleepHK(bedtime, wakeTime); // ✅ iOS
+      else await writeSleepHC(bedtime, wakeTime);     // Android
+      const sleepHours =
+        Math.round(
+          ((wakeTime.getTime() - bedtime.getTime()) / 3_600_000) * 10,
+        ) / 10;
+      setData(prev => ({ ...prev, sleepHours }));
+      setLastUpdated(new Date());
+    },
+    [platform],
+  );
 
-  // Legacy step/weight write
+  // ── Legacy step / weight / hydration write ────────────────────────────────
+
   const writeSteps = useCallback(
     async (count: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeStepsHK(count, start);
@@ -230,6 +254,7 @@ export function useHealth(options: UseHealthOptions = {}) {
     },
     [platform],
   );
+
   const writeHydration = useCallback(
     async (ml: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeHydrationHK(ml, start);

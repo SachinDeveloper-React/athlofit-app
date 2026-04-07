@@ -1,10 +1,9 @@
 import {
   ActivityIndicator,
   StyleSheet,
-  Text,
   TouchableOpacity,
-  View,
 } from 'react-native';
+import { AppView, AppText, Button } from '../../../../components';
 import { Step2Props } from '../../types/completeProfile.types';
 import { Controller, useForm } from 'react-hook-form';
 import { NumericStepper } from './NumericStepper';
@@ -38,18 +37,18 @@ export const Step2Body: React.FC<Step2Props> = ({
   const bloodType = watch('bloodType');
 
   return (
-    <View style={s.stepContent}>
-      <View
+    <AppView style={s.stepContent}>
+      <AppView
         style={[s.stepIconWrap, { backgroundColor: colors.primary + '15' }]}
       >
-        <Text style={s.stepIcon}>📏</Text>
-      </View>
-      <Text style={[s.stepTitle, { color: colors.foreground }]}>
+        <AppText style={s.stepIcon}>📏</AppText>
+      </AppView>
+      <AppText style={[s.stepTitle, { color: colors.foreground }]}>
         Body metrics
-      </Text>
-      <Text style={[s.stepSubtitle, { color: colors.mutedForeground }]}>
+      </AppText>
+      <AppText style={[s.stepSubtitle, { color: colors.mutedForeground }]}>
         Used to calculate personalised health goals
-      </Text>
+      </AppText>
 
       {/* Height */}
       <Controller
@@ -88,8 +87,8 @@ export const Step2Body: React.FC<Step2Props> = ({
       />
 
       {/* Blood type */}
-      <View style={{ marginBottom: 24 }}>
-        <Text
+      <AppView style={{ marginBottom: 24 }}>
+        <AppText
           style={[
             {
               fontSize: 14,
@@ -100,7 +99,7 @@ export const Step2Body: React.FC<Step2Props> = ({
           ]}
         >
           Blood type
-        </Text>
+        </AppText>
         <TouchableOpacity
           onPress={() => setShowBloodPicker(true)}
           style={[
@@ -116,7 +115,7 @@ export const Step2Body: React.FC<Step2Props> = ({
             },
           ]}
         >
-          <Text
+          <AppText
             style={{
               flex: 1,
               fontSize: 16,
@@ -124,15 +123,15 @@ export const Step2Body: React.FC<Step2Props> = ({
             }}
           >
             {bloodType || 'Select blood type'}
-          </Text>
-          <Text style={{ color: colors.mutedForeground }}>⌄</Text>
+          </AppText>
+          <AppText style={{ color: colors.mutedForeground }}>⌄</AppText>
         </TouchableOpacity>
         {!!errors.bloodType && (
-          <Text style={[s.errorText, { color: colors.destructive }]}>
+          <AppText style={[s.errorText, { color: colors.destructive }]}>
             {errors.bloodType.message}
-          </Text>
+          </AppText>
         )}
-      </View>
+      </AppView>
 
       <PickerSheet
         visible={showBloodPicker}
@@ -143,25 +142,15 @@ export const Step2Body: React.FC<Step2Props> = ({
         onSelect={v => setValue('bloodType', v, { shouldValidate: true })}
       />
 
-      <TouchableOpacity
+      <Button
+        label="Complete Profile ✓"
         onPress={handleSubmit(onSubmit)}
-        disabled={loading}
-        activeOpacity={0.8}
-        style={[
-          s.nextBtn,
-          { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
-        ]}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <>
-            <Text style={s.nextBtnText}>Complete Profile</Text>
-            <Text style={s.nextBtnArrow}>✓</Text>
-          </>
-        )}
-      </TouchableOpacity>
-    </View>
+        loading={loading}
+        size="lg"
+        fullWidth
+        style={{ marginTop: 8 }}
+      />
+    </AppView>
   );
 };
 
@@ -185,17 +174,6 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   stepSubtitle: { fontSize: 15, lineHeight: 22, marginBottom: 28 },
-  nextBtn: {
-    height: 54,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  nextBtnText: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  nextBtnArrow: { color: '#fff', fontSize: 17 },
   errorText: { fontSize: 12, marginTop: 4 },
   box: {
     flexDirection: 'row',

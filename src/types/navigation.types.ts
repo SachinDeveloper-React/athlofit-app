@@ -40,30 +40,40 @@ export type HealthStackParamList = {
   [HealthRoutes.HEART_RATE]: undefined;
   [HealthRoutes.BLOOD_PRESSURE]: undefined;
   [HealthRoutes.HYDRATION]: undefined;
-  [HealthRoutes.ANALYTICS]: {
-    metric: 'steps' | 'calories' | 'heartRate' | 'bloodPressure';
-  };
+  [HealthRoutes.EDIT_STEPS_GOAL]: undefined;
+  [HealthRoutes.ANALYTICS]: undefined;
   [HealthRoutes.STREAK]: undefined;
+  [HealthRoutes.COINS]: undefined;
+  // Nutrition Phase 2
+  [HealthRoutes.FOOD_CATALOG]: { mealType?: string } | undefined;
+  [HealthRoutes.FOOD_DETAIL]: { foodId: string };
+  // BMI
+  [HealthRoutes.BMI_CALCULATOR]: undefined;
 };
 
 // ─── Shop Stack ───────────────────────────────────────────────────────────────
 
 export type ShopStackParamList = {
   [ShopRoutes.SHOP]: undefined;
+  [ShopRoutes.SHOP_SEARCH]: undefined;
   [ShopRoutes.PRODUCT_DETAIL]: { productId: string };
-  [ShopRoutes.CART]: undefined;
+  [ShopRoutes.CART]: { preSelectCoins?: boolean } | undefined;
   [ShopRoutes.CHECKOUT]: undefined;
   [ShopRoutes.ORDER_HISTORY]: undefined;
+  [ShopRoutes.ADDRESSES]: { selectMode?: boolean } | undefined;
+  [ShopRoutes.ADD_EDIT_ADDRESS]: { addressId?: string } | undefined;
 };
 
 // ─── Account Stack ────────────────────────────────────────────────────────────
 
 export type AccountStackParamList = {
-  [AccountRoutes.PROFILE]: undefined;
+  [AccountRoutes.ACCOUNT]: undefined;
   [AccountRoutes.SETTINGS]: undefined;
   [AccountRoutes.EDIT_PROFILE]: undefined;
   [AccountRoutes.NOTIFICATIONS]: undefined;
   [AccountRoutes.PRIVACY]: undefined;
+  [AccountRoutes.TERMS]: undefined;
+  [AccountRoutes.HELP_SUPPORT]: undefined;
 };
 
 // ─── Tab Navigator ────────────────────────────────────────────────────────────
@@ -81,6 +91,9 @@ export type RootStackParamList = {
   [RootRoutes.PROFILE_SETUP_STACK]: NavigatorScreenParams<ProfileSetupStackParamList>;
   [RootRoutes.TAB_NAVIGATOR]: NavigatorScreenParams<TabParamList>;
   [RootRoutes.HEALTH_NAVIGATOR]: NavigatorScreenParams<HealthStackParamList>;
+  [RootRoutes.ACCOUNT_NAVIGATOR]: NavigatorScreenParams<AccountStackParamList>;
+  [RootRoutes.SHOP_NAVIGATOR]: NavigatorScreenParams<ShopStackParamList>;
+
 };
 
 // ─── Screen Props Helpers ─────────────────────────────────────────────────────
@@ -126,8 +139,8 @@ export type ProfileSetupScreenProps<
 
 // ─── Typed useNavigation hook augmentation ────────────────────────────────────
 // Add this to your root to get typed navigation globally:
-// declare global {
-//   namespace ReactNavigation {
-//     interface RootParamList extends RootStackParamList {}
-//   }
-// }
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList extends RootStackParamList {}
+  }
+}

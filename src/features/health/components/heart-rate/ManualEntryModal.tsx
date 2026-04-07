@@ -1,15 +1,14 @@
 import { memo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
 } from 'react-native';
-import { AppText, AppView } from '../../../../components';
+import { AppText, AppView, Button } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
 
 export const ManualEntryModal = memo(
   ({
@@ -23,6 +22,7 @@ export const ManualEntryModal = memo(
   }) => {
     const [value, setValue] = useState('');
     const [saving, setSaving] = useState(false);
+    const { colors } = useTheme();
 
     const handleSave = async () => {
       const bpm = parseInt(value, 10);
@@ -50,42 +50,48 @@ export const ManualEntryModal = memo(
         onRequestClose={onClose}
       >
         <KeyboardAvoidingView
-          style={s.overlay}
+          style={styles.overlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <AppView style={s.modalCard}>
-            <AppText style={s.modalTitle}>Enter Heart Rate</AppText>
-            <AppText style={s.modalSub}>
+          <AppView style={[styles.modalCard, { backgroundColor: colors.card }]}>
+            <AppText variant="headline" style={styles.modalTitle}>Enter Heart Rate</AppText>
+            <AppText variant="footnote" secondary style={styles.modalSub}>
               Count your pulse for 60 s or read from a device.
             </AppText>
-            <AppView style={s.bpmRow}>
+            <AppView
+              row
+              align="center"
+              style={[styles.bpmRow, { borderColor: colors.border }]}
+            >
               <TextInput
-                style={s.bpmInput}
+                style={[styles.bpmInput, { color: colors.foreground }]}
                 value={value}
                 onChangeText={setValue}
                 placeholder="72"
-                placeholderTextColor="#ccc"
+                placeholderTextColor={colors.mutedForeground}
                 keyboardType="number-pad"
                 maxLength={3}
                 autoFocus
               />
-              <AppText style={s.bpmUnit}>bpm</AppText>
+              <AppText variant="subhead" secondary>bpm</AppText>
             </AppView>
-            <AppView style={s.row}>
-              <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-                <AppText style={s.cancelTxt}>Cancel</AppText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.saveBtn}
+            <AppView row gap={2}>
+              <Button
+                label="Cancel"
+                onPress={onClose}
+                variant="outline"
+                size="md"
+                style={styles.flex1}
+              />
+              <Button
+                label="Save"
                 onPress={handleSave}
+                variant="primary"
+                size="md"
+                loading={saving}
                 disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <AppText style={s.saveTxt}>Save</AppText>
-                )}
-              </TouchableOpacity>
+                style={styles.flex1}
+              />
             </AppView>
           </AppView>
         </KeyboardAvoidingView>
@@ -93,7 +99,8 @@ export const ManualEntryModal = memo(
     );
   },
 );
-const s = StyleSheet.create({
+
+const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -103,22 +110,13 @@ const s = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 24,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 6,
-  },
-  modalSub: { fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 18 },
+  modalTitle: { marginBottom: 6 },
+  modalSub: { marginBottom: 20, lineHeight: 18 },
   bpmRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e5e5',
     borderRadius: 12,
     paddingHorizontal: 16,
     marginBottom: 20,
@@ -127,27 +125,8 @@ const s = StyleSheet.create({
     flex: 1,
     fontSize: 40,
     fontWeight: '500',
-    color: '#1a1a1a',
     paddingVertical: 10,
     textAlign: 'center',
   },
-  bpmUnit: { fontSize: 16, color: '#aaa' },
-  row: { flexDirection: 'row', gap: 10 },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    alignItems: 'center',
-  },
-  cancelTxt: { fontSize: 15, color: '#666' },
-  saveBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 10,
-    backgroundColor: '#1a1a1a',
-    alignItems: 'center',
-  },
-  saveTxt: { fontSize: 15, color: '#fff', fontWeight: '500' },
+  flex1: { flex: 1 },
 });

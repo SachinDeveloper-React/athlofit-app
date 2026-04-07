@@ -9,11 +9,11 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  Text,
   TextInput,
-  TouchableOpacity,
-  View,
 } from 'react-native';
+import { AppText, AppView, Button } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import {
   PRESET_TIMES,
   useHydrationScheduleStore,
@@ -59,6 +59,8 @@ export const ScheduleModal: React.FC<Props> = ({ visible, onClose }) => {
   const [customInput, setCustomInput] = useState('');
   const [customError, setCustomError] = useState('');
 
+  const { colors } = useTheme();
+
   useEffect(() => {
     if (visible) initSchedule();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,19 +81,19 @@ export const ScheduleModal: React.FC<Props> = ({ visible, onClose }) => {
     (item: string) => {
       const isOn = scheduledTimes.includes(item);
       return (
-        <View key={item} style={styles.timeRow}>
-          <View style={styles.timeInfo}>
-            <Text style={styles.time12h}>{to12h(item)}</Text>
-            <Text style={styles.time24h}>{item}</Text>
-          </View>
+        <AppView key={item} style={[styles.timeRow, { backgroundColor: colors.secondary }]}>
+          <AppView style={styles.timeInfo}>
+            <AppText style={[styles.time12h, { color: colors.foreground }]}>{to12h(item)}</AppText>
+            <AppText style={[styles.time24h, { color: colors.mutedForeground }]}>{item}</AppText>
+          </AppView>
           <Switch
             value={isOn}
             onValueChange={() => toggleAlarm(item)}
-            trackColor={{ false: '#1e293b', true: '#0ea5e9' }}
-            thumbColor={isOn ? '#fff' : '#475569'}
-            ios_backgroundColor="#1e293b"
+            trackColor={{ false: colors.muted, true: colors.primary }}
+            thumbColor={isOn ? colors.primaryForeground : colors.mutedForeground}
+            ios_backgroundColor={colors.muted}
           />
-        </View>
+        </AppView>
       );
     },
     [scheduledTimes, toggleAlarm],
@@ -111,79 +113,82 @@ export const ScheduleModal: React.FC<Props> = ({ visible, onClose }) => {
       <Pressable style={styles.backdrop} onPress={onClose} />
 
       {/* Sheet */}
-      <View style={styles.sheet}>
+      <AppView style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {/* Handle */}
-        <View style={styles.handle} />
+        <AppView style={[styles.handle, { backgroundColor: colors.mutedForeground }]} />
 
         {/* Header */}
-        <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>💧 Reminder Schedule</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <Text style={styles.closeBtn}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <AppView row spaceBetween align="center" style={[styles.sheetHeader, { borderBottomColor: colors.border }]}>
+          <AppText style={[styles.sheetTitle, { color: colors.foreground }]}>💧 Reminder Schedule</AppText>
+          <Button
+            label="✕"
+            onPress={onClose}
+            variant="ghost"
+            size="sm"
+          />
+        </AppView>
 
         {/* Permission warning */}
         {!permissionGranted && (
-          <View style={styles.permBanner}>
-            <Text style={styles.permText}>
+          <AppView style={styles.permBanner}>
+            <AppText style={styles.permText}>
               ⚠ Notification permission not granted. Alarms won't fire.
-            </Text>
-          </View>
+            </AppText>
+          </AppView>
         )}
 
         {/* Error */}
-        {!!error && <Text style={styles.errorText}>⚠ {error}</Text>}
+        {!!error && <AppText style={[styles.errorText, { color: colors.destructive }]}>⚠ {error}</AppText>}
 
         {/* Active count */}
-        <Text style={styles.activeCount}>
+        <AppText style={[styles.activeCount, { color: colors.primary }]}>
           {scheduledTimes.length === 0
             ? 'No reminders set'
             : `${scheduledTimes.length} reminder${
                 scheduledTimes.length > 1 ? 's' : ''
               } active`}
-        </Text>
+        </AppText>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* Preset times */}
-          <Text style={styles.sectionLabel}>PRESET TIMES</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.mutedForeground }]}>PRESET TIMES</AppText>
           {PRESET_TIMES.map(renderPreset)}
 
           {/* Custom times */}
           {customTimes.length > 0 && (
             <>
-              <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
+              <AppText style={[styles.sectionLabel, { marginTop: 20, color: colors.mutedForeground }]}>
                 CUSTOM TIMES
-              </Text>
+              </AppText>
               {customTimes.map(t => (
-                <View key={t} style={styles.timeRow}>
-                  <View style={styles.timeInfo}>
-                    <Text style={styles.time12h}>{to12h(t)}</Text>
-                    <Text style={styles.time24h}>{t}</Text>
-                  </View>
-                  <TouchableOpacity
+                <AppView key={t} row spaceBetween align="center" style={[styles.timeRow, { backgroundColor: colors.secondary }]}>
+                  <AppView style={styles.timeInfo}>
+                    <AppText style={[styles.time12h, { color: colors.foreground }]}>{to12h(t)}</AppText>
+                    <AppText style={[styles.time24h, { color: colors.mutedForeground }]}>{t}</AppText>
+                  </AppView>
+                  <Button
+                    label="Remove"
                     onPress={() => removeAlarm(t)}
-                    style={styles.removeBtn}
-                  >
-                    <Text style={styles.removeBtnText}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
+                    variant="destructive"
+                    size="sm"
+                  />
+                </AppView>
               ))}
             </>
           )}
 
           {/* Add custom time */}
-          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
+          <AppText style={[styles.sectionLabel, { marginTop: 20, color: colors.mutedForeground }]}>
             ADD CUSTOM TIME
-          </Text>
-          <View style={styles.customRow}>
+          </AppText>
+          <AppView style={styles.customRow}>
             <TextInput
-              style={styles.customInput}
+              style={[styles.customInput, { backgroundColor: colors.secondary, color: colors.foreground, borderColor: colors.border }]}
               placeholder="e.g. 14:30"
-              placeholderTextColor="#475569"
+              placeholderTextColor={colors.mutedForeground}
               value={customInput}
               onChangeText={v => {
                 setCustomInput(v);
@@ -194,33 +199,33 @@ export const ScheduleModal: React.FC<Props> = ({ visible, onClose }) => {
               onSubmitEditing={handleAddCustom}
               maxLength={5}
             />
-            <TouchableOpacity
-              style={styles.addBtn}
+            <Button
+              label="Add"
               onPress={handleAddCustom}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.addBtnText}>Add</Text>
-            </TouchableOpacity>
-          </View>
+              variant="primary"
+              size="md"
+            />
+          </AppView>
           {!!customError && (
-            <Text style={styles.customError}>{customError}</Text>
+            <AppText style={[styles.customError, { color: colors.destructive }]}>{customError}</AppText>
           )}
-          <Text style={styles.customHint}>Format: HH:MM (24-hour)</Text>
+          <AppText style={[styles.customHint, { color: colors.mutedForeground }]}>Format: HH:MM (24-hour)</AppText>
 
           {/* Clear all */}
           {scheduledTimes.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearBtn}
+            <Button
+              label="Clear All Reminders"
               onPress={clearAllAlarms}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.clearBtnText}>Clear All Reminders</Text>
-            </TouchableOpacity>
+              variant="destructive"
+              size="md"
+              fullWidth
+              style={styles.clearBtn}
+            />
           )}
 
-          <View style={{ height: 32 }} />
+          <AppView style={{ height: 32 }} />
         </ScrollView>
-      </View>
+      </AppView>
     </Modal>
   );
 };
@@ -237,18 +242,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     maxHeight: SCREEN_H * 0.85,
-    backgroundColor: '#0f172a',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     borderTopWidth: 1,
-    borderColor: '#1e293b',
   },
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#334155',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
@@ -260,17 +262,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
     marginBottom: 8,
   },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#f1f5f9',
     letterSpacing: 0.3,
   },
   closeBtn: {
-    color: '#475569',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -287,12 +286,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   errorText: {
-    color: '#f87171',
     fontSize: 12,
     marginBottom: 8,
   },
   activeCount: {
-    color: '#38bdf8',
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 12,
@@ -303,7 +300,6 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#475569',
     letterSpacing: 1.2,
     marginBottom: 8,
   },
@@ -313,7 +309,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    backgroundColor: '#1e293b',
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -325,22 +320,17 @@ const styles = StyleSheet.create({
   time12h: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#f1f5f9',
   },
   time24h: {
     fontSize: 12,
-    color: '#475569',
   },
   removeBtn: {
-    backgroundColor: 'rgba(248,113,113,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(248,113,113,0.3)',
   },
   removeBtnText: {
-    color: '#f87171',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -351,34 +341,27 @@ const styles = StyleSheet.create({
   },
   customInput: {
     flex: 1,
-    backgroundColor: '#1e293b',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    color: '#f1f5f9',
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#334155',
   },
   addBtn: {
-    backgroundColor: '#0ea5e9',
     paddingHorizontal: 20,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   addBtnText: {
-    color: '#fff',
     fontWeight: '700',
     fontSize: 15,
   },
   customError: {
-    color: '#f87171',
     fontSize: 12,
     marginBottom: 4,
   },
   customHint: {
-    color: '#475569',
     fontSize: 11,
     marginBottom: 16,
   },
@@ -387,12 +370,9 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(248,113,113,0.3)',
     alignItems: 'center',
-    backgroundColor: 'rgba(248,113,113,0.07)',
   },
   clearBtnText: {
-    color: '#f87171',
     fontWeight: '600',
     fontSize: 14,
   },

@@ -8,10 +8,11 @@ import {
 } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import {
-  saveHeartRateToHealthConnect,
+  saveHeartRateToHealthPlatform,
   HeartRateResult,
   MEASURE_DURATION_S,
 } from '../service/heartRate.service';
+import type { HealthPlatform } from './useHealth';
 
 export type MeasurementState =
   | 'idle'
@@ -65,7 +66,7 @@ function finalizeResult(
   };
 }
 
-export function useHeartRate() {
+export function useHeartRate(platform: HealthPlatform = 'unavailable') {
   const [measureState, setMeasureState] = useState<MeasurementState>('idle');
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<HeartRateResult | null>(null);
@@ -354,7 +355,7 @@ export function useHeartRate() {
 
       setIsSaving(true);
       try {
-        await saveHeartRateToHealthConnect(bpm);
+        await saveHeartRateToHealthPlatform(bpm, platform); // ✅ platform-aware
         setSaved(true);
       } catch (e: any) {
         setError(e?.message ?? 'Failed to save');
@@ -362,7 +363,7 @@ export function useHeartRate() {
         setIsSaving(false);
       }
     },
-    [result],
+    [result, platform],
   );
 
   return {

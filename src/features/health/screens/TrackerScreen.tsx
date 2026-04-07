@@ -363,8 +363,16 @@
 // });
 
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
-import { AppText, AppView, Header, Screen, Tabs } from '../../../components';
+import { RefreshControl, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  AppText,
+  AppView,
+  Header,
+  Loader,
+  Screen,
+  Tabs,
+} from '../../../components';
 import RightTrackerHeader from '../components/tracker/RightTrackerHeader';
 import DailyStatsSection, {
   type MetricRow,
@@ -380,27 +388,80 @@ import { useHealth } from '../hooks/useHealth';
 import { WeeklyStepEntry, type HealthData } from '../types/healthTypes';
 import { STEP_GOAL, TabId, TABS } from '../constants/tracker.constant';
 import { useWeeklySteps } from '../hooks/useWeeklySteps';
+import { useGamification } from '../hooks/useGamification';
+import { useStreak } from '../hooks/useStreak';
+import { useGamificationStore } from '../store/gamificationStore';
 import { buildMetricRows } from '../service/health.service';
+import type { StreaksResponseData } from '../types/gamification.type';
+import { navigate } from '../../../navigation/navigationRef';
+import {
+  AccountRoutes,
+  HealthRoutes,
+  RootRoutes,
+} from '../../../navigation/routes';
 
-const RIGHT_ACTION = <RightTrackerHeader />;
+const RIGHT_ACTION = (
+  <RightTrackerHeader
+    onNotificationPress={() => {
+      navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
+        screen: AccountRoutes.NOTIFICATIONS,
+      });
+    }}
+    onActivityPress={() => {
+      navigate(RootRoutes.HEALTH_NAVIGATOR, {
+        screen: HealthRoutes.ANALYTICS,
+      });
+    }}
+    onProfilePress={() => {
+      navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
+        screen: AccountRoutes.EDIT_PROFILE,
+      });
+    }}
+    onCoinPress={() => {
+      navigate(RootRoutes.HEALTH_NAVIGATOR, {
+        screen: HealthRoutes.COINS,
+      });
+    }}
+  />
+);
 
 // ─── Tab panels ───────────────────────────────────────────────────────────────
 
 type TabPanelsProps = {
+  goal: number;
   activeTab: TabId;
   data: HealthData;
   weekData: WeeklyStepEntry[];
+  isWeekPending: boolean;
   metricRows: MetricRow[];
+  streakData?: StreaksResponseData | null;
+  isStreakPending: boolean;
+  streakDays: number;
+  syncDailyProgress: (coinsEarnedThisDay: number, metGoal: boolean) => void;
+  onUpdate?: () => void;
 };
 
 const TabPanels = memo(
-  ({ activeTab, data, weekData, metricRows }: TabPanelsProps) => (
+  ({
+    goal,
+    activeTab,
+    data,
+    weekData,
+    isWeekPending,
+    metricRows,
+    streakData,
+    isStreakPending,
+    streakDays,
+    syncDailyProgress,
+    onUpdate,
+  }: TabPanelsProps) => (
     <>
       <DailyStatsSection
         hidden={activeTab !== TabId.DailyStats}
         steps={data.steps}
-        goal={STEP_GOAL}
+        goal={goal}
         weekData={weekData}
+        isWeekPending={isWeekPending}
         todayIndex={new Date().getDay()}
         metricRows={metricRows}
         stats={{
@@ -411,6 +472,11 @@ const TabPanels = memo(
           bloodPressureSystolic: data?.bloodPressureSystolic,
           hydration: data?.hydration,
         }}
+        streakData={streakData}
+        isStreakPending={isStreakPending}
+        streakDays={streakDays}
+        syncDailyProgress={syncDailyProgress}
+        onUpdate={onUpdate}
       />
       <NutritionAndGoalSection hidden={activeTab !== TabId.NutritionGoal} />
     </>
@@ -419,7 +485,8 @@ const TabPanels = memo(
     prev.activeTab === next.activeTab &&
     prev.data === next.data &&
     prev.weekData === next.weekData &&
-    prev.metricRows === next.metricRows,
+    prev.metricRows === next.metricRows &&
+    prev.onUpdate === next.onUpdate,
 );
 
 TabPanels.displayName = 'TabPanels';
@@ -431,11 +498,31 @@ const TrackerScreen = memo(() => {
   const [gateReason, setGateReason] = useState<HealthGateReason | null>(null);
 
   const weightKg = useAuthStore(state => state.user?.weight);
+  const dailyStepGoal = useAuthStore(state => state.user?.dailyStepGoal);
 
   const { platform, isReady, isLoading, data, error, refresh, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) });
 
-  const { data: weekData, mutate: refreshWeek } = useWeeklySteps();
+  const {
+    data: weekData,
+    mutate: refreshWeek,
+    isPending: isWeekPending,
+  } = useWeeklySteps();
+
+  // Gamification & Streaks
+  const { mutate: fetchGamification } = useGamification();
+  const {
+    streakData,
+    mutate: fetchStreakData,
+    isPending: isStreakPending,
+  } = useStreak();
+  const streakDays = useGamificationStore(s => s.streakDays);
+  const syncDailyProgress = useGamificationStore(s => s.syncDailyProgress);
+
+  useEffect(() => {
+    fetchGamification(); // load real coin balance from server on mount
+    fetchStreakData();
+  }, [fetchGamification, fetchStreakData]);
 
   // ── Gate reason ────────────────────────────────────────────────────────────
 
@@ -454,6 +541,15 @@ const TrackerScreen = memo(() => {
     return `Updated ${h}:${m}`;
   }, [lastUpdated]);
 
+  // ── Background Sync ───────────────────────────────────────────────────────
+
+  useFocusEffect(
+    useCallback(() => {
+      // Silently sync health databases every time the user looks at the tracker
+      refresh(true);
+    }, [refresh]),
+  );
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleTabPress = useCallback((value: number) => {
@@ -464,8 +560,10 @@ const TrackerScreen = memo(() => {
 
   const handleRefresh = useCallback(() => {
     refresh();
-    refreshWeek(); // pull-to-refresh also re-fetches weekly data
-  }, [refresh, refreshWeek]);
+    refreshWeek();
+    fetchStreakData();
+    fetchGamification();
+  }, [refresh, refreshWeek, fetchStreakData, fetchGamification]);
 
   const handleGateRetry = useCallback(() => {
     setGateReason(null);
@@ -490,16 +588,12 @@ const TrackerScreen = memo(() => {
 
   if (isLoading && !isReady) {
     return (
-      <AppView style={styles.center}>
-        <ActivityIndicator size="large" />
-        <AppText style={styles.loadingText}>Connecting to health data…</AppText>
-      </AppView>
+      <Loader message="Connecting to health data…" size="large" fullscreen />
     );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  console.log('data', data);
   return (
     <>
       <Screen
@@ -516,10 +610,17 @@ const TrackerScreen = memo(() => {
       >
         <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
         <TabPanels
+          goal={dailyStepGoal || 8000}
           activeTab={activeTab}
           data={data}
           weekData={weekData?.data || []}
+          isWeekPending={isWeekPending}
           metricRows={metricRows}
+          streakData={streakData}
+          isStreakPending={isStreakPending}
+          streakDays={streakDays}
+          syncDailyProgress={syncDailyProgress}
+          onUpdate={() => refresh(true)}
         />
       </Screen>
 
@@ -537,16 +638,4 @@ TrackerScreen.displayName = 'TrackerScreen';
 
 export default TrackerScreen;
 
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    opacity: 0.5,
-  },
-});
+const styles = StyleSheet.create({});

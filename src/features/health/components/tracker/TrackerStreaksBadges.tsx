@@ -23,15 +23,8 @@ import { AppText, AppView, Card } from '../../../../components';
 import { SCREEN_WIDTH } from '../../../../utils/measure';
 import { Radius, Spacing } from '../../../../constants/spacing';
 import { FontSize } from '../../../../constants/typography';
-
-type BadgeKey = 'starter' | 'consistent' | 'finisher' | 'elite';
-
-export type TrackerBadge = {
-  key: BadgeKey;
-  title: string;
-  rule: string;
-  unlocked: boolean;
-};
+import { Skeleton } from '../../../../components/SkeletonLoader';
+import type { BadgeKey, TrackerBadge } from '../../types/gamification.type';
 
 type Props = {
   streakDays: number;
@@ -474,4 +467,109 @@ const styles = StyleSheet.create({
   tileRule: {
     marginTop: Spacing[0.5],
   },
+});
+
+/* ---------------- Skeleton Loader ---------------- */
+
+export const TrackerStreaksSkeleton = memo(() => {
+  const { colors } = useTheme();
+  
+  const glowBg = useMemo(
+    () => withOpacity(colors.primary, 0.14),
+    [colors.primary],
+  );
+
+  return (
+    <AppView style={styles.container}>
+      <AppView
+        pointerEvents="none"
+        style={[
+          styles.glow,
+          { backgroundColor: glowBg, shadowColor: colors.primary },
+        ]}
+      />
+
+      {/* Header Skeleton */}
+      <AppView style={styles.headerRow}>
+        <AppView style={styles.headerLeft}>
+          <Skeleton width={36} height={36} radius="full" />
+          <AppView style={{ marginLeft: Spacing[1] }}>
+            <Skeleton width={110} height={12} style={{ marginBottom: 4 }} />
+            <Skeleton width={140} height={20} radius="sm" />
+          </AppView>
+        </AppView>
+        <AppView style={styles.headerRight}>
+          <Skeleton width={80} height={14} />
+        </AppView>
+      </AppView>
+
+      {/* Big Row Skeleton */}
+      <AppView style={styles.bigRow}>
+        <AppView style={styles.bigLeft}>
+          <Skeleton width={56} height={46} radius="md" />
+          <Skeleton width={80} height={14} style={{ marginLeft: 4 }} />
+        </AppView>
+        <Skeleton width={70} height={14} />
+      </AppView>
+
+      {/* Progress Skeleton */}
+      <AppView>
+        <AppView style={styles.progressTop}>
+          <Skeleton width={120} height={14} />
+          <Skeleton width={80} height={14} />
+        </AppView>
+        <Skeleton width="100%" height={10} radius="full" />
+      </AppView>
+
+      {/* Grid Skeleton */}
+      <AppView style={styles.grid}>
+        <Animated.View style={styles.tile}>
+          <Card>
+            <AppView style={styles.tileTop}>
+              <Skeleton width={40} height={40} radius="full" />
+              <Skeleton width={60} height={12} />
+            </AppView>
+            <Skeleton width="70%" height={16} radius="sm" style={{ marginTop: Spacing[2] }} />
+            <Skeleton width="50%" height={12} style={{ marginTop: Spacing[1] }} />
+          </Card>
+        </Animated.View>
+
+        <Animated.View style={styles.tile}>
+          <Card>
+            <AppView style={styles.tileTop}>
+              <Skeleton width={40} height={40} radius="full" />
+              <Skeleton width={60} height={12} />
+            </AppView>
+            <Skeleton width="70%" height={16} radius="sm" style={{ marginTop: Spacing[2] }} />
+            <Skeleton width="50%" height={12} style={{ marginTop: Spacing[1] }} />
+          </Card>
+        </Animated.View>
+      </AppView>
+      
+      <AppView style={styles.grid}>
+        <Animated.View style={styles.tile}>
+          <Card>
+            <AppView style={styles.tileTop}>
+              <Skeleton width={40} height={40} radius="full" />
+              <Skeleton width={60} height={12} />
+            </AppView>
+            <Skeleton width="70%" height={16} radius="sm" style={{ marginTop: Spacing[2] }} />
+            <Skeleton width="50%" height={12} style={{ marginTop: Spacing[1] }} />
+          </Card>
+        </Animated.View>
+
+        <Animated.View style={styles.tile}>
+          <Card>
+            <AppView style={styles.tileTop}>
+              <Skeleton width={40} height={40} radius="full" />
+              <Skeleton width={60} height={12} />
+            </AppView>
+            <Skeleton width="70%" height={16} radius="sm" style={{ marginTop: Spacing[2] }} />
+            <Skeleton width="50%" height={12} style={{ marginTop: Spacing[1] }} />
+          </Card>
+        </Animated.View>
+      </AppView>
+
+    </AppView>
+  );
 });

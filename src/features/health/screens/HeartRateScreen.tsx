@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import { StyleSheet, StatusBar } from 'react-native';
 import { Camera } from 'react-native-vision-camera';
 import { useHeartRate } from '../hooks/useHeartRate';
-import { Button, Header, Screen } from '../../../components';
+import { Button, Header, Screen, AppText, AppView } from '../../../components';
 import { InstructionCard } from '../components/heart-rate/InstructionCard';
 import { ManualEntryModal } from '../components/heart-rate/ManualEntryModal';
 import { ProgressRing } from '../components/heart-rate/ProgressRing';
@@ -76,14 +76,10 @@ export default function HeartRateScreen() {
 
   if (measureState === 'measuring') {
     return (
-      <View
-        style={[
-          styles.fullScreen,
-          {
-            marginBottom: bottom,
-          },
-        ]}
-      >
+      <AppView style={[
+        styles.fullScreen,
+        { marginBottom: bottom },
+      ]}>
         <StatusBar hidden />
 
         {device && format ? (
@@ -105,23 +101,23 @@ export default function HeartRateScreen() {
             }}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFill, styles.blackBg]} />
+          <AppView style={[StyleSheet.absoluteFill, styles.blackBg]} />
         )}
 
-        <View style={styles.overlay}>
-          <View style={styles.topBanner}>
-            <Text style={styles.topTitle}>Keep finger on camera</Text>
-            <Text style={styles.topSub}>
+        <AppView style={styles.overlay}>
+          <AppView style={styles.topBanner}>
+            <AppText style={styles.topTitle}>Keep finger on camera</AppText>
+            <AppText style={styles.topSub}>
               Cover the lens and flash • Stay still
-            </Text>
-          </View>
+            </AppText>
+          </AppView>
 
-          <View style={styles.centerArea}>
+          <AppView style={styles.centerArea}>
             <ProgressRing progress={progress} />
             <PulseIndicator active />
-          </View>
+          </AppView>
 
-          <View style={styles.bottomArea}>
+          <AppView style={styles.bottomArea}>
             <Button
               fullWidth
               variant="destructive"
@@ -138,15 +134,15 @@ export default function HeartRateScreen() {
               }}
               style={{ marginTop: 10 }}
             />
-          </View>
-        </View>
+          </AppView>
+        </AppView>
 
         <ManualEntryModal
           visible={showManual}
           onClose={() => setShowManual(false)}
           onSave={handleManualSave}
         />
-      </View>
+      </AppView>
     );
   }
 
@@ -157,11 +153,11 @@ export default function HeartRateScreen() {
         safeArea={false}
         header={<Header title="Heart Rate" bordered showBack backLabel="" />}
       >
-        <View style={styles.errorCard}>
-          <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Measurement failed</Text>
-          <Text style={styles.errorMsg}>{error}</Text>
-        </View>
+        <AppView style={styles.errorCard}>
+          <AppText style={styles.errorIcon}>⚠️</AppText>
+          <AppText variant="headline" style={styles.errorTitle}>Measurement failed</AppText>
+          <AppText variant="footnote" secondary align="center" style={styles.errorMsg}>{error}</AppText>
+        </AppView>
 
         <Button
           fullWidth
@@ -193,7 +189,7 @@ export default function HeartRateScreen() {
         safeArea={false}
         header={<Header title="Heart Rate" bordered showBack backLabel="" />}
       >
-        <Text style={styles.title}>Result</Text>
+        <AppText variant="title3" style={styles.title}>Result</AppText>
         <HeartRateResultCard result={result} />
         {saved ? (
           <SavedBanner />

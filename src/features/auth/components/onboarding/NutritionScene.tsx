@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 import { Animated } from 'react-native';
 import Svg, {
   Path,
@@ -74,10 +75,10 @@ export const NutritionScene: React.FC = () => {
   const barAnims = useStaggeredEnter(MACROS.length, 1200, 200, false);
 
   return (
-    <View style={styles.root}>
+    <AppView style={styles.root}>
       {/* Water bottle + hydration */}
-      <View style={styles.bottleRow}>
-        <View>
+      <AppView style={styles.bottleRow}>
+        <AppView>
           {/* Falling drop */}
           <Animated.View
             style={[
@@ -164,27 +165,27 @@ export const NutritionScene: React.FC = () => {
               { opacity: rippleO, transform: [{ scale: rippleS }] },
             ]}
           />
-        </View>
+        </AppView>
 
         {/* Hydration stats */}
-        <View style={styles.hydrationInfo}>
-          <Text style={styles.hydrationAmount}>2.1L</Text>
-          <Text style={styles.hydrationGoal}>of 3L goal</Text>
-          <View style={styles.hydrationBadge}>
-            <View style={styles.hydrationDot} />
-            <Text style={styles.hydrationPct}>70% hydrated</Text>
-          </View>
-        </View>
-      </View>
+        <AppView style={styles.hydrationInfo}>
+          <AppText style={styles.hydrationAmount}>2.1L</AppText>
+          <AppText style={styles.hydrationGoal}>of 3L goal</AppText>
+          <AppView style={styles.hydrationBadge}>
+            <AppView style={styles.hydrationDot} />
+            <AppText style={styles.hydrationPct}>70% hydrated</AppText>
+          </AppView>
+        </AppView>
+      </AppView>
 
       {/* Macro bars */}
-      <View style={styles.macroSection}>
-        <Text style={styles.sectionTitle}>MACROS TODAY</Text>
+      <AppView style={styles.macroSection}>
+        <AppText style={styles.sectionTitle}>MACROS TODAY</AppText>
         {MACROS.map((m, i) => (
           <MacroRow key={m.label} macro={m} widthAnim={barAnims[i]} />
         ))}
-      </View>
-    </View>
+      </AppView>
+    </AppView>
   );
 };
 

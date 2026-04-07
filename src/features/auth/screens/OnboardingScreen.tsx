@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
   Animated,
   StatusBar,
   StyleSheet,
   Platform,
 } from 'react-native';
+import { AppView, AppText, Button } from '../../../components';
 import { C } from '../constant';
 import { Dots, NextButton, ProgressBar } from '../components/onboarding';
 import { useSlideTransition } from '../hooks';
@@ -96,7 +94,7 @@ const OnboardingScreen = () => {
   const { Scene } = slide;
 
   return (
-    <View
+    <AppView
       style={[
         styles.root,
         {
@@ -108,14 +106,14 @@ const OnboardingScreen = () => {
       <StatusBar barStyle="light-content" backgroundColor={C.bg1} />
 
       {/* Background orbs */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View
+      <AppView style={StyleSheet.absoluteFill} pointerEvents="none">
+        <AppView
           style={[
             styles.bgOrb,
             { top: -80, right: -80, backgroundColor: slide.accent },
           ]}
         />
-        <View
+        <AppView
           style={[
             styles.bgOrb,
             {
@@ -126,16 +124,21 @@ const OnboardingScreen = () => {
             },
           ]}
         />
-      </View>
+      </AppView>
 
       {/* Progress bar */}
       <ProgressBar progress={progWidth} color={slide.accent} />
 
       {/* Skip */}
       {!isLast && (
-        <TouchableOpacity style={styles.skipBtn} onPress={skipToLast}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        <Button
+          label="Skip"
+          variant="ghost"
+          size="sm"
+          onPress={skipToLast}
+          style={styles.skipBtn}
+          labelStyle={styles.skipText}
+        />
       )}
 
       {/* Scene */}
@@ -145,9 +148,9 @@ const OnboardingScreen = () => {
 
       {/* Bottom controls */}
       <Animated.View style={[styles.bottomArea, contentStyle]}>
-        <View style={[styles.accentLine, { backgroundColor: slide.accent }]} />
-        <Text style={styles.title}>{slide.title}</Text>
-        <Text style={styles.subtitle}>{slide.subtitle}</Text>
+        <AppView style={[styles.accentLine, { backgroundColor: slide.accent }]} />
+        <AppText style={styles.title}>{slide.title}</AppText>
+        <AppText style={styles.subtitle}>{slide.subtitle}</AppText>
 
         <Dots
           slides={SLIDES}
@@ -163,7 +166,7 @@ const OnboardingScreen = () => {
           onPress={goNext}
         />
       </Animated.View>
-    </View>
+    </AppView>
   );
 };
 

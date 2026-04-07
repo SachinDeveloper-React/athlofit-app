@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
-import { AppView } from '../../../../components';
+import { TextInput, Alert, StyleSheet } from 'react-native';
+import { AppText, AppView, Button, Card } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
 
 interface ManualEntryCardProps {
   onSubmit: (
@@ -14,6 +15,7 @@ export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) =>
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
   const [pulse, setPulse] = useState('');
+  const { colors } = useTheme();
 
   const handleSubmit = () => {
     const sys = parseInt(systolic, 10);
@@ -39,105 +41,93 @@ export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) =>
     setPulse('');
   };
 
-  return (
-    <AppView style={styles.card}>
-      <Text style={styles.title}>Enter Reading</Text>
+  const inputStyle = [
+    styles.input,
+    {
+      borderColor: colors.border,
+      backgroundColor: colors.secondary,
+      color: colors.foreground,
+    },
+  ];
 
-      <AppView style={styles.inputRow}>
+  return (
+    <Card style={styles.card}>
+      <AppText variant="headline" style={styles.title}>Enter Reading</AppText>
+
+      {/* Systolic / Diastolic row */}
+      <AppView row align="center" gap={2} style={styles.inputRow}>
         <AppView style={styles.group}>
-          <Text style={styles.label}>Systolic</Text>
+          <AppText variant="overline" style={styles.label}>Systolic</AppText>
           <TextInput
-            style={styles.input}
+            style={inputStyle}
             value={systolic}
             onChangeText={setSystolic}
             keyboardType="number-pad"
             placeholder="120"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={colors.mutedForeground}
             maxLength={3}
           />
-          <Text style={styles.unit}>mmHg</Text>
+          <AppText variant="caption2" secondary align="center" style={styles.unitLabel}>mmHg</AppText>
         </AppView>
-        <Text style={styles.divider}>/</Text>
+        <AppText variant="title2" secondary style={styles.divider}>/</AppText>
         <AppView style={styles.group}>
-          <Text style={styles.label}>Diastolic</Text>
+          <AppText variant="overline" style={styles.label}>Diastolic</AppText>
           <TextInput
-            style={styles.input}
+            style={inputStyle}
             value={diastolic}
             onChangeText={setDiastolic}
             keyboardType="number-pad"
             placeholder="80"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={colors.mutedForeground}
             maxLength={3}
           />
-          <Text style={styles.unit}>mmHg</Text>
+          <AppText variant="caption2" secondary align="center" style={styles.unitLabel}>mmHg</AppText>
         </AppView>
       </AppView>
 
-      <AppView style={styles.pulseRow}>
-        <Text style={styles.label}>Pulse (optional)</Text>
+      {/* Pulse row */}
+      <AppView row align="center" gap={2} style={styles.pulseRow}>
+        <AppText variant="overline" style={styles.label}>Pulse (optional)</AppText>
         <TextInput
-          style={[styles.input, styles.pulseInput]}
+          style={[inputStyle, styles.pulseInput]}
           value={pulse}
           onChangeText={setPulse}
           keyboardType="number-pad"
           placeholder="72"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={colors.mutedForeground}
           maxLength={3}
         />
-        <Text style={styles.unit}>bpm</Text>
+        <AppText variant="caption2" secondary>bpm</AppText>
       </AppView>
 
-      <TouchableOpacity style={styles.btn} onPress={handleSubmit}>
-        <Text style={styles.btnText}>Save Reading</Text>
-      </TouchableOpacity>
-    </AppView>
+      <Button
+        label="Save Reading"
+        onPress={handleSubmit}
+        variant="primary"
+        size="lg"
+        fullWidth
+      />
+    </Card>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  title: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 16 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  card: { marginBottom: 16 },
+  title: { marginBottom: 16 },
+  inputRow: { marginBottom: 16 },
   group: { flex: 1 },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+  label: { marginBottom: 6 },
   input: {
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 22,
     fontWeight: '700',
-    color: '#0f172a',
     textAlign: 'center',
-    backgroundColor: '#f8fafc',
   },
-  unit: { fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
-  divider: { fontSize: 32, color: '#cbd5e1', marginTop: 16 },
-  pulseRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  unitLabel: { marginTop: 4 },
+  divider: { marginTop: 16 },
+  pulseRow: { marginBottom: 20 },
   pulseInput: { flex: 1, fontSize: 18, paddingVertical: 10 },
-  btn: {
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  btnText: { color: '#f8fafc', fontSize: 16, fontWeight: '700' },
 });

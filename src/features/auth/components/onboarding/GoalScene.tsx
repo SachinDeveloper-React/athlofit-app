@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { Animated } from 'react-native';
+import { Animated, Dimensions, StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { AppView, AppText } from '../../../../components';
 import { GoalItem } from '../../types';
 import { C } from '../../constant';
 import { useLoopAnim } from '../../hooks';
@@ -48,7 +48,7 @@ export const GoalScene: React.FC = () => {
   const dash = circ * 0.87;
 
   return (
-    <View style={styles.root}>
+    <AppView style={styles.root}>
       {/* Main score ring */}
       <Animated.View style={[styles.mainRingWrap, { opacity: glowAnim }]}>
         <Svg width={160} height={160} viewBox="0 0 160 160">
@@ -84,25 +84,25 @@ export const GoalScene: React.FC = () => {
         </Svg>
 
         {/* Score overlay */}
-        <View style={styles.scoreOverlay}>
-          <Text style={styles.scoreNumber}>{score}</Text>
-          <Text style={styles.scoreLabel}>SCORE</Text>
-        </View>
+        <AppView style={styles.scoreOverlay}>
+          <AppText style={styles.scoreNumber}>{score}</AppText>
+          <AppText style={styles.scoreLabel}>SCORE</AppText>
+        </AppView>
       </Animated.View>
 
       {/* Goal rings row */}
-      <View style={styles.ringsRow}>
+      <AppView style={styles.ringsRow}>
         {GOALS.map(g => (
           <GoalRing key={g.label} goal={g} />
         ))}
-      </View>
+      </AppView>
 
       {/* CTA */}
-      <View style={styles.cta}>
-        <Text style={styles.ctaHeadline}>You're almost there! 🔥</Text>
-        <Text style={styles.ctaBody}>Keep moving to hit today's goals</Text>
-      </View>
-    </View>
+      <AppView style={styles.cta}>
+        <AppText style={styles.ctaHeadline}>You're almost there! 🔥</AppText>
+        <AppText style={styles.ctaBody}>Keep moving to hit today's goals</AppText>
+      </AppView>
+    </AppView>
   );
 };
 

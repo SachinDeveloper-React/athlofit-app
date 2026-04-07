@@ -13,7 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { navigationRef } from '../navigation/navigationRef';
 import RootNavigator from '../navigation/RootNavigator';
-import { enableFreeze, enableScreens } from 'react-native-screens';
+import {  enableScreens } from 'react-native-screens';
 import { ToastProvider } from '../components/Toast';
 import { useTheme } from '../hooks/useTheme';
 import notifee, { EventType } from '@notifee/react-native';
@@ -25,7 +25,7 @@ import {
   setupMidnightChannel,
 } from '../features/health/service/hydrationMidnightReset.service';
 
-// enableFreeze(true);
+
 enableScreens(true);
 // ─── React Query Client ───────────────────────────────────────────────────────
 

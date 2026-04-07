@@ -45,3 +45,11 @@ export type BodyFormValues = z.infer<typeof bodySchema>;
 
 export const completeProfileSchema = personalSchema.merge(bodySchema);
 export type CompleteProfileFormValues = z.infer<typeof completeProfileSchema>;
+
+// ─── Edit Profile ─────────────────────────────────────────────────────────────
+
+export const editProfileSchema = completeProfileSchema.extend({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+});
+
+export type EditProfileFormValues = z.infer<typeof editProfileSchema>;

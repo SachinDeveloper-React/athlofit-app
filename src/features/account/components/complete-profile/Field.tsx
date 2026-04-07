@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react';
 import { useTheme } from '../../../../hooks/useTheme';
 import { FieldProps } from '../../types/completeProfile.types';
-import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, StyleSheet, TextInput } from 'react-native';
+import { AppView, AppText } from '../../../../components';
+
+import { Icon } from '../../../../components';
 
 export const Field: React.FC<FieldProps> = ({
   label,
@@ -15,6 +18,7 @@ export const Field: React.FC<FieldProps> = ({
   onSubmitEditing,
   inputRef,
   hint,
+  isVerified,
 }) => {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -47,17 +51,17 @@ export const Field: React.FC<FieldProps> = ({
   });
 
   return (
-    <View style={f.wrapper}>
-      <Text
+    <AppView style={f.wrapper}>
+      <AppText
         style={[
           f.label,
           { color: error ? colors.destructive : colors.foreground },
         ]}
       >
         {label}
-      </Text>
+      </AppText>
       {hint && (
-        <Text style={[f.hint, { color: colors.mutedForeground }]}>{hint}</Text>
+        <AppText style={[f.hint, { color: colors.mutedForeground }]}>{hint}</AppText>
       )}
       <Animated.View
         style={[
@@ -84,14 +88,18 @@ export const Field: React.FC<FieldProps> = ({
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           selectionColor={colors.primary}
+          editable={!isVerified} // If verified, we might want to make it read-only? No, user said email is non-editable. Phone should stay editable even if verified.
         />
+        {isVerified && (
+          <Icon name="CheckCircle2" size={18} color="#10B981" /> // Emerald green for success
+        )}
       </Animated.View>
       {!!error && (
-        <Text style={[f.errorText, { color: colors.destructive }]}>
+        <AppText style={[f.errorText, { color: colors.destructive }]}>
           {error}
-        </Text>
+        </AppText>
       )}
-    </View>
+    </AppView>
   );
 };
 

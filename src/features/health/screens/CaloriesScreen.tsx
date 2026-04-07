@@ -1,16 +1,21 @@
-import { StyleSheet, Text, View } from 'react-native';
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { AppText, Screen, AppView } from '../../../components';
 
 type Props = {};
 
 const CaloriesScreen = (props: Props) => {
   return (
-    <View>
-      <Text>CaloriesScreen</Text>
-    </View>
+    <Screen>
+      <AppView center style={styles.container}>
+        <AppText variant="headline">CaloriesScreen</AppText>
+      </AppView>
+    </Screen>
   );
 };
 
 export default CaloriesScreen;
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+});

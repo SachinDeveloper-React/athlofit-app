@@ -1,5 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { AppText, AppView, Loader } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { HistoryEntry } from '../../types/hydration.type';
 
 interface HistoryListProps {
@@ -14,10 +17,10 @@ const formatTime = (date: Date): string =>
     hour12: true,
   });
 
-const getBadge = (amount: number) => {
-  if (amount >= 500) return { label: '🍶 Large', bg: 'rgba(56,189,248,0.2)' };
-  if (amount >= 200) return { label: '🥤 Medium', bg: 'rgba(14,165,233,0.1)' };
-  return { label: '🥛 Small', bg: 'rgba(14,165,233,0.08)' };
+const getBadge = (amount: number, colors: any) => {
+  if (amount >= 500) return { label: '🍶 Large', bg: withOpacity(colors.primary, 0.2) };
+  if (amount >= 200) return { label: '🥤 Medium', bg: withOpacity(colors.primary, 0.1) };
+  return { label: '🥛 Small', bg: withOpacity(colors.primary, 0.08) };
 };
 
 const getSourceIcon = (source: HistoryEntry['source']) => {
@@ -30,53 +33,53 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   history,
   isLoading,
 }) => {
+  const { colors } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.sectionTitle}>History</Text>
-        <View style={styles.headerRight}>
-          {isLoading && (
-            <ActivityIndicator
-              size="small"
-              color="#38bdf8"
-              style={styles.loader}
-            />
-          )}
-          <Text style={styles.count}>{history.length} entries</Text>
-        </View>
-      </View>
+    <AppView style={styles.container}>
+      <AppView style={styles.header}>
+        <AppText style={[styles.sectionTitle, { color: colors.mutedForeground }]}>History</AppText>
+        <AppView style={styles.headerRight}>
+          {isLoading && <Loader size="small" />}
+          <AppText style={[styles.count, { color: colors.secondaryForeground }]}>{history.length} entries</AppText>
+        </AppView>
+      </AppView>
 
       {history.length === 0 && !isLoading ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>💧</Text>
-          <Text style={styles.emptyText}>No entries yet. Start drinking!</Text>
-        </View>
+        <AppView style={styles.empty}>
+          <AppText style={styles.emptyIcon}>💧</AppText>
+          <AppText style={[styles.emptyText, { color: colors.secondaryForeground }]}>No entries yet. Start drinking!</AppText>
+        </AppView>
       ) : (
         history.map((entry, index) => {
-          const badge = getBadge(entry.amount);
+          const badge = getBadge(entry.amount, colors);
           return (
-            <View
+            <AppView
               key={entry.id}
-              style={[styles.item, index === 0 && styles.itemFirst]}
+              style={[
+                styles.item,
+                { backgroundColor: withOpacity(colors.primary, 0.08), borderColor: withOpacity(colors.primary, 0.1) },
+                index === 0 && { backgroundColor: withOpacity(colors.primary, 0.15), borderColor: withOpacity(colors.primary, 0.2) }
+              ]}
             >
-              <View style={styles.dot} />
-              <View style={styles.info}>
-                <Text style={styles.amount}>
+              <AppView style={[styles.dot, { backgroundColor: colors.primary }]} />
+              <AppView style={styles.info}>
+                <AppText style={[styles.amount, { color: colors.primary }]}>
                   +{entry.amount} ml
-                  <Text style={styles.sourceIcon}>
+                  <AppText style={styles.sourceIcon}>
                     {getSourceIcon(entry.source)}
-                  </Text>
-                </Text>
-                <Text style={styles.time}>{formatTime(entry.time)}</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                <Text style={styles.badgeText}>{badge.label}</Text>
-              </View>
-            </View>
+                  </AppText>
+                </AppText>
+                <AppText style={[styles.time, { color: colors.secondaryForeground }]}>{formatTime(entry.time)}</AppText>
+              </AppView>
+              <AppView style={[styles.badge, { backgroundColor: badge.bg }]}>
+                <AppText style={[styles.badgeText, { color: colors.primary }]}>{badge.label}</AppText>
+              </AppView>
+            </AppView>
           );
         })
       )}
-    </View>
+    </AppView>
   );
 };
 
@@ -95,18 +98,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  loader: {
-    marginRight: 4,
-  },
   sectionTitle: {
     fontSize: 13,
     letterSpacing: 1,
-    color: '#475569',
     textTransform: 'uppercase',
   },
   count: {
     fontSize: 12,
-    color: '#334155',
   },
   empty: {
     alignItems: 'center',
@@ -117,7 +115,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   emptyText: {
-    color: '#334155',
     fontSize: 14,
   },
   item: {
@@ -125,21 +122,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: 'rgba(14,50,80,0.25)',
     borderRadius: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(56,189,248,0.08)',
-  },
-  itemFirst: {
-    borderColor: 'rgba(56,189,248,0.25)',
-    backgroundColor: 'rgba(14,165,233,0.08)',
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#0ea5e9',
     marginRight: 12,
   },
   info: {
@@ -148,14 +138,12 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#e0f2fe',
   },
   sourceIcon: {
     fontSize: 13,
   },
   time: {
     fontSize: 12,
-    color: '#334155',
     marginTop: 2,
   },
   badge: {
@@ -165,7 +153,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    color: '#7dd3fc',
     fontWeight: '600',
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 import { Animated } from 'react-native';
 import Svg, {
   Circle,
@@ -100,7 +101,7 @@ export const SleepScene: React.FC = () => {
   });
 
   return (
-    <View style={styles.root}>
+    <AppView style={styles.root}>
       {/* Stars */}
       {STAR_POSITIONS.map(([left, top], i) => (
         <Animated.View
@@ -133,11 +134,11 @@ export const SleepScene: React.FC = () => {
       <Animated.View
         style={{ transform: [{ translateY: zFloat }], marginTop: -10 }}
       >
-        <Text style={styles.zText}>z z z</Text>
+        <AppText style={styles.zText}>z z z</AppText>
       </Animated.View>
 
       {/* Sleep wave */}
-      <View style={styles.waveCard}>
+      <AppView style={styles.waveCard}>
         <Animated.View
           style={[styles.waveInner, { transform: [{ translateX: waveTX }] }]}
         >
@@ -151,28 +152,28 @@ export const SleepScene: React.FC = () => {
             />
           </Svg>
         </Animated.View>
-        <Text style={styles.deepLabel}>DEEP SLEEP</Text>
-      </View>
+        <AppText style={styles.deepLabel}>DEEP SLEEP</AppText>
+      </AppView>
 
       {/* Sleep score */}
-      <View style={styles.scoreSection}>
-        <View style={styles.scoreHeader}>
-          <Text style={styles.scoreTitle}>SLEEP SCORE</Text>
-          <Text style={styles.scoreDuration}>7h 42m</Text>
-        </View>
-        <View style={styles.barTrack}>
+      <AppView style={styles.scoreSection}>
+        <AppView style={styles.scoreHeader}>
+          <AppText style={styles.scoreTitle}>SLEEP SCORE</AppText>
+          <AppText style={styles.scoreDuration}>7h 42m</AppText>
+        </AppView>
+        <AppView style={styles.barTrack}>
           <Animated.View style={[styles.barFill, { width: sbWidth }]} />
-        </View>
-        <View style={styles.stagesRow}>
+        </AppView>
+        <AppView style={styles.stagesRow}>
           {STAGES.map(s => (
-            <View key={s.label} style={styles.stageItem}>
-              <View style={[styles.stageDot, { backgroundColor: s.color }]} />
-              <Text style={styles.stageLabel}>{s.label}</Text>
-            </View>
+            <AppView key={s.label} style={styles.stageItem}>
+              <AppView style={[styles.stageDot, { backgroundColor: s.color }]} />
+              <AppText style={styles.stageLabel}>{s.label}</AppText>
+            </AppView>
           ))}
-        </View>
-      </View>
-    </View>
+        </AppView>
+      </AppView>
+    </AppView>
   );
 };
 

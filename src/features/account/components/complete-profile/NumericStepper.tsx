@@ -3,11 +3,10 @@ import { useTheme } from '../../../../hooks/useTheme';
 import { StepperProps } from '../../types/completeProfile.types';
 import {
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
-  View,
 } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 
 export const NumericStepper: React.FC<StepperProps> = ({
   label,
@@ -39,16 +38,16 @@ export const NumericStepper: React.FC<StepperProps> = ({
   };
 
   return (
-    <View style={st.wrapper}>
-      <Text
+    <AppView style={st.wrapper}>
+      <AppText
         style={[
           st.label,
           { color: error ? colors.destructive : colors.foreground },
         ]}
       >
         {label}
-      </Text>
-      <View
+      </AppText>
+      <AppView
         style={[
           st.row,
           {
@@ -61,10 +60,10 @@ export const NumericStepper: React.FC<StepperProps> = ({
           onPress={decrement}
           style={[st.btn, { borderRightColor: colors.border }]}
         >
-          <Text style={[st.btnText, { color: colors.primary }]}>−</Text>
+          <AppText style={[st.btnText, { color: colors.primary }]}>−</AppText>
         </TouchableOpacity>
 
-        <View style={st.inputWrap}>
+        <AppView style={st.inputWrap}>
           <TextInput
             style={[st.input, { color: colors.foreground }]}
             value={raw}
@@ -73,24 +72,24 @@ export const NumericStepper: React.FC<StepperProps> = ({
             textAlign="center"
             selectionColor={colors.primary}
           />
-          <Text style={[st.unit, { color: colors.mutedForeground }]}>
+          <AppText style={[st.unit, { color: colors.mutedForeground }]}>
             {unit}
-          </Text>
-        </View>
+          </AppText>
+        </AppView>
 
         <TouchableOpacity
           onPress={increment}
           style={[st.btn, { borderLeftColor: colors.border }]}
         >
-          <Text style={[st.btnText, { color: colors.primary }]}>+</Text>
+          <AppText style={[st.btnText, { color: colors.primary }]}>+</AppText>
         </TouchableOpacity>
-      </View>
+      </AppView>
       {!!error && (
-        <Text style={[st.errorText, { color: colors.destructive }]}>
+        <AppText style={[st.errorText, { color: colors.destructive }]}>
           {error}
-        </Text>
+        </AppText>
       )}
-    </View>
+    </AppView>
   );
 };
 

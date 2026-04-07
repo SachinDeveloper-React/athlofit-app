@@ -1,5 +1,8 @@
 import React from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, } from 'react-native';
+import { AppText, AppView } from '../../../../components';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 
 interface StatsCardProps {
   consumed: number;
@@ -18,46 +21,48 @@ export const StatsCard: React.FC<StatsCardProps> = ({
 
   children,
 }) => {
+  const { colors } = useTheme();
+
   return (
-    <View style={[styles.card]}>
+    <AppView style={[styles.card, { borderColor: colors.border }]}>
       {/* Stats row */}
-      <View style={styles.statsRow}>
+      <AppView style={styles.statsRow}>
         <StatItem
           value={`${(consumed / 1000).toFixed(1)}L`}
           label="Consumed"
-          color="#38bdf8"
+          color={colors.primary}
         />
-        <View style={styles.divider} />
+        <AppView style={[styles.divider, { backgroundColor: withOpacity(colors.primary, 0.2) }]} />
         <StatItem
           value={`${(dailyGoal / 1000).toFixed(1)}L`}
           label="Daily Goal"
-          color="#7dd3fc"
+          color={withOpacity(colors.primary, 0.7)}
         />
-        <View style={styles.divider} />
+        <AppView style={[styles.divider, { backgroundColor: withOpacity(colors.primary, 0.2) }]} />
         <StatItem
           value={`${(remaining / 1000).toFixed(1)}L`}
           label="Remaining"
-          color="#bae6fd"
+          color={withOpacity(colors.primary, 0.4)}
         />
-      </View>
+      </AppView>
 
       {/* Progress bar */}
-      <View style={styles.progressOuter}>
+      <AppView style={[styles.progressOuter, { backgroundColor: withOpacity(colors.primary, 0.1) }]}>
         <Animated.View
           style={[
             styles.progressInner,
             {
               width: `${percentage}%` as any,
-              backgroundColor: percentage >= 100 ? '#4ade80' : '#38bdf8',
+              backgroundColor: percentage >= 100 ? colors.success : colors.primary,
             },
           ]}
         />
-        <Text style={styles.progressPct}>{Math.round(percentage)}%</Text>
-      </View>
+        <AppText style={[styles.progressPct, { color: withOpacity(colors.primary, 0.6) }]}>{Math.round(percentage)}%</AppText>
+      </AppView>
 
       {/* Children = glass + amount */}
       {children}
-    </View>
+    </AppView>
   );
 };
 
@@ -69,19 +74,20 @@ const StatItem = ({
   value: string;
   label: string;
   color: string;
-}) => (
-  <View style={styles.statBox}>
-    <Text style={[styles.statValue, { color }]}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
+}) => {
+  const { colors } = useTheme();
+  return (
+    <AppView style={styles.statBox}>
+      <AppText style={[styles.statValue, { color }]}>{value}</AppText>
+      <AppText style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</AppText>
+    </AppView>
+  );
+};
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(14,50,80,0.4)',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(56,189,248,0.15)',
     padding: 20,
     marginBottom: 20,
   },
@@ -95,7 +101,6 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(56,189,248,0.2)',
   },
   statValue: {
     fontSize: 20,
@@ -103,14 +108,12 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 10,
-    color: '#64748b',
     marginTop: 2,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   progressOuter: {
     height: 8,
-    backgroundColor: 'rgba(56,189,248,0.1)',
     borderRadius: 4,
     marginBottom: 24,
     overflow: 'hidden',
@@ -126,6 +129,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 6,
     fontSize: 9,
-    color: 'rgba(56,189,248,0.6)',
   },
 });

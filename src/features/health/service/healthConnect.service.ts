@@ -60,6 +60,8 @@ const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
   { accessType: 'write', recordType: 'SleepSession' },
   { accessType: 'read', recordType: 'Weight' },
   { accessType: 'write', recordType: 'Weight' },
+  { accessType: 'read', recordType: 'Height' },
+  { accessType: 'write', recordType: 'Height' },
   { accessType: 'read', recordType: 'BloodGlucose' },
   { accessType: 'write', recordType: 'BloodGlucose' },
   { accessType: 'read', recordType: 'Hydration' },

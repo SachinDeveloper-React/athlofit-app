@@ -41,9 +41,18 @@
 <!-- Blood pressure -->
 <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE"/>
 <uses-permission android:name="android.permission.health.WRITE_BLOOD_PRESSURE"/>
+<!-- HEIGHT -->
+<uses-permission android:name="android.permission.health.WRITE_HEIGHT"/>
+    <uses-permission android:name="android.permission.health.READ_HEIGHT"/>
 
-    <uses-permission android:name="android.permission.health.READ_SLEEP"/>
+<!-- WEIGHT -->
+<uses-permission android:name="android.permission.health.WRITE_WEIGHT"/>
     <uses-permission android:name="android.permission.health.READ_WEIGHT"/>
+
+<!-- SLEEP -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP"/>
+    
+<!-- BLOOD GLUCOSE -->
     <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
 
     <application

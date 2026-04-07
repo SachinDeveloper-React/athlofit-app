@@ -19,8 +19,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  type PressableStateCallbackType,
-  type ViewStyle,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -29,8 +27,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { AppText, AppView } from '../../../../components';
-
+import { AppText, AppView, Button } from '../../../../components';
 import { type HealthPlatform } from '../../hooks/useHealth';
 import { Icon, LucideName } from '../../../../components/Icon';
 import { useTheme } from '../../../../hooks/useTheme';
@@ -181,21 +178,6 @@ export const HealthGate = memo(
       }
     }, [cfg, onRetry, handleDismiss]);
 
-    const primaryPressStyle = useCallback(
-      ({ pressed }: PressableStateCallbackType): ViewStyle => ({
-        opacity: pressed ? 0.8 : 1,
-        transform: [{ scale: pressed ? 0.97 : 1 }],
-      }),
-      [],
-    );
-
-    const secondaryPressStyle = useCallback(
-      ({ pressed }: PressableStateCallbackType): ViewStyle => ({
-        opacity: pressed ? 0.55 : 1,
-      }),
-      [],
-    );
-
     // ── Animated styles ───────────────────────────────────────────────────────
 
     const sheetAnimStyle = useAnimatedStyle(() => ({
@@ -262,25 +244,23 @@ export const HealthGate = memo(
             )}
 
             {/* Primary CTA */}
-            <Pressable style={primaryPressStyle} onPress={handlePrimary}>
-              <AppView
-                style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-              >
-                <AppText style={styles.primaryBtnText}>
-                  {cfg.primaryLabel}
-                </AppText>
-              </AppView>
-            </Pressable>
+            <Button
+              label={cfg.primaryLabel}
+              onPress={handlePrimary}
+              variant="primary"
+              size="lg"
+              fullWidth
+              style={styles.primaryBtn}
+            />
 
             {/* Secondary */}
             {!!cfg.secondaryLabel && (
-              <Pressable style={secondaryPressStyle} onPress={handleDismiss}>
-                <AppText
-                  style={[styles.secondaryLabel, { color: colors.muted }]}
-                >
-                  {cfg.secondaryLabel}
-                </AppText>
-              </Pressable>
+              <Button
+                label={cfg.secondaryLabel}
+                onPress={handleDismiss}
+                variant="ghost"
+                size="md"
+              />
             )}
           </Animated.View>
         </AppView>

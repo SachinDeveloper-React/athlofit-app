@@ -26,7 +26,7 @@ interface CardProps {
 
 const Card: React.FC<CardProps> = ({
   children,
-  variant = 'elevated',
+  variant = 'inset',
   onPress,
   p = 4,
   radius = '2xl',

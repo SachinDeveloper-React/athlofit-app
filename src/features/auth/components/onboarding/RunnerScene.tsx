@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 
 import { Animated as RNAnimated } from 'react-native';
 import Svg, {
@@ -53,9 +54,9 @@ export const RunnerScene: React.FC = () => {
   const shadowScale = SHADOW_SCALES[frame];
 
   return (
-    <View style={styles.root}>
+    <AppView style={styles.root}>
       {/* Track */}
-      <View style={styles.trackWrap}>
+      <AppView style={styles.trackWrap}>
         <Svg width={width} height={32}>
           <Defs>
             <LinearGradient id="trackGrad" x1="0" y1="0" x2="1" y2="0">
@@ -83,7 +84,7 @@ export const RunnerScene: React.FC = () => {
             opacity={0.15}
           />
         </Svg>
-      </View>
+      </AppView>
 
       {/* Shadow */}
       <RNAnimated.View
@@ -287,12 +288,12 @@ export const RunnerScene: React.FC = () => {
       </RNAnimated.View>
 
       {/* Stats HUD */}
-      <View style={styles.hud}>
+      <AppView style={styles.hud}>
         {STATS.map(s => (
           <StatCard key={s.label} stat={s} />
         ))}
-      </View>
-    </View>
+      </AppView>
+    </AppView>
   );
 };
 

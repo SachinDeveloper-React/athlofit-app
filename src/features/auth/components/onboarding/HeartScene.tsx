@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 import { Animated } from 'react-native';
 import Svg, {
   Path,
@@ -58,7 +59,7 @@ export const HeartScene: React.FC = () => {
   ];
 
   return (
-    <View style={styles.root}>
+    <AppView style={styles.root}>
       {/* Pulse rings */}
       {rings.map(({ scale, opacity }, i) => (
         <Animated.View
@@ -93,7 +94,7 @@ export const HeartScene: React.FC = () => {
       </Animated.View>
 
       {/* ECG strip */}
-      <View style={styles.ecgStrip}>
+      <AppView style={styles.ecgStrip}>
         <Animated.View
           style={[
             styles.ecgInner,
@@ -111,17 +112,17 @@ export const HeartScene: React.FC = () => {
             />
           </Svg>
         </Animated.View>
-        <Text style={styles.bpmLabel}>72 BPM</Text>
-      </View>
+        <AppText style={styles.bpmLabel}>72 BPM</AppText>
+      </AppView>
 
       {/* Blood Pressure */}
-      <View style={styles.bpSection}>
-        <Text style={styles.sectionTitle}>BLOOD PRESSURE</Text>
+      <AppView style={styles.bpSection}>
+        <AppText style={styles.sectionTitle}>BLOOD PRESSURE</AppText>
         {bpItems.map(item => (
           <BpRow key={item.label} item={item} />
         ))}
-      </View>
-    </View>
+      </AppView>
+    </AppView>
   );
 };
 

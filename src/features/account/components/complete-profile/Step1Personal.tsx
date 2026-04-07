@@ -5,7 +5,8 @@ import {
   personalSchema,
 } from '../../utils/profileSetup.validation';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
+import { AppView, AppText, Button } from '../../../../components';
 import { Field } from './Field';
 import { DateField } from './DateField';
 import { GENDER_OPTIONS } from '../../constants/completeProfile.constant';
@@ -22,18 +23,18 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
   });
 
   return (
-    <View style={g.stepContent}>
-      <View
+    <AppView style={g.stepContent}>
+      <AppView
         style={[g.stepIconWrap, { backgroundColor: colors.primary + '15' }]}
       >
-        <Text style={g.stepIcon}>👤</Text>
-      </View>
-      <Text style={[g.stepTitle, { color: colors.foreground }]}>
+        <AppText style={g.stepIcon}>👤</AppText>
+      </AppView>
+      <AppText style={[g.stepTitle, { color: colors.foreground }]}>
         Personal info
-      </Text>
-      <Text style={[g.stepSubtitle, { color: colors.mutedForeground }]}>
+      </AppText>
+      <AppText style={[g.stepSubtitle, { color: colors.mutedForeground }]}>
         Tell us a bit about yourself
-      </Text>
+      </AppText>
 
       {/* Phone */}
       <Controller
@@ -71,8 +72,8 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
         control={control}
         name="gender"
         render={({ field: { value, onChange } }) => (
-          <View style={{ marginBottom: 16 }}>
-            <Text
+          <AppView style={{ marginBottom: 16 }}>
+            <AppText
               style={[
                 {
                   fontSize: 14,
@@ -83,8 +84,8 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
               ]}
             >
               Gender
-            </Text>
-            <View style={g.row}>
+            </AppText>
+            <AppView style={g.row}>
               {GENDER_OPTIONS.map(opt => {
                 const selected = value === opt.value;
                 return (
@@ -102,8 +103,8 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
                       },
                     ]}
                   >
-                    <Text style={g.emoji}>{opt.emoji}</Text>
-                    <Text
+                    <AppText style={g.emoji}>{opt.emoji}</AppText>
+                    <AppText
                       style={[
                         g.label,
                         {
@@ -115,29 +116,28 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
                       ]}
                     >
                       {opt.label}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </AppView>
             {!!errors.gender && (
-              <Text style={[g.errorText, { color: colors.destructive }]}>
+              <AppText style={[g.errorText, { color: colors.destructive }]}>
                 {errors.gender.message}
-              </Text>
+              </AppText>
             )}
-          </View>
+          </AppView>
         )}
       />
 
-      <TouchableOpacity
+      <Button
+        label="Continue →"
         onPress={handleSubmit(onNext)}
-        activeOpacity={0.8}
-        style={[g.nextBtn, { backgroundColor: colors.primary }]}
-      >
-        <Text style={g.nextBtnText}>Continue</Text>
-        <Text style={g.nextBtnArrow}>→</Text>
-      </TouchableOpacity>
-    </View>
+        size="lg"
+        fullWidth
+        style={{ marginTop: 8 }}
+      />
+    </AppView>
   );
 };
 
@@ -163,16 +163,5 @@ const g = StyleSheet.create({
     marginBottom: 6,
   },
   stepSubtitle: { fontSize: 15, lineHeight: 22, marginBottom: 28 },
-  nextBtn: {
-    height: 54,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  nextBtnText: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  nextBtnArrow: { color: '#fff', fontSize: 17 },
   errorText: { fontSize: 12, marginTop: 4 },
 });

@@ -1,4 +1,6 @@
 import { writeHeartRateHC } from './healthConnect.service';
+import { writeHeartRateHK } from './healthkit.service';
+import type { HealthPlatform } from '../hooks/useHealth';
 
 export const MEASURE_DURATION_S = 30;
 export const VALID_BPM_MIN = 40;
@@ -42,7 +44,20 @@ export const computeHeartRateResult = (
   };
 };
 
-export const saveHeartRateToHealthConnect = async (bpm: number) =>
+/**
+ * Save a heart rate measurement to the correct health platform.
+ * ✅ Routes to HealthKit on iOS, Health Connect on Android.
+ */
+export const saveHeartRateToHealthPlatform = async (
+  bpm: number,
+  platform: HealthPlatform,
+): Promise<void> => {
+  if (platform === 'healthkit') return writeHeartRateHK(bpm);
+  return writeHeartRateHC(bpm);
+};
+
+/** @deprecated Use `saveHeartRateToHealthPlatform` instead. */
+export const saveHeartRateToHealthConnect = (bpm: number) =>
   writeHeartRateHC(bpm);
 
 export const getHeartRateZone = (bpm: number) => {

@@ -2,10 +2,9 @@ import {
   FlatList,
   Modal,
   StyleSheet,
-  Text,
   TouchableOpacity,
-  View,
 } from 'react-native';
+import { AppView, AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { PickerSheetProps } from '../../types/completeProfile.types';
 
@@ -31,14 +30,14 @@ export const PickerSheet: React.FC<PickerSheetProps> = ({
         activeOpacity={1}
         onPress={onClose}
       />
-      <View
+      <AppView
         style={[
           pk.sheet,
           { backgroundColor: colors.card, borderTopColor: colors.border },
         ]}
       >
-        <View style={pk.handle} />
-        <Text style={[pk.title, { color: colors.foreground }]}>{title}</Text>
+        <AppView style={pk.handle} />
+        <AppText style={[pk.title, { color: colors.foreground }]}>{title}</AppText>
         <FlatList
           data={options}
           keyExtractor={i => i}
@@ -50,16 +49,16 @@ export const PickerSheet: React.FC<PickerSheetProps> = ({
                 onClose();
               }}
             >
-              <Text style={[pk.itemText, { color: colors.foreground }]}>
+              <AppText style={[pk.itemText, { color: colors.foreground }]}>
                 {item}
-              </Text>
+              </AppText>
               {selected === item && (
-                <Text style={[pk.checkmark, { color: colors.primary }]}>✓</Text>
+                <AppText style={[pk.checkmark, { color: colors.primary }]}>✓</AppText>
               )}
             </TouchableOpacity>
           )}
         />
-      </View>
+      </AppView>
     </Modal>
   );
 };

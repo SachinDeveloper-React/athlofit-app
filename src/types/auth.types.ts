@@ -75,6 +75,7 @@ export interface CompleteProfileRequest {
   avatarUrl?: string | null;
 }
 
+
 // ─── API base response ────────────────────────────────────────────────────────
 
 export interface ApiResponse<T = void> {
@@ -137,6 +138,7 @@ export interface AuthState {
   accessToken: string | null;
   isAuthenticated: boolean;
   // actions
+  setAccessToken: (accessToken: string) => void;
   setAuth: (user: User, tokens: AuthTokens) => void;
   setTokensFromStorage: () => Promise<void>;
   logout: () => Promise<void>;

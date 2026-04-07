@@ -17,6 +17,7 @@ export interface FieldProps {
   onSubmitEditing?: () => void;
   inputRef?: React.RefObject<TextInput>;
   hint?: string;
+  isVerified?: boolean;
 }
 
 export interface StepperProps {
