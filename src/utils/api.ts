@@ -9,6 +9,8 @@ import { resetToAuth } from '../navigation/navigationRef';
 
 import { Platform } from 'react-native';
 
+// const BASE_URL = "https://athlofit-backend.vercel.app/"
+
 const BASE_URL =
   Platform.OS === 'android'
     ? 'http://192.168.0.129:5001/'

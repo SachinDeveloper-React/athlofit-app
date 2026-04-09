@@ -393,6 +393,7 @@ import { useStreak } from '../hooks/useStreak';
 import { useGamificationStore } from '../store/gamificationStore';
 import { buildMetricRows } from '../service/health.service';
 import type { StreaksResponseData } from '../types/gamification.type';
+import { useSyncHealth } from '../hooks/useSyncHealth';
 import { navigate } from '../../../navigation/navigationRef';
 import {
   AccountRoutes,
@@ -523,6 +524,19 @@ const TrackerScreen = memo(() => {
     fetchGamification(); // load real coin balance from server on mount
     fetchStreakData();
   }, [fetchGamification, fetchStreakData]);
+
+  const { syncHealth } = useSyncHealth();
+
+  useEffect(() => {
+    // Automatically push health data to server when loaded
+    if (isReady && data && lastUpdated) {
+      const isGoalMet = data.steps >= (dailyStepGoal || 8000);
+      syncHealth({
+        ...data,
+        goalMet: isGoalMet,
+      });
+    }
+  }, [data, isReady, lastUpdated, dailyStepGoal, syncHealth]);
 
   // ── Gate reason ────────────────────────────────────────────────────────────
 

@@ -140,3 +140,4 @@ All endpoints return:
 5. **Logout** → All refresh tokens revoked
 
 🔒 = Requires `Authorization: Bearer <accessToken>` header
+# athlofit-backend

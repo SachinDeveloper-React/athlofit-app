@@ -37,6 +37,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import { withOpacity } from '../../../utils/withOpacity';
 import { useBmiHistory, useSaveBmi } from '../hooks/useBmi';
 import { useHealthMetrics } from '../hooks/useHealthMetrics';
+import { useAuthStore } from '../../../features/auth/store/authStore';
 
 // ─── BMI helpers ─────────────────────────────────────────────────────────────
 
@@ -219,6 +220,7 @@ const BmiCalculatorScreen = memo(() => {
   const { data: history = [] } = useBmiHistory(10);
   const { mutate: saveBmi, isPending: isSaving } = useSaveBmi();
   const [saved, setSaved] = useState(false);
+  const updateUser = useAuthStore(state => state.updateUser);
 
   const handleSave = useCallback(() => {
     saveBmi(
@@ -226,11 +228,12 @@ const BmiCalculatorScreen = memo(() => {
       {
         onSuccess: () => {
           setSaved(true);
+          updateUser({ weight: parseFloat(weight.toFixed(1)), height: parseFloat((height * 100).toFixed(0)) });
           setTimeout(() => setSaved(false), 3000);
         },
       },
     );
-  }, [saveBmi, weight, height]);
+  }, [saveBmi, weight, height, updateUser]);
 
   const historyBmiValues = useMemo(
     () => [...history].reverse().map(r => r.bmi),

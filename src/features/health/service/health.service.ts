@@ -18,6 +18,14 @@ export const healthService = {
       data: response.data ?? [],
     };
   },
+
+  syncHealthData: async (body: any) => {
+    const response = await api.post<{ success: boolean; message: string }>('health/sync', body);
+    return {
+      success: response?.success,
+      message: response?.message,
+    };
+  },
 };
 
 export function buildMetricRows(data: HealthData): MetricRow[] {
