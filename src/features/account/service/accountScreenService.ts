@@ -1,5 +1,5 @@
 // src/features/account/service/accountScreenService.ts
-import { Activity, Award, Coins, CreditCard, Droplets, Footprints, Package, ShoppingBag, Zap } from 'lucide-react-native';
+import { Activity, Award, Coins, Gift, Swords, Droplets, Footprints, Package, ShoppingBag, Zap } from 'lucide-react-native';
 import { MenuRow, Stat } from '../types/account.types';
 import { formatInt } from './accountService';
 import { navigate } from '../../../navigation/navigationRef';
@@ -79,7 +79,11 @@ export const accountScreenService = {
       title: 'ACHIEVEMENTS',
       icon: Award,
       tint: 'yellow',
-      onPress: () => {},
+      onPress: () => {
+        navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
+          screen: AccountRoutes.ACHIEVEMENTS,
+        });
+      },
     },
     {
       key: 'reports',
@@ -89,6 +93,28 @@ export const accountScreenService = {
       onPress: () => {
         navigate(RootRoutes.HEALTH_NAVIGATOR, {
           screen: HealthRoutes.HEALTH_ANALYTICS,
+        });
+      },
+    },
+    {
+      key: 'leaderboard',
+      title: 'LEADERBOARD',
+      icon: Swords,
+      tint: 'yellow',
+      onPress: () => {
+        navigate(RootRoutes.HEALTH_NAVIGATOR, {
+          screen: HealthRoutes.LEADERBOARD,
+        });
+      },
+    },
+    {
+      key: 'referral',
+      title: 'REFER & EARN',
+      icon: Gift,
+      tint: 'green',
+      onPress: () => {
+        navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
+          screen: AccountRoutes.REFERRAL,
         });
       },
     },

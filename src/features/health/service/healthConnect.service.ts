@@ -236,7 +236,7 @@ export const fetchAllHealthConnectData = async (
           return { records: [] };
         },
       ),
-      readRecords('Hydration', { timeRangeFilter: lastNDays(1) }).catch(e => {
+      readRecords('Hydration', { timeRangeFilter: todayRange() }).catch(e => {
         console.warn('Hydration read failed:', e);
         return { records: [] };
       }),

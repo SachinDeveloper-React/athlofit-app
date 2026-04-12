@@ -21,6 +21,7 @@ import {
   useToast,
 } from '../../../components';
 import { useLogin } from '../hooks/useLogin';
+import { useGoogleLogin } from '../hooks/useGoogleLogin';
 import { LoginFormValues, loginSchema } from '../utils/authValidation';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.LOGIN>;
@@ -32,6 +33,7 @@ const LoginScreen: React.FC<Props> = () => {
   const toast = useToast();
 
   const { mutate: login, isPending } = useLogin();
+  const { mutate: googleLogin, isPending: isGooglePending } = useGoogleLogin();
 
   const {
     control,
@@ -152,9 +154,15 @@ const LoginScreen: React.FC<Props> = () => {
           />
 
           <Button
-            label="Continue with Google"
+            label={isGooglePending ? 'Signing in...' : 'Continue with Google'}
             variant="outline"
-            onPress={() => {}}
+            onPress={() =>
+              googleLogin(undefined, {
+                onError: (err: any) =>
+                  toast.error(err?.message ?? 'Google sign-in failed. Please try again.'),
+              })
+            }
+            loading={isGooglePending}
             fullWidth
             size="lg"
           />

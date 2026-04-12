@@ -70,4 +70,17 @@ export const authService = {
       data: response.data,
     };
   },
+
+  googleLogin: async (idToken: string) => {
+    const response = await api.post<AuthResponse>('auth/google', { idToken }, { auth: false });
+    return {
+      success: !!(response?.data?.accessToken && response?.data?.refreshToken && response?.data?.user),
+      message: response.message,
+      data: {
+        accessToken: response?.data?.accessToken,
+        refreshToken: response?.data?.refreshToken,
+        user: response?.data?.user,
+      },
+    };
+  },
 };

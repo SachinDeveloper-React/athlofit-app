@@ -49,6 +49,8 @@ export type HealthStackParamList = {
   [HealthRoutes.FOOD_DETAIL]: { foodId: string };
   // BMI
   [HealthRoutes.BMI_CALCULATOR]: undefined;
+  // Leaderboard
+  [HealthRoutes.LEADERBOARD]: undefined;
 };
 
 // ─── Shop Stack ───────────────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ export type AccountStackParamList = {
   [AccountRoutes.PRIVACY]: undefined;
   [AccountRoutes.TERMS]: undefined;
   [AccountRoutes.HELP_SUPPORT]: undefined;
+  [AccountRoutes.ACHIEVEMENTS]: undefined;
+  [AccountRoutes.REFERRAL]: undefined;
 };
 
 // ─── Tab Navigator ────────────────────────────────────────────────────────────

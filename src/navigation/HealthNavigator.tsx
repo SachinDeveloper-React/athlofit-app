@@ -12,6 +12,8 @@ import CoinScreen from '../features/health/screens/CoinScreen';
 import FoodCatalogScreen from '../features/health/screens/FoodCatalogScreen';
 import FoodDetailScreen from '../features/health/screens/FoodDetailScreen';
 import BmiCalculatorScreen from '../features/health/screens/BmiCalculatorScreen';
+import LeaderboardScreen from '../features/health/screens/LeaderboardScreen';
+import StreakScreen from '../features/health/screens/StreakScreen';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
 
@@ -61,6 +63,16 @@ const HealthNavigator: React.FC = () => {
       <Stack.Screen
         name={HealthRoutes.BMI_CALCULATOR}
         component={BmiCalculatorScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.LEADERBOARD}
+        component={LeaderboardScreen}
+        options={{ animation: 'ios_from_right' }}
+      />
+      <Stack.Screen
+        name={HealthRoutes.STREAK}
+        component={StreakScreen}
         options={{ animation: 'ios_from_right' }}
       />
     </Stack.Navigator>

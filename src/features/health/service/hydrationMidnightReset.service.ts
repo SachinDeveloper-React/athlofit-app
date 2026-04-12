@@ -46,15 +46,14 @@ export const setupMidnightChannel = async (): Promise<void> => {
 // ─── Core reset logic ─────────────────────────────────────────────────────────
 export const performMidnightReset = (): void => {
   const store = useHydrationStore.getState();
-  store.setHistory([]);
-  store.setConsumed(0);
+  store.resetDay();
   deleteRecordsByTimeRange('Hydration', buildPreviousDaysFilter()).catch(e =>
     console.warn('[HC] Previous days hydration delete failed:', e),
-  ),
-    console.log(
-      '[Hydration] Midnight reset performed at',
-      new Date().toISOString(),
-    );
+  );
+  console.log(
+    '[Hydration] Midnight reset performed at',
+    new Date().toISOString(),
+  );
 };
 
 // ─── Schedule the repeating midnight trigger ──────────────────────────────────

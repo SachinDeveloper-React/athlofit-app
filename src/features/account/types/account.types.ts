@@ -11,7 +11,7 @@ export type MenuRow = {
   key: string;
   title: string;
   icon: any;
-  tint: 'blue' | 'purple' | 'yellow' | 'pink' | 'gold';
+  tint: 'blue' | 'purple' | 'yellow' | 'pink' | 'gold' | 'green';
   badge?: number;
   onPress: () => void;
 };

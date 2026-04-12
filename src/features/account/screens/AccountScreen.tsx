@@ -1,4 +1,4 @@
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList } from 'react-native';
 import React, { useCallback } from 'react';
 import { AppText, AppView, Card, Icon, Screen } from '../../../components';
 import {
@@ -47,10 +47,8 @@ const AccountScreen = (props: Props) => {
             <Card style={s.profileCard} variant="outlined">
               <AppView style={s.profileTop}>
                 <AccountAvatar
-                  uri={
-                    profile?.avatarUrl ??
-                    'https://plus.unsplash.com/premium_photo-1673458333581-c2bfab6f0f69?q=80&w=2070'
-                  }
+                  name={profile?.name}
+                  uri={profile?.avatarUrl ?? undefined}
                 />
 
                 <AppView style={s.topRight}>
@@ -88,7 +86,12 @@ const AccountScreen = (props: Props) => {
             <AppText style={s.sectionTitle}>SETTINGS &amp; SHOP</AppText>
           </AppView>
         }
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={[
+          s.listContent,
+          {
+            paddingBottom: 100,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
         initialNumToRender={8}

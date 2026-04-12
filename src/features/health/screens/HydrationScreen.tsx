@@ -54,7 +54,12 @@ const HydrationScreen = (_props: Props) => {
             >
               <AppText style={styles.bellIcon}>🔔</AppText>
               {scheduledCount > 0 && (
-                <AppView style={[styles.badge, { backgroundColor: colors.destructive }]}>
+                <AppView
+                  style={[
+                    styles.badge,
+                    { backgroundColor: colors.destructive },
+                  ]}
+                >
                   <AppText style={styles.badgeText}>{scheduledCount}</AppText>
                 </AppView>
               )}
@@ -63,19 +68,34 @@ const HydrationScreen = (_props: Props) => {
         />
       }
     >
-      <StatusBar barStyle="light-content" />
+      {/* <StatusBar barStyle="light-content" /> */}
 
       {/* Background layers */}
 
-      <View style={[styles.bgLayer2, { backgroundColor: withOpacity(colors.primary, 0.06) }]} />
+      <View
+        style={[
+          styles.bgLayer2,
+          { backgroundColor: withOpacity(colors.primary, 0.06) },
+        ]}
+      />
 
       {/* Status / sync message */}
       <View style={styles.headerRow}>
-        <AppText style={[styles.statusMsg, { color: colors.primary }]}>{statusMessage}</AppText>
+        <AppText style={[styles.statusMsg, { color: colors.primary }]}>
+          {statusMessage}
+        </AppText>
         {isSyncing && (
-          <AppText style={[styles.syncingText, { color: colors.mutedForeground }]}>↻ Syncing health data…</AppText>
+          <AppText
+            style={[styles.syncingText, { color: colors.mutedForeground }]}
+          >
+            ↻ Syncing health data…
+          </AppText>
         )}
-        {error && <AppText style={[styles.errorText, { color: colors.destructive }]}>⚠ {error}</AppText>}
+        {error && (
+          <AppText style={[styles.errorText, { color: colors.destructive }]}>
+            ⚠ {error}
+          </AppText>
+        )}
       </View>
 
       {/* Stats card with glass + amount */}

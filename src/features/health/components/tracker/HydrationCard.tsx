@@ -10,6 +10,7 @@ import { AppText, AppView, Button, Card } from '../../../../components';
 import { WaterCircleProgress } from './WaterCircleProgress';
 import { navigate } from '../../../../navigation/navigationRef';
 import { useHydration } from '../../hooks/useHydration';
+import { useCoinData, useClaimReward } from '../../hooks/useGamification';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,13 @@ const CIRCLE_SIZE = SCREEN_WIDTH * 0.3;
 
 export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props) => {
   const { consumed, addWater } = useHydration();
+  
+  const { data: coinData } = useCoinData();
+  const { mutate: claimReward, isPending: claimPending } = useClaimReward();
+
+  const hydrationReward = coinData?.claimable?.find(c => c.id === 'hydration_daily');
+  const isGoalMet = value >= 2000;
+  const isClaimed = hydrationReward?.isClaimed;
 
   const { colors } = useTheme();
 
@@ -57,6 +65,10 @@ export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props
     onUpdate?.();
   }, [addWater, onUpdate]);
 
+  const handleClaim = useCallback(() => {
+    claimReward('hydration_daily');
+  }, [claimReward]);
+
   // ── Press style is handled by Card's onPress ──────────────────────────
 
   return (
@@ -84,13 +96,31 @@ export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props
             </AppView>
 
             <AppView style={styles.actions}>
-              <Button
-                size="sm"
-                variant="outline"
-                label="+200 ml"
-                onPress={handleAdd250}
-              />
-              <Button size="sm" label="+500 ml" onPress={handleAdd500} />
+              {isGoalMet && !isClaimed ? (
+                <Button 
+                  size="sm" 
+                  variant="tinted" 
+                  label={claimPending ? "Claiming..." : "🪙 Claim 20 Coins"} 
+                  onPress={handleClaim} 
+                  disabled={claimPending} 
+                  style={{ backgroundColor: withOpacity('#F5C518', 0.15) }}
+                  labelStyle={{ color: '#F5C518' }}
+                />
+              ) : isClaimed ? (
+                <View style={{ paddingVertical: 8 }}>
+                  <AppText variant="caption1" style={{ color: colors.primary, fontWeight: '600' }}>✓ Coins claimed today!</AppText>
+                </View>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    label="+200 ml"
+                    onPress={handleAdd250}
+                  />
+                  <Button size="sm" label="+500 ml" onPress={handleAdd500} />
+                </>
+              )}
             </AppView>
           </AppView>
       </Card>
@@ -99,6 +129,8 @@ export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props
 });
 
 HydrationCard.displayName = 'HydrationCard';
+
+import { View } from 'react-native';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 

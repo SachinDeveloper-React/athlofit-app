@@ -24,12 +24,13 @@ export const useGamificationStore = create<GamificationStore>()(
         
         // Coins logic
         let currentToday = lastCoinDate === todayStr ? coinsEarnedToday : 0;
-        const newToday = Math.min(10, coinsEarnedThisDay);
+        // The server's cap is 250. We use Math.round to prevent floating point issues.
+        const newToday = Math.round(Math.min(250, coinsEarnedThisDay));
         const actualAdded = newToday - currentToday;
 
         if (actualAdded > 0) {
           updates.coinsEarnedToday = newToday;
-          updates.coinsBalance = coinsBalance + actualAdded;
+          updates.coinsBalance = Math.round(coinsBalance + actualAdded);
           updates.lastCoinDate = todayStr;
         }
 

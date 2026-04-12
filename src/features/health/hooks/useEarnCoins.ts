@@ -1,9 +1,9 @@
-// src/features/health/hooks/useEarnCoins.ts
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { gamificationService } from '../service/gamification.service';
 import { useGamificationStore } from '../store/gamificationStore';
 
 export function useEarnCoins() {
+  const queryClient = useQueryClient();
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
   const coinsEarnedToday = useGamificationStore(s => s.coinsEarnedToday);
   const lastCoinDate = useGamificationStore(s => s.lastCoinDate);
@@ -19,6 +19,7 @@ export function useEarnCoins() {
     onSuccess: (response) => {
       if (!response.success || !response.data) return;
       setCoinsBalance(response.data.coinsBalance);
+      queryClient.invalidateQueries({ queryKey: ['coin-data'] });
     },
   });
 

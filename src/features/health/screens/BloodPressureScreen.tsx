@@ -50,7 +50,7 @@ export const BloodPressureScreen: React.FC = () => {
       safeArea={false}
       header={<Header title="Blood Pressure" bordered showBack backLabel="" />}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+      {/* <StatusBar barStyle="light-content" backgroundColor="#0f172a" /> */}
 
       {latestReading && <LatestReadingCard reading={latestReading} />}
 

@@ -13,7 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { navigationRef } from '../navigation/navigationRef';
 import RootNavigator from '../navigation/RootNavigator';
-import {  enableScreens } from 'react-native-screens';
+import { enableScreens } from 'react-native-screens';
 import { ToastProvider } from '../components/Toast';
 import { useTheme } from '../hooks/useTheme';
 import notifee, { EventType } from '@notifee/react-native';
@@ -24,7 +24,7 @@ import {
   scheduleMidnightReset,
   setupMidnightChannel,
 } from '../features/health/service/hydrationMidnightReset.service';
-
+import { SystemOverlay } from '../components';
 
 enableScreens(true);
 // ─── React Query Client ───────────────────────────────────────────────────────
@@ -91,21 +91,26 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    SystemNavigationBar.setNavigationColor(isDark ? '#000000' : '#ffffff');
-    SystemNavigationBar.setBarMode(isDark ? 'light' : 'dark', 'navigation');
-  }, []);
+    SystemNavigationBar.setNavigationColor(
+      isDark ? '#000000' : '#ffffff',
+    ).catch(() => {});
+    SystemNavigationBar.setBarMode(
+      isDark ? 'light' : 'dark',
+      'navigation',
+    ).catch(() => {});
+  }, [isDark]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <StatusBar
-          barStyle="dark-content"
+          barStyle={isDark ? 'light-content' : 'dark-content'}
           backgroundColor="transparent"
-          translucent
         />
         <NavigationContainer ref={navigationRef}>
           <ToastProvider>
             <RootNavigator />
+            <SystemOverlay />
           </ToastProvider>
         </NavigationContainer>
       </SafeAreaProvider>

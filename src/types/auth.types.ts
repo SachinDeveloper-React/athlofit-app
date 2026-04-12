@@ -63,6 +63,8 @@ export interface User {
   weight?: number | null; // kg
   bloodType?: string | null;
   avatarUrl?: string | null;
+  unitSystem?: 'metric' | 'imperial';
+  referralCode?: string | null;
 }
 
 export interface CompleteProfileRequest {

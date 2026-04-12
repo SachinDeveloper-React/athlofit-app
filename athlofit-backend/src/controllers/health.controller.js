@@ -94,6 +94,26 @@ const syncHealthData = async (req, res, next) => {
       await _updateStreak(req.user._id, today);
     }
 
+    // Securely calculate and store passive "sweatcoin-style" coins based on steps
+    const Gamification = require('../models/Gamification.model');
+    const coinsEarnedToday = Math.round(Math.min(10, Math.max(0, ((steps ?? 0) / 1000) * 0.95)));
+    
+    let gam = await Gamification.findOne({ user: req.user._id });
+    if (!gam) gam = await Gamification.create({ user: req.user._id });
+
+    if (gam.lastCoinDate !== today) {
+        gam.coinsEarnedToday = 0;
+    }
+    
+    const currentEarned = gam.coinsEarnedToday || 0;
+    if (coinsEarnedToday > currentEarned) {
+        const actualAdded = coinsEarnedToday - currentEarned;
+        gam.coinsEarnedToday = coinsEarnedToday;
+        gam.coinsBalance = Math.round(gam.coinsBalance + actualAdded);
+        gam.lastCoinDate = today;
+        await gam.save();
+    }
+
     return success(res, 'Health data synced');
   } catch (err) {
     next(err);

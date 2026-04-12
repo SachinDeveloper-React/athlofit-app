@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { ThemeColors } from '../../../../constants/colors';
-
+import { SCREEN_WIDTH } from '../../../../utils/measure';
 
 export const useAccountStyles = (colors: ThemeColors) => {
   return StyleSheet.create({
@@ -79,11 +79,13 @@ export const useAccountStyles = (colors: ThemeColors) => {
     statsRow: {
       marginTop: 16,
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 12,
+      justifyContent: 'space-between',
     },
 
     statPill: {
-      flex: 1,
+      width: SCREEN_WIDTH / 2 - (32 + 10),
       borderRadius: 18,
       paddingVertical: 12,
       paddingHorizontal: 14,
@@ -251,5 +253,5 @@ export const useAccountStyles = (colors: ThemeColors) => {
       marginLeft: 16 + 44 + 14, // align to start after icon
       backgroundColor: withOpacity(colors.foreground, 0.06),
     },
-  })
-}
+  });
+};

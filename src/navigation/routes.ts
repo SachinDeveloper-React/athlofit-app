@@ -34,6 +34,8 @@ export const HealthRoutes = {
   FOOD_DETAIL: 'FoodDetailScreen',
   // BMI
   BMI_CALCULATOR: 'BmiCalculatorScreen',
+  // Leaderboard
+  LEADERBOARD: 'LeaderboardScreen',
 } as const;
 
 export const ShopRoutes = {
@@ -55,6 +57,8 @@ export const AccountRoutes = {
   PRIVACY: 'PrivacyScreen',
   TERMS: 'TermsScreen',
   HELP_SUPPORT: 'HelpSupportScreen',
+  ACHIEVEMENTS: 'AchievementsScreen',
+  REFERRAL: 'ReferralScreen',
 } as const;
 
 export const RootRoutes = {

@@ -3,7 +3,7 @@ export function calcCoinsFromSteps(steps: number) {
   // 1000 steps = 0.95 coin
   // Max 10 coins/day
   const coins = (steps / 1000) * 0.95;
-  return Math.min(10, Math.max(0, coins));
+  return Math.round(Math.min(10, Math.max(0, coins)));
 }
 
 export function getTrackerMessage(params: {

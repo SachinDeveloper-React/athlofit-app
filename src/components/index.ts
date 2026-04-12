@@ -23,5 +23,6 @@ export {
   ProfileSkeleton,
   Skeleton,
 } from './SkeletonLoader';
+export { default as SystemOverlay } from './common/SystemOverlay';
 export { ToastProvider, useToast } from './Toast';
 export { default as Typography } from './Typography';

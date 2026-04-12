@@ -3,6 +3,7 @@
 import { api } from '../../../utils/api';
 import type { GamificationResponse, GamificationState, StreaksResponse, EarnCoinsResponse, CoinDataResponse, ClaimRewardResponse } from '../types/gamification.type';
 import type { ApiResponse } from '../../../types/auth.types';
+import type { LeaderboardEntry } from '../types/leaderboard.types';
 
 export const gamificationService = {
   getGamification: async () => {
@@ -73,6 +74,40 @@ export const gamificationService = {
       success: response.success,
       message: response.message,
       data: response.data,
+    };
+  },
+
+  getAdvancedAchievements: async () => {
+    const response = await api.get<any>(
+      'gamification/achievements'
+    );
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.data,
+    };
+  },
+
+  claimAdvancedAchievement: async (achievementId: string) => {
+    const response = await api.post<any>(
+      'gamification/achievements/claim',
+      { achievementId }
+    );
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.data,
+    };
+  },
+
+  getLeaderboard: async () => {
+    const response = await api.get<ApiResponse<LeaderboardEntry[]>>(
+      'gamification/leaderboard'
+    );
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.data as LeaderboardEntry[],
     };
   },
 };

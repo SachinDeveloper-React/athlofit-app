@@ -6,16 +6,17 @@
 import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { resetToAuth } from '../navigation/navigationRef';
+import { useSystemStore } from '../store/systemStore';
 
 import { Platform } from 'react-native';
 
-// const BASE_URL = "https://athlofit-backend.vercel.app/"
+const BASE_URL = "https://athlofit-backend.vercel.app/"
 
-const BASE_URL =
-  Platform.OS === 'android'
-    ? 'http://192.168.0.129:5001/'
-    // ? 'http://192.168.1.14:5001/'
-    : 'http://localhost:5001/';
+// export const BASE_URL =
+//   Platform.OS === 'android'
+//     // ? 'http://192.168.0.129:5001/'
+//     ? 'http://192.168.0.129:5001/'
+//     : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,12 @@ async function request<T>(
       resetToAuth();
       throw createError('Session expired. Please log in again.', 401);
     }
+  }
+
+  // ── 503: Maintenance mode ──────────────────────────────────────────────────
+  if (response.status === 503) {
+    useSystemStore.getState().setMaintenance(true);
+    throw createError('Service is under maintenance.', 503);
   }
 
   // ── Parse response ─────────────────────────────────────────────────────────

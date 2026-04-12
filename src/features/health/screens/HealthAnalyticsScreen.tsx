@@ -1,5 +1,10 @@
 import React from 'react';
-import { StyleSheet, View, Dimensions, ActivityIndicator } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { AppText, Screen, Header, IconButton } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
@@ -145,6 +150,14 @@ const HealthAnalyticsScreen = () => {
         />
       }
       safeArea={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={syncMutation.isPending}
+          onRefresh={handleSync}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
     >
       <View style={styles.container}>
         <TimeframeTabs activeTab={activeTab} onTabChange={setActiveTab} />

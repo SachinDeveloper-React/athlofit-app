@@ -12,8 +12,16 @@ export interface SupportRequest {
   message: string;
 }
 
+export interface FaqItem {
+  id: string;
+  category: string;
+  question: string;
+  answer: string;
+}
+
 export const legalService = {
   getTerms: () => api.get<ApiResponse<LegalContent>>('config/terms'),
   getPrivacy: () => api.get<ApiResponse<LegalContent>>('config/privacy'),
   submitSupport: (body: SupportRequest) => api.post<ApiResponse>('config/support', body),
+  getFaqs: () => api.get<ApiResponse<FaqItem[]>>('config/faqs'),
 };

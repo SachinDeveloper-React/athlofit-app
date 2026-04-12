@@ -9,6 +9,8 @@ import NotificationsScreen from '../features/account/screens/NotificationsScreen
 import PrivacyScreen from '../features/account/screens/PrivacyScreen';
 import TermsScreen from '../features/account/screens/TermsScreen';
 import HelpSupportScreen from '../features/account/screens/HelpSupportScreen';
+import AchievementsScreen from '../features/account/screens/AchievementsScreen';
+import ReferralScreen from '../features/account/screens/ReferralScreen';
 
 const Stack = createNativeStackNavigator<AccountStackParamList>();
 const AccountNavigator: React.FC = () => {
@@ -29,6 +31,14 @@ const AccountNavigator: React.FC = () => {
       <Stack.Screen
         name={AccountRoutes.HELP_SUPPORT}
         component={HelpSupportScreen}
+      />
+      <Stack.Screen
+        name={AccountRoutes.ACHIEVEMENTS}
+        component={AchievementsScreen}
+      />
+      <Stack.Screen
+        name={AccountRoutes.REFERRAL}
+        component={ReferralScreen}
       />
     </Stack.Navigator>
   );

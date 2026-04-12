@@ -1,4 +1,4 @@
-import { FileText, LifeBuoy, LogOut, Mail, User, Shield } from 'lucide-react-native';
+import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Ruler } from 'lucide-react-native';
 import { Section } from '../types/setting.types';
 
 export const settingScreenService = {
@@ -12,6 +12,8 @@ export const settingScreenService = {
       onTerms: () => void;
       onPrivacy: () => void;
       onSignOut: () => void;
+      isMetric: boolean;
+      onUnitToggle: (v: boolean) => void;
     },
   ): Section[] => [
     {
@@ -32,6 +34,19 @@ export const settingScreenService = {
           icon: Mail,
           valueText: profileEmail,
           onPress: callbacks.onEmail,
+        },
+      ],
+    },
+    {
+      title: 'PREFERENCES',
+      rows: [
+        {
+          key: 'unit_system',
+          type: 'toggle',
+          title: 'USE METRIC UNITS (KG/CM)',
+          icon: Ruler,
+          value: callbacks.isMetric,
+          onValueChange: callbacks.onUnitToggle,
         },
       ],
     },

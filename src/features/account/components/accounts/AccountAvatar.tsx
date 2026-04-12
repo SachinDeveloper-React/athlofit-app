@@ -1,21 +1,12 @@
-import { memo, useMemo } from 'react';
-import { useAccountStyles } from './useAccountStyles';
+import { memo } from 'react';
+import { AppView, Avatar } from '../../../../components';
 
-import { Image } from 'react-native';
-import { useTheme } from '../../../../hooks/useTheme';
-import { AppView } from '../../../../components';
-
-export const AccountAvatar = memo(({ uri }: { uri?: string }) => {
-  const { colors } = useTheme();
-  const s = useMemo(() => useAccountStyles(colors), [colors]);
-
-  return (
-    <AppView style={s.avatarWrap}>
-      {uri ? (
-        <Image source={{ uri }} style={s.avatarImg} />
-      ) : (
-        <AppView style={s.avatarPlaceholder} />
-      )}
-    </AppView>
-  );
-});
+export const AccountAvatar = memo(
+  ({ uri, name }: { uri?: string; name?: string }) => {
+    return (
+      <AppView>
+        <Avatar uri={uri || undefined} name={name} size="2xl" shape="rounded" />
+      </AppView>
+    );
+  },
+);

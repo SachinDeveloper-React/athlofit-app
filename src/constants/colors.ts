@@ -25,6 +25,7 @@ export const lightColors = {
   link: '#0000EE',
   success: '#008000',
   warning: '#FFA500',
+  gold: '#FFB800',
   chart: {
     c1: '#E57A2E',
     c2: '#3AA6A6',
@@ -73,6 +74,7 @@ export const darkColors = {
   link: '#0000EE',
   success: '#008000',
   warning: '#FFA500',
+  gold: '#FFB800',
   chart: {
     c1: '#6B5CFF',
     c2: '#4AD1B3',

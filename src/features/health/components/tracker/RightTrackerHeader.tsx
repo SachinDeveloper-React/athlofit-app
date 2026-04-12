@@ -1,6 +1,12 @@
 import React, { memo, useCallback } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import { AppText, AppView, Avatar, IconButton } from '../../../../components';
+import {
+  AppText,
+  AppView,
+  Avatar,
+  Icon,
+  IconButton,
+} from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { useGamificationStore } from '../../store/gamificationStore';
@@ -12,11 +18,10 @@ const AVATAR_URI =
 
 // ─── Coin Badge ───────────────────────────────────────────────────────────────
 
-const CoinBadge = memo(() => {
+export const CoinBadge = memo(() => {
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
-
   const bg = withOpacity('#F5C518', 0.15);
-
+  const { colors } = useTheme();
   return (
     <AppView
       style={[
@@ -24,7 +29,8 @@ const CoinBadge = memo(() => {
         { backgroundColor: bg, borderColor: withOpacity('#F5C518', 0.35) },
       ]}
     >
-      <AppText style={styles.coinEmoji}>🪙</AppText>
+      <Icon name="HandCoins" size={16} color={colors.gold} />
+
       <AppText style={styles.coinCount}>
         {coinsBalance >= 1000
           ? `${(coinsBalance / 1000).toFixed(1)}k`
@@ -44,6 +50,7 @@ type Props = {
   onProfilePress?: () => void;
   onCoinPress?: () => void;
   avatarUri?: string;
+  avatarName?: string;
 };
 
 const RightTrackerHeader = memo(
@@ -53,6 +60,7 @@ const RightTrackerHeader = memo(
     onProfilePress,
     onCoinPress,
     avatarUri = AVATAR_URI,
+    avatarName = AVATAR_URI,
   }: Props) => {
     const { colors, radius } = useTheme();
 
@@ -98,7 +106,12 @@ const RightTrackerHeader = memo(
             transform: [{ scale: pressed ? 0.99 : 1 }],
           })}
         >
-          <Avatar uri={avatarUri} size="sm" shape="rounded" />
+          <Avatar
+            uri={avatarUri || undefined}
+            name={avatarName}
+            size="sm"
+            shape="rounded"
+          />
         </Pressable>
       </AppView>
     );
@@ -122,18 +135,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: 32,
     borderRadius: 20,
     borderWidth: 1,
   },
   coinEmoji: {
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   coinCount: {
     fontSize: 13,
     fontWeight: '700',
     color: '#F5C518',
     letterSpacing: 0.3,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
 });

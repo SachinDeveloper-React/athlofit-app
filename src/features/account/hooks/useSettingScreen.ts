@@ -4,10 +4,12 @@ import { tokenService } from '../../auth/service/tokenService';
 import { navigate } from '../../../navigation/navigationRef';
 import { AccountRoutes, RootRoutes } from '../../../navigation/routes';
 import { settingScreenService } from '../service/settingScreenService';
+import { useUnitSystem } from './useUnitSystem';
 
 export const useSettingScreen = () => {
   const profile = useAuthStore(s => s.user);
   const logout = useAuthStore(state => state.logout);
+  const { isMetric, switchUnit } = useUnitSystem();
 
   const onEditProfile = useCallback(() => {
     navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
@@ -53,6 +55,8 @@ export const useSettingScreen = () => {
         onTerms,
         onPrivacy,
         onSignOut,
+        isMetric,
+        onUnitToggle: (v: boolean) => switchUnit(v ? 'metric' : 'imperial'),
       }),
     [
       profile?.name,
@@ -63,6 +67,8 @@ export const useSettingScreen = () => {
       onTerms,
       onPrivacy,
       onSignOut,
+      isMetric,
+      switchUnit,
     ],
   );
 

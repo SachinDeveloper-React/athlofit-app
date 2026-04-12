@@ -11,7 +11,11 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../types/navigation.types';
-import { HealthRoutes, RootRoutes, ShopRoutes } from '../../../navigation/routes';
+import {
+  HealthRoutes,
+  RootRoutes,
+  ShopRoutes,
+} from '../../../navigation/routes';
 import { useTheme } from '../../../hooks/useTheme';
 import AppView from '../../../components/AppView';
 import AppText from '../../../components/AppText';
@@ -27,6 +31,7 @@ import { Header, IconButton } from '../../../components';
 import { SCREEN_WIDTH } from '../../../utils/measure';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import { formatCoins } from '../../../config/appConfig';
+import { CoinBadge } from '../../health/components/tracker/RightTrackerHeader';
 
 const COLUMN_GAP = 12;
 
@@ -281,23 +286,7 @@ const ShopScreen = () => {
             rightAction={
               <AppView style={styles.headerRight}>
                 {/* Live coin balance chip */}
-                <Pressable
-                  onPress={() =>
-                    navigation.navigate(RootRoutes.HEALTH_NAVIGATOR, {
-                      screen: HealthRoutes.COINS,
-                    })
-                  }
-                  style={[styles.coinChip, {
-                    backgroundColor: withOpacity('#F5C518', 0.15),
-                    borderColor: withOpacity('#F5C518', 0.4),
-                    borderRadius: radius.full ?? 999,
-                  }]}
-                >
-                  <AppText style={styles.coinEmoji}>🪙</AppText>
-                  <AppText style={styles.coinCount}>
-                    {formatCoins(coinsBalance)}
-                  </AppText>
-                </Pressable>
+                <CoinBadge />
 
                 <IconButton
                   name="ShoppingCart"
@@ -453,4 +442,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 });
-
