@@ -110,4 +110,45 @@ export const gamificationService = {
       data: response.data as LeaderboardEntry[],
     };
   },
+
+  // ─── Admin: Badge Definitions ─────────────────────────────────────────────
+
+  adminGetBadges: async () => {
+    const response = await api.get<any>('gamification/admin/badges');
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  adminCreateBadge: async (badge: {
+    key: string;
+    title: string;
+    rule: string;
+    emoji: string;
+    color: string;
+    threshold: number;
+    coinReward: number;
+    order?: number;
+    isActive?: boolean;
+  }) => {
+    const response = await api.post<any>('gamification/admin/badges', badge);
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  adminUpdateBadge: async (id: string, updates: Partial<{
+    title: string;
+    rule: string;
+    emoji: string;
+    color: string;
+    threshold: number;
+    coinReward: number;
+    order: number;
+    isActive: boolean;
+  }>) => {
+    const response = await api.put<any>(`gamification/admin/badges/${id}`, updates);
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  adminDeleteBadge: async (id: string) => {
+    const response = await api.delete<any>(`gamification/admin/badges/${id}`);
+    return { success: response.success, message: response.message, data: response.data };
+  },
 };

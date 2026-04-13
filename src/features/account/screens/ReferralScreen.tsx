@@ -25,7 +25,8 @@ const ReferralScreen: React.FC = () => {
   const { colors } = useTheme();
   const toast = useToast();
   const [inputCode, setInputCode] = useState('');
-  const { stats, isLoading, isRefetching, refetch, applyCode, isApplying } = useReferral();
+  const { stats, isLoading, isRefetching, refetch, applyCode, isApplying } =
+    useReferral();
 
   const handleCopy = useCallback(() => {
     if (!stats?.referralCode) return;
@@ -74,45 +75,107 @@ const ReferralScreen: React.FC = () => {
       header={<Header title="Refer & Earn" showBack backLabel="" />}
     >
       <AppView style={styles.container}>
-
         {/* ── Hero card ── */}
         <AppView
-          style={[styles.heroCard, { backgroundColor: colors.primary + '14', borderColor: colors.primary + '35' }]}
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: colors.primary + '14',
+              borderColor: colors.primary + '35',
+            },
+          ]}
         >
-          <AppText style={{ fontSize: 48, textAlign: 'center', marginBottom: 12 }}>🎁</AppText>
-          <AppText variant="title2" weight="bold" align="center" style={{ marginBottom: 6 }}>
+          <AppText
+            style={{ fontSize: 48, textAlign: 'center', marginBottom: 12 }}
+          >
+            🎁
+          </AppText>
+          <AppText
+            variant="title2"
+            weight="bold"
+            align="center"
+            style={{ marginBottom: 6 }}
+          >
             Share & Earn Coins
           </AppText>
-          <AppText variant="callout" align="center" style={{ opacity: 0.65, lineHeight: 22 }}>
-            Share your code with friends. When they join and use it, you both get rewarded!
+          <AppText
+            variant="callout"
+            align="center"
+            style={{ opacity: 0.65, lineHeight: 22 }}
+          >
+            Share your code with friends. When they join and use it, you both
+            get rewarded!
           </AppText>
 
           {/* Coin reward breakdown */}
-          <AppView style={[styles.rewardRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <AppView
+            style={[
+              styles.rewardRow,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <AppView center style={{ flex: 1 }}>
-              <AppText variant="title2" weight="bold" style={{ color: '#f59e0b' }}>
+              <AppText
+                variant="title2"
+                weight="bold"
+                style={{ color: '#f59e0b' }}
+              >
                 +{stats?.referrerBonus ?? 100}
               </AppText>
-              <AppText variant="caption1" style={{ opacity: 0.6, marginTop: 2 }}>You earn</AppText>
+              <AppText
+                variant="caption1"
+                style={{ opacity: 0.6, marginTop: 2 }}
+              >
+                You earn
+              </AppText>
             </AppView>
-            <AppView style={[styles.divider, { backgroundColor: colors.border }]} />
+            <AppView
+              style={[styles.divider, { backgroundColor: colors.border }]}
+            />
             <AppView center style={{ flex: 1 }}>
-              <AppText variant="title2" weight="bold" style={{ color: colors.primary }}>
+              <AppText
+                variant="title2"
+                weight="bold"
+                style={{ color: colors.primary }}
+              >
                 +{stats?.refereeBonus ?? 50}
               </AppText>
-              <AppText variant="caption1" style={{ opacity: 0.6, marginTop: 2 }}>Friend earns</AppText>
+              <AppText
+                variant="caption1"
+                style={{ opacity: 0.6, marginTop: 2 }}
+              >
+                Friend earns
+              </AppText>
             </AppView>
           </AppView>
         </AppView>
 
         {/* ── My Referral Code ── */}
-        <AppView style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <AppText variant="footnote" weight="semibold" style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}>
+        <AppView
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <AppText
+            variant="footnote"
+            weight="semiBold"
+            style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}
+          >
             YOUR REFERRAL CODE
           </AppText>
 
           <AppView
-            style={[styles.codeBox, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '40' }]}
+            style={[
+              styles.codeBox,
+              {
+                backgroundColor: colors.primary + '10',
+                borderColor: colors.primary + '40',
+              },
+            ]}
           >
             <AppText
               variant="largeTitle"
@@ -125,20 +188,34 @@ const ReferralScreen: React.FC = () => {
 
           <AppView row style={{ gap: 12, marginTop: 16 }}>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.primary + '15', flex: 1 }]}
+              style={[
+                styles.actionBtn,
+                { backgroundColor: colors.primary + '15', flex: 1 },
+              ]}
               onPress={handleCopy}
             >
               <Icon name="Copy" size={18} color={colors.primary} />
-              <AppText variant="callout" weight="semibold" style={{ color: colors.primary, marginLeft: 6 }}>
+              <AppText
+                variant="callout"
+                weight="semiBold"
+                style={{ color: colors.primary, marginLeft: 6 }}
+              >
                 Copy
               </AppText>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.primary, flex: 1 }]}
+              style={[
+                styles.actionBtn,
+                { backgroundColor: colors.primary, flex: 1 },
+              ]}
               onPress={handleShare}
             >
               <Icon name="Share2" size={18} color="#fff" />
-              <AppText variant="callout" weight="semibold" style={{ color: '#fff', marginLeft: 6 }}>
+              <AppText
+                variant="callout"
+                weight="semiBold"
+                style={{ color: '#fff', marginLeft: 6 }}
+              >
                 Share
               </AppText>
             </TouchableOpacity>
@@ -147,31 +224,72 @@ const ReferralScreen: React.FC = () => {
 
         {/* ── Stats ── */}
         <AppView row style={{ gap: 12 }}>
-          <AppView style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <AppText variant="title2" weight="bold" style={{ color: colors.primary }}>
+          <AppView
+            style={[
+              styles.statCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <AppText
+              variant="title2"
+              weight="bold"
+              style={{ color: colors.primary }}
+            >
               {stats?.totalReferred ?? 0}
             </AppText>
-            <AppText variant="caption1" style={{ opacity: 0.55, marginTop: 2 }}>Friends Referred</AppText>
+            <AppText variant="caption1" style={{ opacity: 0.55, marginTop: 2 }}>
+              Friends Referred
+            </AppText>
           </AppView>
-          <AppView style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <AppText variant="title2" weight="bold" style={{ color: '#f59e0b' }}>
+          <AppView
+            style={[
+              styles.statCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <AppText
+              variant="title2"
+              weight="bold"
+              style={{ color: '#f59e0b' }}
+            >
               {formatCoins(stats?.bonusCoinsEarned ?? 0)}
             </AppText>
-            <AppText variant="caption1" style={{ opacity: 0.55, marginTop: 2 }}>Coins Earned</AppText>
+            <AppText variant="caption1" style={{ opacity: 0.55, marginTop: 2 }}>
+              Coins Earned
+            </AppText>
           </AppView>
         </AppView>
 
         {/* ── Apply a friend's code ── */}
-        <AppView style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <AppText variant="footnote" weight="semibold" style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}>
+        <AppView
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <AppText
+            variant="footnote"
+            weight="semiBold"
+            style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}
+          >
             HAVE A FRIEND'S CODE?
           </AppText>
-          <AppText variant="callout" style={{ opacity: 0.65, marginBottom: 16, lineHeight: 20 }}>
-            Enter your friend's referral code below to earn {stats?.refereeBonus ?? 50} bonus coins instantly!
+          <AppText
+            variant="callout"
+            style={{ opacity: 0.65, marginBottom: 16, lineHeight: 20 }}
+          >
+            Enter your friend's referral code below to earn{' '}
+            {stats?.refereeBonus ?? 50} bonus coins instantly!
           </AppText>
 
           <AppView
-            style={[styles.inputRow, { backgroundColor: colors.background, borderColor: colors.border }]}
+            style={[
+              styles.inputRow,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
           >
             <TextInput
               value={inputCode}
@@ -196,8 +314,17 @@ const ReferralScreen: React.FC = () => {
 
         {/* ── Recent referrals ── */}
         {(stats?.referrals ?? []).length > 0 && (
-          <AppView style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <AppText variant="footnote" weight="semibold" style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}>
+          <AppView
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <AppText
+              variant="footnote"
+              weight="semiBold"
+              style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 12 }}
+            >
               FRIENDS YOU REFERRED
             </AppText>
             {(stats?.referrals ?? []).map(ref => (
@@ -207,20 +334,28 @@ const ReferralScreen: React.FC = () => {
                 style={[styles.refRow, { borderBottomColor: colors.border }]}
               >
                 <AppView
-                  style={[styles.refAvatar, { backgroundColor: colors.primary + '20' }]}
+                  style={[
+                    styles.refAvatar,
+                    { backgroundColor: colors.primary + '20' },
+                  ]}
                 >
                   <AppText weight="bold" style={{ color: colors.primary }}>
                     {ref.name.charAt(0).toUpperCase()}
                   </AppText>
                 </AppView>
                 <AppView style={{ flex: 1, marginLeft: 10 }}>
-                  <AppText variant="callout" weight="semibold">{ref.name}</AppText>
+                  <AppText variant="callout" weight="semiBold">
+                    {ref.name}
+                  </AppText>
                   <AppText variant="caption1" style={{ opacity: 0.5 }}>
                     {new Date(ref.joinedAt).toLocaleDateString()}
                   </AppText>
                 </AppView>
                 {ref.bonusAwarded && (
-                  <AppText variant="caption1" style={{ color: '#10b981', fontWeight: '600' }}>
+                  <AppText
+                    variant="caption1"
+                    style={{ color: '#10b981', fontWeight: '600' }}
+                  >
                     +100 🪙
                   </AppText>
                 )}

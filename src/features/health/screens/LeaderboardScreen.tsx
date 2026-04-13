@@ -35,10 +35,7 @@ const Avatar: React.FC<{ name: string; size?: number; color?: string }> = ({
       justifyContent: 'center',
     }}
   >
-    <AppText
-      weight="bold"
-      style={{ color, fontSize: size * 0.36 }}
-    >
+    <AppText weight="bold" style={{ color, fontSize: size * 0.36 }}>
       {name?.charAt(0)?.toUpperCase() ?? '?'}
     </AppText>
   </View>
@@ -88,7 +85,7 @@ const Podium: React.FC<{
               </AppView>
               <AppText
                 variant="caption1"
-                weight="semibold"
+                weight="semiBold"
                 numberOfLines={1}
                 style={{
                   color: isMe ? colors.primary : colors.foreground,
@@ -99,10 +96,7 @@ const Podium: React.FC<{
               >
                 {isMe ? 'YOU' : entry?.name?.split(' ')[0]}
               </AppText>
-              <AppText
-                variant="caption2"
-                style={{ color: mc, marginTop: 1 }}
-              >
+              <AppText variant="caption2" style={{ color: mc, marginTop: 1 }}>
                 {formatCoins(entry?.coinsBalance ?? 0)}
               </AppText>
             </AppView>
@@ -121,11 +115,7 @@ const Podium: React.FC<{
                 },
               ]}
             >
-              <AppText
-                variant="title3"
-                weight="bold"
-                style={{ color: mc }}
-              >
+              <AppText variant="title3" weight="bold" style={{ color: mc }}>
                 #{rankIdx + 1}
               </AppText>
             </AppView>
@@ -146,9 +136,7 @@ const RankRow: React.FC<{
     style={[
       styles.rankRow,
       {
-        backgroundColor: isMe
-          ? colors.primary + '12'
-          : colors.card,
+        backgroundColor: isMe ? colors.primary + '12' : colors.card,
         borderColor: isMe ? colors.primary + '50' : colors.border,
       },
     ]}
@@ -158,9 +146,10 @@ const RankRow: React.FC<{
       style={[
         styles.rankBadge,
         {
-          backgroundColor: entry.rank <= 3
-            ? (MEDAL_COLOR[entry.rank - 1] + '22')
-            : colors.border,
+          backgroundColor:
+            entry.rank <= 3
+              ? MEDAL_COLOR[entry.rank - 1] + '22'
+              : colors.border,
         },
       ]}
     >
@@ -168,7 +157,8 @@ const RankRow: React.FC<{
         variant="footnote"
         weight="bold"
         style={{
-          color: entry.rank <= 3 ? MEDAL_COLOR[entry.rank - 1] : colors.foreground,
+          color:
+            entry.rank <= 3 ? MEDAL_COLOR[entry.rank - 1] : colors.foreground,
         }}
       >
         #{entry.rank}
@@ -184,11 +174,12 @@ const RankRow: React.FC<{
 
     {/* Name & streak */}
     <AppView style={{ flex: 1, marginLeft: 12 }}>
-      <AppText variant="callout" weight="semibold" numberOfLines={1}>
+      <AppText variant="callout" weight="semiBold" numberOfLines={1}>
         {isMe ? `${entry.name} (You)` : entry.name}
       </AppText>
       <AppText variant="caption1" style={{ opacity: 0.55, marginTop: 1 }}>
-        🔥 {entry.streakDays}d streak · {entry.badgesCount} badge{entry.badgesCount !== 1 ? 's' : ''}
+        🔥 {entry.streakDays}d streak · {entry.badgesCount} badge
+        {entry.badgesCount !== 1 ? 's' : ''}
       </AppText>
     </AppView>
 
@@ -201,7 +192,9 @@ const RankRow: React.FC<{
       >
         {formatCoins(entry.coinsBalance)}
       </AppText>
-      <AppText variant="caption2" style={{ opacity: 0.45 }}>coins</AppText>
+      <AppText variant="caption2" style={{ opacity: 0.45 }}>
+        coins
+      </AppText>
     </AppView>
   </AppView>
 );
@@ -209,7 +202,8 @@ const RankRow: React.FC<{
 // ─── Screen ───────────────────────────────────────────────────────────────────
 const LeaderboardScreen: React.FC = () => {
   const { colors } = useTheme();
-  const { entries, myEntry, isLoading, isRefetching, refetch } = useLeaderboard();
+  const { entries, myEntry, isLoading, isRefetching, refetch } =
+    useLeaderboard();
 
   const below3 = entries.slice(3);
 
@@ -227,22 +221,35 @@ const LeaderboardScreen: React.FC = () => {
       header={<Header title="Leaderboard" showBack backLabel="" />}
     >
       <AppView style={styles.container}>
-
         {/* Header banner */}
         <AppView
-          style={[styles.heroCard, { backgroundColor: colors.primary + '14', borderColor: colors.primary + '30' }]}
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: colors.primary + '14',
+              borderColor: colors.primary + '30',
+            },
+          ]}
         >
           <AppText variant="title2" weight="bold" align="center">
             🏆 Top Athletes
           </AppText>
-          <AppText variant="callout" align="center" style={{ opacity: 0.65, marginTop: 4 }}>
+          <AppText
+            variant="callout"
+            align="center"
+            style={{ opacity: 0.65, marginTop: 4 }}
+          >
             Earn coins & maintain streaks to climb the ranks!
           </AppText>
         </AppView>
 
         {/* Podium */}
         {entries.length >= 3 && (
-          <Podium entries={entries} myUserId={myEntry?.userId} colors={colors} />
+          <Podium
+            entries={entries}
+            myUserId={myEntry?.userId}
+            colors={colors}
+          />
         )}
 
         {/* Ranked list (4+) */}
@@ -250,7 +257,7 @@ const LeaderboardScreen: React.FC = () => {
           <AppView style={{ marginTop: 12, gap: 8 }}>
             <AppText
               variant="footnote"
-              weight="semibold"
+              weight="semiBold"
               style={{ opacity: 0.5, letterSpacing: 0.5, marginBottom: 4 }}
             >
               FULL RANKINGS
@@ -282,7 +289,9 @@ const LeaderboardScreen: React.FC = () => {
         {entries.length === 0 && !isLoading && (
           <AppView center style={{ marginTop: 60, gap: 8 }}>
             <AppText style={{ fontSize: 48 }}>🏆</AppText>
-            <AppText variant="title3" align="center">No data yet</AppText>
+            <AppText variant="title3" align="center">
+              No data yet
+            </AppText>
             <AppText align="center" style={{ opacity: 0.55 }}>
               Start tracking and earning coins to appear here!
             </AppText>

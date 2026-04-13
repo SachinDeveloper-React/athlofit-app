@@ -13,13 +13,18 @@ export interface GamificationState {
 
 export type GamificationResponse = ApiResponse<GamificationState>;
 
-export type BadgeKey = 'starter' | 'consistent' | 'finisher' | 'elite';
+export type BadgeKey = string; // Dynamic — keys are defined in BadgeDefinition DB records
 
 export interface TrackerBadge {
   key: BadgeKey;
   title: string;
   rule: string;
+  emoji: string;     // e.g. '🥉' — served from API
+  color: string;     // e.g. '#cd7f32' — served from API
+  threshold: number; // streak days needed — served from API
+  coinReward: number; // coins awarded on unlock — served from API
   unlocked: boolean;
+  unlockedAt?: string | null;
 }
 
 export interface StreaksResponseData {

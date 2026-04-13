@@ -56,16 +56,17 @@ const TabNavigator: React.FC = () => {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.foreground,
-      animation: 'shift',
-      lazy: true,
+      animation: 'fade',
+      lazy: false,
       tabBarAllowFontScaling: true,
     }),
-    [tabBarStyle, colors.primary, colors.ring],
+    [tabBarStyle, colors.primary, colors.ring, colors.background],
   );
   return (
     <Tab.Navigator
       initialRouteName={TabRoutes.TRACKER}
       screenOptions={screenOptions}
+      // sceneContainerStyle={{ backgroundColor: colors.background }}
     >
       <Tab.Screen
         name={TabRoutes.TRACKER}

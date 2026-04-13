@@ -1,10 +1,13 @@
 import React, { memo, useCallback } from 'react';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { AppView } from '../../../../components';
 import { StepProgressCard } from './StepProgressCard';
 import MetricCard, { type MetricCardProps } from '../MetricCard';
 import { HydrationCard } from './HydrationCard';
-import { TrackerStreaksBadges, TrackerStreaksSkeleton } from './TrackerStreaksBadges';
+import {
+  TrackerStreaksBadges,
+  TrackerStreaksSkeleton,
+} from './TrackerStreaksBadges';
 import { TrackerMotivation } from './TrackerMotivation';
 
 import { navigate } from '../../../../navigation/navigationRef';
@@ -54,16 +57,33 @@ MetricRowPair.displayName = 'MetricRowPair';
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const DailyStatsSection = memo(
-  ({ hidden, steps, goal, weekData, isWeekPending, todayIndex, metricRows, stats, streakData, isStreakPending, streakDays, syncDailyProgress, onUpdate }: Props) => {
+  ({
+    hidden,
+    steps,
+    goal,
+    weekData,
+    isWeekPending,
+    todayIndex,
+    metricRows,
+    stats,
+    streakData,
+    isStreakPending,
+    streakDays,
+    syncDailyProgress,
+    onUpdate,
+  }: Props) => {
     const { earnCoins, isPending: claimPending, claimedToday } = useEarnCoins();
     const { data: bmiHistory } = useBmiHistory(1);
     const latestBmi = bmiHistory?.[0];
 
-    const handleClaim = useCallback((coinsToAdd: number) => {
-      earnCoins(coinsToAdd);
-      // Also update local streak/coin progress
-      syncDailyProgress(coinsToAdd, (steps >= (goal ?? 10000)));
-    }, [earnCoins, syncDailyProgress, steps, goal]);
+    const handleClaim = useCallback(
+      (coinsToAdd: number) => {
+        earnCoins(coinsToAdd);
+        // Also update local streak/coin progress
+        syncDailyProgress(coinsToAdd, steps >= (goal ?? 10000));
+      },
+      [earnCoins, syncDailyProgress, steps, goal],
+    );
 
     const goToHeartRate = useCallback(() => {
       navigate('HealthStack', {
@@ -150,12 +170,16 @@ const DailyStatsSection = memo(
         {isStreakPending ? (
           <TrackerStreaksSkeleton />
         ) : streakData ? (
-          <TrackerStreaksBadges
-            streakDays={streakData.streakDays}
-            bestStreakDays={streakData.bestStreakDays}
-            nextBadgeAt={streakData.nextBadgeAt}
-            badges={streakData.badges}
-          />
+          <Pressable
+            onPress={() => navigate('HealthStack', { screen: 'StreakScreen' })}
+          >
+            <TrackerStreaksBadges
+              streakDays={streakData.streakDays}
+              bestStreakDays={streakData.bestStreakDays}
+              nextBadgeAt={streakData.nextBadgeAt}
+              badges={streakData.badges}
+            />
+          </Pressable>
         ) : null}
 
         <TrackerMotivation
@@ -163,7 +187,7 @@ const DailyStatsSection = memo(
           goalSteps={goal || 10000}
           streakDays={streakDays}
           onComputed={({ coinsToday, streakWillContinue }) => {
-             syncDailyProgress(coinsToday, streakWillContinue);
+            syncDailyProgress(coinsToday, streakWillContinue);
           }}
         />
       </AppView>
