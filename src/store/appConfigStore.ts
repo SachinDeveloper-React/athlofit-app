@@ -35,3 +35,23 @@ export const useCoinRate = () =>
 /** Selector: daily coin earn limit */
 export const useDailyCoinLimit = () =>
   useAppConfigStore(s => s.config.coin.dailyEarnLimit);
+
+/** Selector: step goal reward coins */
+export const useStepGoalCoins = () =>
+  useAppConfigStore(s => s.config.rewards?.stepGoalCoins ?? 50);
+
+/** Selector: referrer bonus */
+export const useReferrerBonus = () =>
+  useAppConfigStore(s => s.config.coin.referrerBonus ?? 100);
+
+/** Selector: referee bonus */
+export const useRefereeBonus = () =>
+  useAppConfigStore(s => s.config.coin.refereeBonus ?? 50);
+
+/** Selector: support contact info */
+export const useSupportContact = () =>
+  useAppConfigStore(s => s.config.support ?? { email: 'support@athlofit.com', website: 'www.athlofit.com/faq' });
+
+/** Selector: feature flags */
+export const useFeatureFlags = () =>
+  useAppConfigStore(s => s.config.features);

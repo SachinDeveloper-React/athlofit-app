@@ -27,6 +27,7 @@ import { useSupportMutation } from '../hooks/useSupportMutation';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useFaqs } from '../hooks/useFaqs';
 import type { FaqItem } from '../service/legalService';
+import { useSupportContact } from '../../../store/appConfigStore';
 
 // Enable LayoutAnimation on Android
 if (
@@ -125,6 +126,7 @@ const HelpSupportScreen: React.FC = () => {
   const user = useAuthStore(s => s.user);
   const { mutate: submitSupport, isPending } = useSupportMutation();
   const { grouped, isLoading: faqsLoading } = useFaqs();
+  const supportContact = useSupportContact();
 
   const [showForm, setShowForm] = useState(false);
 
@@ -367,7 +369,7 @@ const HelpSupportScreen: React.FC = () => {
             ]}
           >
             <Icon name="Mail" size={20} color={colors.primary} />
-            <AppText style={styles.infoLink}>support@athlofit.com</AppText>
+            <AppText style={styles.infoLink}>{supportContact.email}</AppText>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -376,7 +378,7 @@ const HelpSupportScreen: React.FC = () => {
             ]}
           >
             <Icon name="Globe" size={20} color={colors.primary} />
-            <AppText style={styles.infoLink}>www.athlofit.com/faq</AppText>
+            <AppText style={styles.infoLink}>{supportContact.website}</AppText>
           </TouchableOpacity>
         </AppView>
 

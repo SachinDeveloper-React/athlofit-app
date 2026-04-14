@@ -1,834 +1,468 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+// src/features/shop/screens/ProductDetailScreen.tsx — Advanced Redesign
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Image,
-  Pressable,
   ActivityIndicator,
-  Alert,
+  Dimensions,
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import Animated, {
   FadeIn,
   FadeInDown,
+  FadeInUp,
   SlideInDown,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../../hooks/useTheme';
-import { AppView, AppText, Screen, Icon } from '../../../components';
+import AppText from '../../../components/AppText';
+import { Icon } from '../../../components/Icon';
+import { withOpacity } from '../../../utils/withOpacity';
 import { useProductDetail } from '../hooks/useShop';
 import { useCart } from '../context/CartContext';
 import { RootRoutes, ShopRoutes } from '../../../navigation/routes';
 import type { ShopStackParamList } from '../../../types/navigation.types';
-import { withOpacity } from '../../../utils/withOpacity';
-import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../../../utils/measure';
 
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.48;
+const { width: W, height: H } = Dimensions.get('window');
+const HERO_H = H * 0.46;
 
-type ProductDetailRouteProp = RouteProp<
-  ShopStackParamList,
-  typeof ShopRoutes.PRODUCT_DETAIL
->;
-type ProductDetailNavProp = NavigationProp<
-  ShopStackParamList,
-  typeof ShopRoutes.PRODUCT_DETAIL
->;
+type RoutePropT = RouteProp<ShopStackParamList, typeof ShopRoutes.PRODUCT_DETAIL>;
+type NavPropT = NavigationProp<ShopStackParamList, typeof ShopRoutes.PRODUCT_DETAIL>;
 
+// ─── Star Rating ──────────────────────────────────────────────────────────────
+const StarRating = memo(({ rating }: { rating: number }) => (
+  <View style={{ flexDirection: 'row', gap: 2 }}>
+    {[1, 2, 3, 4, 5].map(i => (
+      <Icon
+        key={i}
+        name="Star"
+        size={14}
+        color={i <= Math.round(rating) ? '#F59E0B' : '#D1D5DB'}
+        filled={i <= Math.round(rating)}
+      />
+    ))}
+  </View>
+));
+StarRating.displayName = 'StarRating';
+
+// ─── Quantity Stepper ─────────────────────────────────────────────────────────
+const QuantityStepper = memo(({ qty, onInc, onDec }: { qty: number; onInc: () => void; onDec: () => void }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.stepper, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+      <Pressable onPress={onDec} style={styles.stepBtn}>
+        <Icon name="Minus" size={16} color={colors.foreground} />
+      </Pressable>
+      <AppText variant="headline" weight="bold" style={{ minWidth: 28, textAlign: 'center' }}>{qty}</AppText>
+      <Pressable onPress={onInc} style={styles.stepBtn}>
+        <Icon name="Plus" size={16} color={colors.foreground} />
+      </Pressable>
+    </View>
+  );
+});
+QuantityStepper.displayName = 'QuantityStepper';
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const ProductDetailScreen = () => {
-  const { colors, spacing, radius, fontSize } = useTheme();
-  const route = useRoute<ProductDetailRouteProp>();
-  const navigation = useNavigation<ProductDetailNavProp>();
-
+  const { colors, radius } = useTheme();
+  const insets = useSafeAreaInsets();
+  const route = useRoute<RoutePropT>();
+  const navigation = useNavigation<NavPropT>();
   const { productId } = route.params;
-  const { addToCart } = useCart();
+  const { addToCart, items } = useCart();
   const { mutate: getProduct, isPending, data: resData } = useProductDetail();
 
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const imageScrollRef = useRef<ScrollView>(null);
+  const [activeImg, setActiveImg] = useState(0);
+  const [qty, setQty] = useState(1);
+  const [addedAnim, setAddedAnim] = useState(false);
+  const scrollY = useSharedValue(0);
 
-  useEffect(() => {
-    getProduct(productId);
-  }, [getProduct, productId]);
+  useEffect(() => { getProduct(productId); }, [productId]);
 
   const product = resData?.data;
-
-  const hasDiscount =
-    product?.discountedPrice != null &&
-    Number(product.discountedPrice) < Number(product.price);
-
-  const displayPrice = hasDiscount
-    ? product?.discountedPrice ?? 0
-    : product?.price ?? 0;
-
+  const hasDiscount = product?.discountedPrice != null && product.discountedPrice < product.price;
+  const displayPrice = hasDiscount ? product?.discountedPrice ?? 0 : product?.price ?? 0;
   const originalPrice = product?.price ?? 0;
   const coinPrice = Math.max(1, Math.round(displayPrice * 10));
+  const originalCoinPrice = Math.round(originalPrice * 10);
+  const discountPct = hasDiscount ? Math.round(((originalPrice - displayPrice) / originalPrice) * 100) : 0;
 
-  const discountPercent = useMemo(() => {
-    if (!hasDiscount || !originalPrice || !displayPrice) return 0;
-    return Math.round(((originalPrice - displayPrice) / originalPrice) * 100);
-  }, [hasDiscount, originalPrice, displayPrice]);
+  const inCartQty = useMemo(
+    () => items.find(i => i.product._id === productId)?.quantity ?? 0,
+    [items, productId],
+  );
 
-  const highlights = useMemo(() => {
-    if (!product) return [];
+  const scrollHandler = useAnimatedScrollHandler(e => {
+    scrollY.value = e.contentOffset.y;
+  });
 
-    return [
-      {
-        id: 'rating',
-        icon: 'Star',
-        label: 'Rating',
-        value: `${product.rating.toFixed(1)}`,
-        tint: '#F59E0B',
-      },
-      {
-        id: 'reviews',
-        icon: 'MessageCircleMore',
-        label: 'Reviews',
-        value: `${product.reviewCount}`,
-        tint: colors.primary,
-      },
-      {
-        id: 'stock',
-        icon: product.stock > 0 ? 'PackageCheck' : 'PackageX',
-        label: 'Availability',
-        value: product.stock > 0 ? `${product.stock} left` : 'Out of stock',
-        tint: product.stock > 0 ? colors.success : colors.destructive,
-      },
-    ];
-  }, [product, colors.primary, colors.success, colors.destructive]);
+  const headerBgStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [HERO_H - 80, HERO_H - 20], [0, 1], 'clamp'),
+  }));
 
-  const handleGalleryScrollEnd = (
-    e: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setActiveImageIndex(index);
+  const handleGalleryEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setActiveImg(Math.round(e.nativeEvent.contentOffset.x / W));
   };
 
-  const handleBuyWithCoins = () => {
+  const handleAddToCart = useCallback(() => {
     if (!product || product.stock <= 0) return;
-    addToCart(product, 1);
-    navigation.navigate(ShopRoutes.CART, { preSelectCoins: true });
-  };
+    addToCart(product, qty);
+    setAddedAnim(true);
+    setTimeout(() => setAddedAnim(false), 1800);
+  }, [product, qty, addToCart]);
+
+  const handleBuyNow = useCallback(() => {
+    if (!product || product.stock <= 0) return;
+    addToCart(product, qty);
+    navigation.navigate(ShopRoutes.CART);
+  }, [product, qty, addToCart, navigation]);
 
   if (isPending || !product) {
     return (
-      <Screen padded={false} safeArea={true}>
-        <View
-          style={[styles.loaderWrap, { backgroundColor: colors.background }]}
-        >
-          <ActivityIndicator size="large" color={colors.primary} />
-          <AppText variant="body" secondary style={{ marginTop: spacing[3] }}>
-            Loading product...
-          </AppText>
-        </View>
-      </Screen>
+      <View style={[styles.loader, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <AppText variant="body" secondary style={{ marginTop: 12 }}>Loading product…</AppText>
+      </View>
     );
   }
 
   return (
-    <Screen padded={false}>
-      <AppView
-        style={[styles.container, { backgroundColor: colors.background }]}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Animated floating header */}
+      <Animated.View
+        style={[
+          styles.floatingHeader,
+          headerBgStyle,
+          { backgroundColor: colors.background, paddingTop: insets.top, borderBottomColor: colors.border },
+        ]}
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 130 }}
-        >
-          {/* Hero Gallery */}
-          <Animated.View
-            entering={FadeIn.duration(350)}
-            style={[
-              styles.heroWrap,
-              {
-                height: HERO_HEIGHT,
-                backgroundColor: withOpacity(product.category.color, 0.07),
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.topActions,
-                {
-                  paddingHorizontal: spacing[4],
-                  paddingTop: spacing[8],
-                },
-              ]}
-            >
-              <Pressable
-                onPress={() => navigation.goBack()}
-                style={[
-                  styles.actionBtn,
-                  {
-                    backgroundColor: withOpacity(colors.card, 0.82),
-                    borderColor: withOpacity(colors.border, 0.7),
-                  },
-                ]}
-              >
-                <Icon name="ArrowLeft" size={22} color={colors.foreground} />
-              </Pressable>
+        <AppText variant="headline" weight="semiBold" numberOfLines={1} style={{ flex: 1, marginHorizontal: 12 }}>
+          {product.name}
+        </AppText>
+      </Animated.View>
 
-              <View style={styles.topRightActions}>
-                <Pressable
-                  onPress={() => navigation.navigate(ShopRoutes.CART)}
-                  style={[
-                    styles.actionBtn,
-                    {
-                      backgroundColor: withOpacity(colors.card, 0.82),
-                      borderColor: withOpacity(colors.border, 0.7),
-                    },
-                  ]}
-                >
-                  <Icon
-                    name="ShoppingCart"
-                    size={22}
-                    color={colors.foreground}
-                  />
-                </Pressable>
-              </View>
+      {/* Back + Cart buttons (always visible) */}
+      <View style={[styles.topBtns, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}>
+          <Icon name="ArrowLeft" size={20} color={colors.foreground} />
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate(ShopRoutes.CART)} style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}>
+          <Icon name="ShoppingCart" size={20} color={colors.foreground} />
+          {inCartQty > 0 && (
+            <View style={[styles.cartDot, { backgroundColor: colors.primary }]}>
+              <AppText variant="caption2" weight="bold" color="#fff" style={{ fontSize: 9 }}>{inCartQty}</AppText>
             </View>
+          )}
+        </Pressable>
+      </View>
 
-            {hasDiscount ? (
-              <View
-                style={[
-                  styles.discountBadge,
-                  {
-                    top: spacing[16],
-                    left: spacing[4],
-                    backgroundColor: colors.destructive,
-                    borderRadius: radius.lg,
-                  },
-                ]}
-              >
-                <AppText variant="caption1" weight="bold" color="#fff">
-                  SAVE {discountPercent}%
-                </AppText>
-              </View>
-            ) : null}
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 140 + insets.bottom + 12 }}
+      >
+        {/* Hero Gallery */}
+        <View style={[styles.heroWrap, { height: HERO_H, backgroundColor: withOpacity(product.category.color, 0.07) }]}>
+          <ScrollView
+            horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleGalleryEnd}
+          >
+            {product.images.map((img: string, i: number) => (
+              <Image key={i} source={{ uri: img }} style={{ width: W, height: HERO_H }} resizeMode="cover" />
+            ))}
+          </ScrollView>
 
+
+          {/* Discount badge */}
+          {hasDiscount && (
+            <View style={[styles.discBadge, { top: insets.top + 56, left: 16, backgroundColor: '#EF4444' }]}>
+              <AppText variant="caption1" weight="bold" color="#fff">SAVE {discountPct}%</AppText>
+            </View>
+          )}
+
+          {/* Dot indicators */}
+          {product.images.length > 1 && (
+            <View style={styles.dots}>
+              {product.images.map((_: string, i: number) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    { width: i === activeImg ? 20 : 7, backgroundColor: i === activeImg ? '#fff' : 'rgba(255,255,255,0.5)' },
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Thumbnail strip */}
+          {product.images.length > 1 && (
             <ScrollView
-              ref={imageScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={handleGalleryScrollEnd}
+              horizontal showsHorizontalScrollIndicator={false}
+              style={styles.thumbStrip}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
             >
-              {product.images.map((img: string, index: number) => (
-                <AppView
-                  key={`${img}-${index}`}
-                  style={{ width: SCREEN_WIDTH, height: HERO_HEIGHT }}
-                >
-                  <Image
-                    source={{ uri: img }}
-                    resizeMode="cover"
-                    style={styles.heroImage}
-                  />
-                </AppView>
+              {product.images.map((img: string, i: number) => (
+                <Pressable key={i} style={[styles.thumb, { borderColor: i === activeImg ? colors.primary : 'transparent', borderRadius: 8 }]}>
+                  <Image source={{ uri: img }} style={{ width: '100%', height: '100%', borderRadius: 6 }} resizeMode="cover" />
+                </Pressable>
               ))}
             </ScrollView>
+          )}
+        </View>
 
-            <View style={styles.imageIndicators}>
-              {product.images.map((_: string, index: number) => {
-                const isActive = index === activeImageIndex;
-                return (
-                  <View
-                    key={index}
-                    style={[
-                      styles.dot,
-                      {
-                        width: isActive ? 22 : 8,
-                        backgroundColor: isActive
-                          ? colors.primary
-                          : withOpacity('#FFFFFF', 0.65),
-                      },
-                    ]}
-                  />
-                );
-              })}
+        {/* Content card */}
+        <Animated.View
+          entering={FadeInDown.delay(100).duration(400)}
+          style={[styles.contentCard, { backgroundColor: colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -28 }]}
+        >
+          {/* Category + Rating */}
+          <View style={styles.rowBetween}>
+            <View style={[styles.catChip, { backgroundColor: withOpacity(product.category.color, 0.12) }]}>
+              <AppText variant="caption1" weight="semiBold" color={product.category.color}>{product.category.name}</AppText>
             </View>
-          </Animated.View>
-
-          {/* Content */}
-          <Animated.View
-            entering={FadeInDown.delay(120).duration(400)}
-            style={[
-              styles.contentCard,
-              {
-                marginTop: -28,
-                backgroundColor: colors.card,
-                borderTopLeftRadius: radius['3xl'],
-                borderTopRightRadius: radius['3xl'],
-                paddingHorizontal: spacing[4],
-                paddingTop: spacing[5],
-                paddingBottom: spacing[6],
-              },
-            ]}
-          >
-            {/* Category + Rating */}
-            <View style={styles.rowBetween}>
-              <View
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor: withOpacity(product.category.color, 0.12),
-                    borderRadius: radius.md,
-                  },
-                ]}
-              >
-                <AppText
-                  variant="caption1"
-                  weight="semiBold"
-                  color={product.category.color}
-                >
-                  {product.category.name}
-                </AppText>
-              </View>
-
-              <View
-                style={[
-                  styles.ratingChip,
-                  {
-                    backgroundColor: withOpacity(colors.primary, 0.08),
-                    borderRadius: radius.md,
-                  },
-                ]}
-              >
-                <Icon name="Star" size={15} color="#F59E0B" />
-                <AppText
-                  variant="subhead"
-                  weight="bold"
-                  style={{ marginLeft: 6 }}
-                >
-                  {product.rating.toFixed(1)}
-                </AppText>
-                <AppText variant="caption1" secondary style={{ marginLeft: 4 }}>
-                  ({product.reviewCount})
-                </AppText>
-              </View>
+            <View style={[styles.ratingChip, { backgroundColor: withOpacity('#F59E0B', 0.1) }]}>
+              <StarRating rating={product.rating} />
+              <AppText variant="caption1" weight="bold" style={{ marginLeft: 6 }}>{product.rating.toFixed(1)}</AppText>
+              <AppText variant="caption2" secondary style={{ marginLeft: 4 }}>({product.reviewCount})</AppText>
             </View>
+          </View>
 
-            {/* Title */}
-            <AppText
-              variant="title1"
-              weight="bold"
-              style={{ marginTop: spacing[3], lineHeight: 34 }}
-            >
-              {product.name}
-            </AppText>
+          {/* Title */}
+          <AppText variant="title1" weight="bold" style={{ marginTop: 12, lineHeight: 34 }}>
+            {product.name}
+          </AppText>
 
-            {/* Price Block */}
-            <View
-              style={[
-                styles.priceCard,
-                {
-                  marginTop: spacing[4],
-                  borderRadius: radius.xl,
-                  backgroundColor: withOpacity('#F5C518', 0.07),
-                  borderColor: withOpacity('#F5C518', 0.25),
-                  padding: spacing[4],
-                },
-              ]}
-            >
-              <View style={styles.rowBetween}>
-                <View>
-                  <AppText variant="caption1" secondary>
-                    Coins Price
-                  </AppText>
-                  <View style={[styles.priceRow, { marginTop: spacing[1] }]}>
-                    <Icon name="Coins" size={22} color="#B45309" />
-                    <AppText
-                      variant="title2"
-                      weight="bold"
-                      color="#92400E"
-                      style={{ marginLeft: 6 }}
-                    >
-                      {coinPrice.toLocaleString()}
-                    </AppText>
-                    <AppText
-                      variant="caption1"
-                      color="#B45309"
-                      style={{ marginLeft: 4, marginTop: 4 }}
-                    >
-                      coins
-                    </AppText>
-                  </View>
-                  {hasDiscount ? (
-                    <AppText
-                      variant="caption1"
-                      secondary
-                      style={{
-                        marginTop: spacing[1],
-                        textDecorationLine: 'line-through',
-                      }}
-                    >
-                      {Math.round(originalPrice * 10).toLocaleString()} coins
-                    </AppText>
-                  ) : null}
-                </View>
-
-                {hasDiscount ? (
-                  <View
-                    style={[
-                      styles.offPill,
-                      {
-                        backgroundColor: withOpacity(colors.success, 0.12),
-                        borderRadius: radius.full ?? 999,
-                      },
-                    ]}
-                  >
-                    <AppText
-                      variant="caption1"
-                      weight="bold"
-                      color={colors.success}
-                    >
-                      {discountPercent}% OFF
-                    </AppText>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* ₹ reference price */}
-              <View
-                style={[
-                  styles.rupeeRef,
-                  {
-                    marginTop: spacing[2],
-                    paddingTop: spacing[2],
-                    borderTopWidth: 1,
-                    borderTopColor: withOpacity('#F5C518', 0.3),
-                  },
-                ]}
-              >
-                <Icon
-                  name="IndianRupee"
-                  size={12}
-                  color={colors.mutedForeground}
-                />
-                <AppText variant="caption1" secondary style={{ marginLeft: 2 }}>
-                  Equivalent: ₹{displayPrice.toLocaleString()} · 10 coins = ₹1
-                </AppText>
-              </View>
-            </View>
-
-            {/* Quick Highlights */}
-            <View style={[styles.highlightRow, { marginTop: spacing[4] }]}>
-              {highlights.map(item => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.highlightCard,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: withOpacity(colors.border, 0.8),
-                      borderRadius: radius.xl,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.highlightIcon,
-                      { backgroundColor: withOpacity(item.tint, 0.12) },
-                    ]}
-                  >
-                    <Icon name={item.icon as any} size={18} color={item.tint} />
-                  </View>
-
-                  <AppText
-                    variant="caption1"
-                    secondary
-                    style={{ marginTop: spacing[2] }}
-                  >
-                    {item.label}
-                  </AppText>
-
-                  <AppText
-                    variant="subhead"
-                    weight="bold"
-                    style={{ marginTop: 4, textAlign: 'center' }}
-                  >
-                    {item.value}
-                  </AppText>
+          {/* Tags */}
+          {product.tags?.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 6 }}>
+              {product.tags.map((tag: string) => (
+                <View key={tag} style={[styles.tag, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                  <AppText variant="caption2" secondary>#{tag}</AppText>
                 </View>
               ))}
-            </View>
+            </ScrollView>
+          )}
 
-            {/* Stock Section */}
-            <View
-              style={[
-                styles.statusRow,
-                {
-                  marginTop: spacing[5],
-                  padding: spacing[4],
-                  borderRadius: radius.xl,
-                  backgroundColor: colors.background,
-                  borderColor: withOpacity(colors.border, 0.8),
-                },
-              ]}
-            >
-              <View style={styles.statusLeft}>
-                <View
-                  style={[
-                    styles.stockDot,
-                    {
-                      backgroundColor:
-                        product.stock > 0 ? colors.success : colors.destructive,
-                    },
-                  ]}
-                />
-                <View>
-                  <AppText variant="subhead" weight="semiBold">
-                    {product.stock > 0
-                      ? 'Available in stock'
-                      : 'Currently unavailable'}
+          {/* Price block */}
+          <View style={[styles.priceBlock, { backgroundColor: withOpacity('#F5C518', 0.07), borderColor: withOpacity('#F5C518', 0.3), marginTop: 18 }]}>
+            <View style={styles.rowBetween}>
+              <View>
+                <AppText variant="caption1" secondary>Coins Price</AppText>
+                <View style={styles.priceRow}>
+                  <Icon name="Coins" size={24} color="#B45309" />
+                  <AppText variant="title1" weight="bold" color="#92400E" style={{ marginLeft: 6 }}>{coinPrice.toLocaleString()}</AppText>
+                  <AppText variant="subhead" color="#B45309" style={{ marginLeft: 4, marginTop: 6 }}>coins</AppText>
+                </View>
+                {hasDiscount && (
+                  <AppText variant="caption1" secondary style={{ textDecorationLine: 'line-through', marginTop: 2 }}>
+                    {originalCoinPrice.toLocaleString()} coins
                   </AppText>
-                  <AppText
-                    variant="caption1"
-                    secondary
-                    style={{ marginTop: 2 }}
-                  >
-                    {product.stock > 0
-                      ? `${product.stock} units ready for order`
-                      : 'This product is temporarily unavailable'}
-                  </AppText>
+                )}
+              </View>
+              {hasDiscount && (
+                <View style={[styles.offBadge, { backgroundColor: withOpacity('#10B981', 0.12) }]}>
+                  <AppText variant="subhead" weight="bold" color="#10B981">{discountPct}% OFF</AppText>
+                </View>
+              )}
+            </View>
+            <View style={[styles.rupeeRow, { borderTopColor: withOpacity('#F5C518', 0.3), marginTop: 10 }]}>
+              <Icon name="IndianRupee" size={12} color={colors.mutedForeground} />
+              <AppText variant="caption1" secondary style={{ marginLeft: 3 }}>
+                Equivalent ₹{displayPrice.toLocaleString()} · 10 coins = ₹1
+              </AppText>
+            </View>
+          </View>
+
+          {/* Highlights */}
+          <View style={[styles.highlightRow, { marginTop: 18 }]}>
+            {[
+              { icon: 'Star', label: 'Rating', value: product.rating.toFixed(1), color: '#F59E0B' },
+              { icon: 'MessageCircle', label: 'Reviews', value: String(product.reviewCount), color: colors.primary },
+              { icon: product.stock > 0 ? 'PackageCheck' : 'PackageX', label: 'Stock', value: product.stock > 0 ? `${product.stock}` : 'None', color: product.stock > 0 ? '#10B981' : '#EF4444' },
+            ].map(h => (
+              <View key={h.label} style={[styles.highlightCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.hlIcon, { backgroundColor: withOpacity(h.color, 0.12) }]}>
+                  <Icon name={h.icon as any} size={18} color={h.color} />
+                </View>
+                <AppText variant="caption2" secondary style={{ marginTop: 8 }}>{h.label}</AppText>
+                <AppText variant="subhead" weight="bold" style={{ marginTop: 3 }}>{h.value}</AppText>
+              </View>
+            ))}
+          </View>
+
+          {/* Quantity */}
+          <View style={[styles.qtyRow, { marginTop: 20 }]}>
+            <AppText variant="headline" weight="semiBold">Quantity</AppText>
+            <QuantityStepper
+              qty={qty}
+              onInc={() => setQty(q => Math.min(q + 1, product.stock))}
+              onDec={() => setQty(q => Math.max(1, q - 1))}
+            />
+          </View>
+
+          {/* Stock status */}
+          <View style={[styles.stockRow, { backgroundColor: product.stock > 0 ? withOpacity('#10B981', 0.07) : withOpacity('#EF4444', 0.07), borderColor: product.stock > 0 ? withOpacity('#10B981', 0.25) : withOpacity('#EF4444', 0.25), marginTop: 16 }]}>
+            <View style={[styles.stockDot, { backgroundColor: product.stock > 0 ? '#10B981' : '#EF4444' }]} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <AppText variant="subhead" weight="semiBold" color={product.stock > 0 ? '#10B981' : '#EF4444'}>
+                {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+              </AppText>
+              <AppText variant="caption1" secondary style={{ marginTop: 2 }}>
+                {product.stock > 0 ? `${product.stock} units available` : 'Currently unavailable'}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Description */}
+          <View style={{ marginTop: 22 }}>
+            <AppText variant="title3" weight="bold">About this item</AppText>
+            <AppText variant="body" secondary style={{ marginTop: 10, lineHeight: 24 }}>
+              {product.description}
+            </AppText>
+          </View>
+
+          {/* Delivery info */}
+          <View style={[styles.deliveryCard, { backgroundColor: withOpacity(colors.primary, 0.05), borderColor: withOpacity(colors.primary, 0.12), marginTop: 20 }]}>
+            {[
+              { icon: 'Truck', title: 'Fast Delivery', sub: 'Delivered to your door' },
+              { icon: 'ShieldCheck', title: 'Secure Purchase', sub: 'Coins deducted instantly' },
+              { icon: 'RotateCcw', title: 'Easy Returns', sub: 'Cancel before shipping' },
+            ].map((item, i) => (
+              <View key={item.icon} style={[styles.deliveryRow, i > 0 && { marginTop: 14 }]}>
+                <View style={[styles.deliveryIcon, { backgroundColor: withOpacity(colors.primary, 0.12) }]}>
+                  <Icon name={item.icon as any} size={16} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <AppText variant="subhead" weight="semiBold">{item.title}</AppText>
+                  <AppText variant="caption1" secondary style={{ marginTop: 2 }}>{item.sub}</AppText>
                 </View>
               </View>
-            </View>
-
-            {/* Description */}
-            <View style={{ marginTop: spacing[5] }}>
-              <AppText variant="title3" weight="semiBold">
-                About this item
-              </AppText>
-              <AppText
-                variant="body"
-                secondary
-                style={{
-                  marginTop: spacing[2],
-                  lineHeight: 24,
-                  fontSize: fontSize?.md ?? 15,
-                }}
-              >
-                {product.description}
-              </AppText>
-            </View>
-
-            {/* Extra section */}
-            <View
-              style={[
-                styles.deliveryCard,
-                {
-                  marginTop: spacing[5],
-                  borderRadius: radius.xl,
-                  backgroundColor: withOpacity(colors.primary, 0.05),
-                  borderColor: withOpacity(colors.primary, 0.1),
-                  padding: spacing[4],
-                },
-              ]}
-            >
-              <View style={styles.deliveryRow}>
-                <View
-                  style={[
-                    styles.deliveryIcon,
-                    {
-                      backgroundColor: withOpacity(colors.primary, 0.12),
-                    },
-                  ]}
-                >
-                  <Icon name="Truck" size={18} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <AppText variant="subhead" weight="semiBold">
-                    Fast delivery available
-                  </AppText>
-                  <AppText
-                    variant="caption1"
-                    secondary
-                    style={{ marginTop: 4 }}
-                  >
-                    Smooth checkout, easy cart flow, and coin-based shopping
-                    support.
-                  </AppText>
-                </View>
-              </View>
-            </View>
-          </Animated.View>
-        </ScrollView>
-
-        {/* Sticky Bottom CTA — Coins Only */}
-        <Animated.View
-          entering={SlideInDown.delay(250).duration(450)}
-          style={[
-            styles.bottomBar,
-            {
-              backgroundColor: colors.card,
-              borderTopColor: withOpacity(colors.border, 0.9),
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.bottomInner,
-              {
-                paddingHorizontal: spacing[4],
-                paddingTop: spacing[3],
-                paddingBottom: spacing[6],
-              },
-            ]}
-          >
-            {/* Coin balance hint */}
-            <View
-              style={[
-                styles.balanceHint,
-                {
-                  backgroundColor: withOpacity('#F5C518', 0.1),
-                  borderRadius: radius.lg,
-                  marginBottom: spacing[3],
-                  paddingHorizontal: spacing[3],
-                  paddingVertical: spacing[2],
-                },
-              ]}
-            >
-              <Icon name="Coins" size={14} color="#B45309" />
-              <AppText
-                variant="caption1"
-                weight="semiBold"
-                color="#92400E"
-                style={{ marginLeft: 6 }}
-              >
-                {coinPrice.toLocaleString()} coins needed
-              </AppText>
-              <View style={{ flex: 1 }} />
-              <AppText variant="caption2" color="#B45309">
-                10 coins = ₹1
-              </AppText>
-            </View>
-
-            {/* Full-width Buy button */}
-            <Pressable
-              disabled={product.stock <= 0}
-              onPress={handleBuyWithCoins}
-              style={[
-                styles.buyButton,
-                {
-                  borderRadius: radius.xl,
-                  backgroundColor:
-                    product.stock <= 0 ? colors.mutedForeground : '#92400E',
-                },
-              ]}
-            >
-              <Icon name="Coins" size={20} color="#FEF3C7" />
-              <AppText
-                variant="body"
-                weight="bold"
-                color="#FEF3C7"
-                style={{ marginLeft: 8 }}
-              >
-                {product.stock <= 0
-                  ? 'Out of Stock'
-                  : `Buy with ${coinPrice.toLocaleString()} Coins`}
-              </AppText>
-            </Pressable>
+            ))}
           </View>
         </Animated.View>
-      </AppView>
-    </Screen>
+      </Animated.ScrollView>
+
+      {/* Sticky bottom CTA */}
+      <Animated.View
+        entering={SlideInDown.delay(200).duration(400)}
+        style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 12 }]}
+      >
+        <View style={[styles.balanceHint, { backgroundColor: withOpacity('#F5C518', 0.1), borderColor: withOpacity('#F5C518', 0.3) }]}>
+          <Icon name="Coins" size={14} color="#B45309" />
+          <AppText variant="caption1" weight="semiBold" color="#92400E" style={{ marginLeft: 6 }}>
+            {(coinPrice * qty).toLocaleString()} coins needed
+          </AppText>
+          <View style={{ flex: 1 }} />
+          <AppText variant="caption2" color="#B45309">10 coins = ₹1</AppText>
+        </View>
+
+        <View style={styles.ctaRow}>
+          <Pressable
+            onPress={handleAddToCart}
+            disabled={product.stock <= 0}
+            style={[
+              styles.addCartBtn,
+              { borderColor: addedAnim ? '#10B981' : withOpacity('#92400E', 0.5), backgroundColor: addedAnim ? withOpacity('#10B981', 0.1) : withOpacity('#92400E', 0.07) },
+            ]}
+          >
+            <Icon name={addedAnim ? 'CheckCircle2' : 'ShoppingCart'} size={18} color={addedAnim ? '#10B981' : '#92400E'} />
+            <AppText variant="subhead" weight="bold" color={addedAnim ? '#10B981' : '#92400E'} style={{ marginLeft: 6 }}>
+              {addedAnim ? 'Added!' : 'Add to Cart'}
+            </AppText>
+          </Pressable>
+
+          <Pressable
+            onPress={handleBuyNow}
+            disabled={product.stock <= 0}
+            style={[styles.buyBtn, { backgroundColor: product.stock <= 0 ? colors.mutedForeground : '#92400E' }]}
+          >
+            <Icon name="Coins" size={18} color="#FEF3C7" />
+            <AppText variant="subhead" weight="bold" color="#FEF3C7" style={{ marginLeft: 6 }}>
+              {product.stock <= 0 ? 'Out of Stock' : `Buy · ${(coinPrice * qty).toLocaleString()}`}
+            </AppText>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </View>
   );
 };
 
 export default ProductDetailScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  floatingHeader: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
+    flexDirection: 'row', alignItems: 'flex-end',
+    paddingHorizontal: 16, paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  topBtns: {
+    position: 'absolute', left: 16, right: 16, zIndex: 60,
+    flexDirection: 'row', justifyContent: 'space-between',
+  },
+  circleBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1,
+  },
+  cartDot: {
+    position: 'absolute', top: -3, right: -3,
+    width: 16, height: 16, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  loaderWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  heroWrap: { width: '100%', overflow: 'hidden' },
+  discBadge: { position: 'absolute', zIndex: 10, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  dots: { position: 'absolute', bottom: 60, width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  dot: { height: 7, borderRadius: 99 },
+  thumbStrip: { position: 'absolute', bottom: 10 },
+  thumb: { width: 48, height: 48, borderWidth: 2, borderRadius: 8 },
 
-  heroWrap: {
-    width: '100%',
-    position: 'relative',
-  },
+  contentCard: { paddingHorizontal: 16, paddingTop: 20 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  catChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  ratingChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
 
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
+  priceBlock: { borderRadius: 16, borderWidth: 1, padding: 16 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  offBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  rupeeRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, paddingTop: 10 },
 
-  topActions: {
-    position: 'absolute',
-    top: 0,
-    zIndex: 20,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  highlightRow: { flexDirection: 'row', gap: 10 },
+  highlightCard: { flex: 1, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: 12, alignItems: 'center' },
+  hlIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 
-  topRightActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  qtyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, padding: 4 },
+  stepBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
 
-  actionBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
+  stockRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, padding: 14 },
+  stockDot: { width: 10, height: 10, borderRadius: 5 },
 
-  discountBadge: {
-    position: 'absolute',
-    zIndex: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
+  deliveryCard: { borderRadius: 16, borderWidth: 1, padding: 16 },
+  deliveryRow: { flexDirection: 'row', alignItems: 'center' },
+  deliveryIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 
-  imageIndicators: {
-    position: 'absolute',
-    bottom: 24,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-
-  dot: {
-    height: 8,
-    borderRadius: 99,
-  },
-
-  contentCard: {},
-
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-
-  ratingChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-
-  priceCard: {
-    borderWidth: 1,
-  },
-
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  offPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-
-  rupeeRef: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  coinEarnRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-
-  coinInfoChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-
-  highlightRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  highlightCard: {
-    flex: 1,
-    borderWidth: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-
-  highlightIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  statusRow: {
-    borderWidth: 1,
-  },
-
-  statusLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  stockDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 12,
-  },
-
-  deliveryCard: {
-    borderWidth: 1,
-  },
-
-  deliveryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  deliveryIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    borderTopWidth: 1,
-  },
-
-  bottomInner: {},
-
-  balanceHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  buyButton: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  bottomBar: { position: 'absolute', bottom: 0, width: '100%', borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12 },
+  balanceHint: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
+  ctaRow: { flexDirection: 'row', gap: 10 },
+  addCartBtn: { flex: 1, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1.5 },
+  buyBtn: { flex: 1.4, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
 });
