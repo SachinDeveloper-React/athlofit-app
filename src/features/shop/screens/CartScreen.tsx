@@ -187,10 +187,13 @@ const CartScreen = () => {
 
           return (
             <Animated.View
-              entering={FadeInDown.delay(index * 50).duration(350)}
               layout={Layout.springify()}
               style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 16 }]}
             >
+              <Animated.View
+                entering={FadeInDown.delay(index * 50).duration(350)}
+                style={{ flex: 1, flexDirection: 'row' }}
+              >
               <Image
                 source={{ uri: item.product.images?.[0] }}
                 style={[styles.itemImg, { borderRadius: 12, backgroundColor: withOpacity(item.product.category.color, 0.07) }]}
@@ -239,6 +242,7 @@ const CartScreen = () => {
                   </View>
                 </View>
               </View>
+              </Animated.View>
             </Animated.View>
           );
         }}
@@ -371,7 +375,7 @@ const styles = StyleSheet.create({
   balanceIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   savingsBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
 
-  itemCard: { flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, padding: 12 },
+  itemCard: { borderWidth: StyleSheet.hairlineWidth, padding: 12 },
   itemImg: { width: 90, height: 90 },
   itemBody: { flex: 1, marginLeft: 12 },
   itemTopRow: { flexDirection: 'row', alignItems: 'flex-start' },

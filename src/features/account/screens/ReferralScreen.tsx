@@ -4,10 +4,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Share,
-  Clipboard,
   TextInput,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {
   AppText,
   AppView,
@@ -32,17 +33,19 @@ const ReferralScreen: React.FC = () => {
     if (!stats?.referralCode) return;
     Clipboard.setString(stats.referralCode);
     toast.success('Referral code copied! 📋');
-  }, [stats?.referralCode]);
+  }, [stats?.referralCode, toast]);
 
   const handleShare = useCallback(async () => {
     if (!stats?.referralCode) return;
     try {
       await Share.share({
-        message: `Join me on Athlofit and get 50 bonus coins! 🎉\n\nUse my referral code: ${stats.referralCode}\n\nDownload Athlofit and start your health journey today!`,
-        title: 'Join Athlofit',
+        message: `Join me on Athlofit and get ${stats.refereeBonus ?? 100} bonus coins! 🎉\n\nUse my referral code: ${stats.referralCode}\n\nDownload Athlofit and start your health journey today!`,
+        title: 'Join Athlofit — Refer & Earn',
       });
-    } catch {}
-  }, [stats?.referralCode]);
+    } catch {
+      // user cancelled — no-op
+    }
+  }, [stats?.referralCode, stats?.refereeBonus]);
 
   const handleApply = useCallback(() => {
     const code = inputCode.trim().toUpperCase();
@@ -52,11 +55,21 @@ const ReferralScreen: React.FC = () => {
     }
     applyCode(code, {
       onSuccess: res => {
-        toast.success(res?.message ?? 'Referral code applied! 🎉');
+        toast.success(res?.message ?? `Referral code applied! You earned ${res?.data?.refereeBonus ?? 100} coins 🎉`);
         setInputCode('');
       },
       onError: (err: any) => {
-        toast.error(err?.message ?? 'Failed to apply referral code');
+        const msg: string = err?.message ?? 'Failed to apply referral code';
+        // Show a friendlier message for the one-time restriction
+        if (msg.toLowerCase().includes('already used') || msg.toLowerCase().includes('already applied')) {
+          toast.error('You have already used a referral code. Each account can only apply one code.');
+        } else if (msg.toLowerCase().includes('invalid')) {
+          toast.error('Invalid referral code. Please check and try again.');
+        } else if (msg.toLowerCase().includes('own')) {
+          toast.error("You can't use your own referral code.");
+        } else {
+          toast.error(msg);
+        }
       },
     });
   }, [inputCode, applyCode]);
@@ -177,22 +190,27 @@ const ReferralScreen: React.FC = () => {
               },
             ]}
           >
-            <AppText
-              variant="largeTitle"
-              weight="bold"
-              style={{ color: colors.primary, letterSpacing: 6, fontSize: 28 }}
-            >
-              {stats?.referralCode ?? '------'}
-            </AppText>
+            {isLoading ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : (
+              <AppText
+                variant="largeTitle"
+                weight="bold"
+                style={{ color: colors.primary, letterSpacing: 6, fontSize: 28 }}
+              >
+                {stats?.referralCode ?? '------'}
+              </AppText>
+            )}
           </AppView>
 
           <AppView row style={{ gap: 12, marginTop: 16 }}>
             <TouchableOpacity
               style={[
                 styles.actionBtn,
-                { backgroundColor: colors.primary + '15', flex: 1 },
+                { backgroundColor: colors.primary + '15', flex: 1, opacity: !stats?.referralCode ? 0.5 : 1 },
               ]}
               onPress={handleCopy}
+              disabled={!stats?.referralCode}
             >
               <Icon name="Copy" size={18} color={colors.primary} />
               <AppText
@@ -206,9 +224,10 @@ const ReferralScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.actionBtn,
-                { backgroundColor: colors.primary, flex: 1 },
+                { backgroundColor: colors.primary, flex: 1, opacity: !stats?.referralCode ? 0.5 : 1 },
               ]}
               onPress={handleShare}
+              disabled={!stats?.referralCode}
             >
               <Icon name="Share2" size={18} color="#fff" />
               <AppText
@@ -279,7 +298,10 @@ const ReferralScreen: React.FC = () => {
             style={{ opacity: 0.65, marginBottom: 16, lineHeight: 20 }}
           >
             Enter your friend's referral code below to earn{' '}
-            {stats?.refereeBonus ?? 50} bonus coins instantly!
+            <AppText variant="callout" weight="semiBold" style={{ color: colors.primary }}>
+              {stats?.refereeBonus ?? 100} bonus coins
+            </AppText>{' '}
+            instantly!
           </AppText>
 
           <AppView
@@ -356,7 +378,7 @@ const ReferralScreen: React.FC = () => {
                     variant="caption1"
                     style={{ color: '#10b981', fontWeight: '600' }}
                   >
-                    +100 🪙
+                    +{ref.referrerBonus ?? stats?.referrerBonus ?? 200} 🪙
                   </AppText>
                 )}
               </AppView>

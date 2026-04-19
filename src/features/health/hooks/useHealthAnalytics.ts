@@ -7,7 +7,7 @@ export function useHealthAnalytics(initialTab: Timeframe = 'Day') {
   const [activeTab, setActiveTab] = useState<Timeframe>(initialTab);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['healthAnalytics', activeTab],
     queryFn: () => fetchAnalyticsInfo(activeTab),
   });
@@ -25,6 +25,7 @@ export function useHealthAnalytics(initialTab: Timeframe = 'Day') {
     setActiveTab,
     data,
     isLoading,
+    isFetching,
     isError,
     error,
     refetch,

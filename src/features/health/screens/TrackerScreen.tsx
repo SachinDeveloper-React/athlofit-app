@@ -143,7 +143,7 @@ const TrackerScreen = memo(() => {
   const dailyStepGoal = useAuthStore(state => state.user?.dailyStepGoal);
 
   const { platform, isReady, isLoading, data, error, refresh, lastUpdated } =
-    useHealth({ weightKg: Number(weightKg) });
+    useHealth({ weightKg: Number(weightKg) || 70 });
 
   const {
     data: weekData,

@@ -15,7 +15,7 @@ import ReferralScreen from '../features/account/screens/ReferralScreen';
 const Stack = createNativeStackNavigator<AccountStackParamList>();
 const AccountNavigator: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen name={AccountRoutes.ACCOUNT} component={AccountScreen} />
       <Stack.Screen name={AccountRoutes.SETTINGS} component={SettingsScreen} />
       <Stack.Screen

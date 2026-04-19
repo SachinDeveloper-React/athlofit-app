@@ -19,7 +19,7 @@ const Stack = createNativeStackNavigator<HealthStackParamList>();
 
 const HealthNavigator: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen
         name={HealthRoutes.HEART_RATE}
         component={HeartRateScreen}
@@ -28,52 +28,42 @@ const HealthNavigator: React.FC = () => {
       <Stack.Screen
         name={HealthRoutes.BLOOD_PRESSURE}
         component={BloodPressureScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.HYDRATION}
         component={HydrationScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.EDIT_STEPS_GOAL}
         component={EditStepsGoalScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.HEALTH_ANALYTICS}
         component={HealthAnalyticsScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.COINS}
         component={CoinScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.FOOD_CATALOG}
         component={FoodCatalogScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.FOOD_DETAIL}
         component={FoodDetailScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.BMI_CALCULATOR}
         component={BmiCalculatorScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.LEADERBOARD}
         component={LeaderboardScreen}
-        options={{ animation: 'ios_from_right' }}
       />
       <Stack.Screen
         name={HealthRoutes.STREAK}
         component={StreakScreen}
-        options={{ animation: 'ios_from_right' }}
       />
     </Stack.Navigator>
   );

@@ -179,8 +179,6 @@ export const fetchAllHealthConnectData = async (
   try {
     const [
       stepsRecords,
-      calRecords,
-      distRecords,
       hrRecords,
       bpRecords,
       sleepRecords,
@@ -191,18 +189,6 @@ export const fetchAllHealthConnectData = async (
       // Steps — read from Android built-in step sensor via Health Connect
       readRecords('Steps', { timeRangeFilter: todayRange() }).catch(e => {
         console.warn('Steps read failed:', e);
-        return { records: [] };
-      }),
-
-      readRecords('ActiveCaloriesBurned', {
-        timeRangeFilter: todayRange(),
-      }).catch(e => {
-        console.warn('Calories read failed:', e);
-        return { records: [] };
-      }),
-
-      readRecords('Distance', { timeRangeFilter: todayRange() }).catch(e => {
-        console.warn('Distance read failed:', e);
         return { records: [] };
       }),
 
@@ -243,34 +229,18 @@ export const fetchAllHealthConnectData = async (
     ]);
 
     // ── Steps: sum all Step records for today ──────────────────────────────
-    //    Android's built-in sensor (TYPE_STEP_COUNTER) writes these
-    //    automatically — no third-party app or library needed on Android 15.
     const steps = stepsRecords.records.reduce(
       (sum, r) => sum + (r.count ?? 0),
       0,
     );
 
-    // ── Derive calories / distance / activeMinutes from steps ──────────────
-    //    Use stored values if they already exist (written by a previous call
-    //    to writeDerivedActivity), otherwise fall back to the formula.
-    const storedCalories = Math.round(
-      calRecords.records.reduce(
-        (sum, r) => sum + (r.energy?.inKilocalories ?? 0),
-        0,
-      ),
-    );
-    const storedDistance =
-      Math.round(
-        distRecords.records.reduce(
-          (sum, r) => sum + (r.distance?.inKilometers ?? 0),
-          0,
-        ) * 100,
-      ) / 100;
-
+    // ── Always derive calories / distance / activeMinutes from steps ────────
+    // This ensures values are always consistent with current step count,
+    // never stale from a previous session's written records.
     const derived = deriveFromSteps(steps, weightKg);
-    const calories = storedCalories > 0 ? storedCalories : derived.calories;
-    const distance = storedDistance > 0 ? storedDistance : derived.distanceKm;
-    const activeMinutes = derived.activeMinutes; // always recompute from steps
+    const calories = derived.calories;
+    const distance = derived.distanceKm;
+    const activeMinutes = derived.activeMinutes;
 
     // ── Heart rate ─────────────────────────────────────────────────────────
     const allSamples = hrRecords.records.flatMap(r => r.samples ?? []);

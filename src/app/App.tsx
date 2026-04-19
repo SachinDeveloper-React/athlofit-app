@@ -11,6 +11,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { navigationRef } from '../navigation/navigationRef';
 import RootNavigator from '../navigation/RootNavigator';
 import { enableScreens } from 'react-native-screens';
@@ -27,6 +28,14 @@ import {
 import { SystemOverlay } from '../components';
 
 enableScreens(true);
+
+// ─── Google Sign-In — must be called once before any signIn() call ────────────
+GoogleSignin.configure({
+  webClientId: '248456486264-if00mjj7r7kt7pejjuoh4t5vg3jo6ges.apps.googleusercontent.com',
+  iosClientId:
+      '248456486264-046ntrivtk80o2u60vt8mudj5mme7gnn.apps.googleusercontent.com',
+  offlineAccess: true,
+});
 // ─── React Query Client ───────────────────────────────────────────────────────
 
 const queryClient = new QueryClient({

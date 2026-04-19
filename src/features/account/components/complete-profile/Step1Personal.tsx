@@ -1,17 +1,19 @@
 import { Controller, useForm } from 'react-hook-form';
 import { Step1Props } from '../../types/completeProfile.types';
-import {
-  PersonalFormValues,
-  personalSchema,
-} from '../../utils/profileSetup.validation';
+import { PersonalFormValues, personalSchema } from '../../utils/profileSetup.validation';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { StyleSheet, TouchableOpacity } from 'react-native';
-import { AppView, AppText, Button } from '../../../../components';
+import { Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { AppView, AppText, Button, Avatar, Icon } from '../../../../components';
 import { Field } from './Field';
 import { DateField } from './DateField';
 import { GENDER_OPTIONS } from '../../constants/completeProfile.constant';
 
-export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
+export const Step1Personal: React.FC<Step1Props> = ({
+  onNext,
+  colors,
+  avatarUri,
+  onAvatarPress,
+}) => {
   const {
     control,
     handleSubmit,
@@ -24,9 +26,7 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
 
   return (
     <AppView style={g.stepContent}>
-      <AppView
-        style={[g.stepIconWrap, { backgroundColor: colors.primary + '15' }]}
-      >
+      <AppView style={[g.stepIconWrap, { backgroundColor: colors.primary + '15' }]}>
         <AppText style={g.stepIcon}>👤</AppText>
       </AppView>
       <AppText style={[g.stepTitle, { color: colors.foreground }]}>
@@ -35,6 +35,25 @@ export const Step1Personal: React.FC<Step1Props> = ({ onNext, colors }) => {
       <AppText style={[g.stepSubtitle, { color: colors.mutedForeground }]}>
         Tell us a bit about yourself
       </AppText>
+
+      {/* Avatar picker */}
+      <AppView center style={{ marginBottom: 24 }}>
+        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={g.avatarWrap}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={g.avatarImg} />
+          ) : (
+            <AppView style={[g.avatarPlaceholder, { backgroundColor: colors.primary + '15' }]}>
+              <Icon name="User" size={36} color={colors.primary} />
+            </AppView>
+          )}
+          <AppView style={[g.cameraBadge, { backgroundColor: colors.primary }]}>
+            <Icon name="Camera" size={14} color="#fff" />
+          </AppView>
+        </TouchableOpacity>
+        <AppText variant="caption1" style={{ marginTop: 8, opacity: 0.55 }}>
+          {avatarUri ? 'Tap to change' : 'Add profile photo (optional)'}
+        </AppText>
+      </AppView>
 
       {/* Phone */}
       <Controller
@@ -164,4 +183,25 @@ const g = StyleSheet.create({
   },
   stepSubtitle: { fontSize: 15, lineHeight: 22, marginBottom: 28 },
   errorText: { fontSize: 12, marginTop: 4 },
+  avatarWrap: { position: 'relative' },
+  avatarImg: { width: 90, height: 90, borderRadius: 45 },
+  avatarPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
 });

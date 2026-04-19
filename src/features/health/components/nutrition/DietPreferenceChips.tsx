@@ -1,29 +1,25 @@
 // ─── DietPreferenceChips.tsx ──────────────────────────────────────────────────
-// Veg / Non-Veg / Vegan selection chips with live API persistence.
 
-import React, { memo, useCallback } from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import React, { memo, useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolateColor,
+} from 'react-native-reanimated';
 import { AppText, AppView, Card } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
-import type { DietPreference, DietaryGoal, NutritionPreferences } from '../../types/nutrition.types';
+import { useNutritionOptions } from '../../hooks/useNutrition';
+import type {
+  DietPreference,
+  DietaryGoal,
+  NutritionPreferences,
+  NutritionOption,
+} from '../../types/nutrition.types';
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-
-const DIET_PREFS: { value: DietPreference; label: string; emoji: string }[] = [
-  { value: 'veg', label: 'Vegetarian', emoji: '🥦' },
-  { value: 'non-veg', label: 'Non-Veg', emoji: '🍗' },
-  { value: 'vegan', label: 'Vegan', emoji: '🌱' },
-];
-
-const DIETARY_GOALS: { value: DietaryGoal; label: string; emoji: string }[] = [
-  { value: 'weight_loss', label: 'Weight Loss', emoji: '🔥' },
-  { value: 'muscle_gain', label: 'Muscle Gain', emoji: '💪' },
-  { value: 'maintenance', label: 'Maintenance', emoji: '⚖️' },
-  { value: 'endurance', label: 'Endurance', emoji: '🏃' },
-];
-
-// ─── Chip ─────────────────────────────────────────────────────────────────────
+// ─── Animated Chip ────────────────────────────────────────────────────────────
 
 interface ChipProps<T extends string> {
   value: T;
@@ -34,40 +30,83 @@ interface ChipProps<T extends string> {
   onPress: (v: T) => void;
   disabled?: boolean;
 }
-
 function Chip<T extends string>({
-  value,
-  label,
-  emoji,
-  isActive,
-  activeColor,
-  onPress,
-  disabled,
+  value, label, emoji, isActive, activeColor, onPress, disabled,
 }: ChipProps<T>) {
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 200 });
+  }, [isActive]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      ['rgba(0,0,0,0.03)', activeColor],
+    ),
+    borderColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      ['rgba(0,0,0,0.1)', activeColor],
+    ),
+  }));
+
   return (
     <TouchableOpacity
       activeOpacity={0.75}
       onPress={() => onPress(value)}
       disabled={disabled}
-      style={[
-        styles.chip,
-        isActive
-          ? { backgroundColor: activeColor, borderColor: activeColor }
-          : styles.chipInactive,
-      ]}
     >
-      <AppText style={styles.chipEmoji}>{emoji}</AppText>
-      <AppText
-        variant="caption1"
-        weight={isActive ? 'semiBold' : 'regular'}
-        color={isActive ? '#ffffff' : undefined}
-        style={styles.chipLabel}
-      >
-        {label}
-      </AppText>
+      <Animated.View style={[styles.chip, animStyle]}>
+        <AppText style={styles.chipEmoji}>{emoji}</AppText>
+        <AppText
+          variant="caption1"
+          weight={isActive ? 'semiBold' : 'regular'}
+          color={isActive ? '#ffffff' : undefined}
+          style={styles.chipLabel}
+        >
+          {label}
+        </AppText>
+      </Animated.View>
     </TouchableOpacity>
   );
 }
+
+// ─── Overlay ──────────────────────────────────────────────────────────────────
+
+const SavingOverlay = memo(({ visible, colors }: { visible: boolean; colors: any }) => {
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(visible ? 1 : 0, { duration: 200 });
+  }, [visible]);
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    // pointerEvents handled by parent wrapper
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.overlay,
+        { backgroundColor: withOpacity(colors.card, 0.82) },
+        overlayStyle,
+      ]}
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
+      <Animated.View style={[styles.spinnerWrap, { backgroundColor: colors.card }]}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <AppText variant="caption1" style={{ marginTop: 6, color: colors.mutedForeground }}>
+          Saving…
+        </AppText>
+      </Animated.View>
+    </Animated.View>
+  );
+});
+
+SavingOverlay.displayName = 'SavingOverlay';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -77,67 +116,93 @@ interface Props {
   isMutating?: boolean;
 }
 
-export const DietPreferenceChips = memo(
-  ({ preferences, onUpdate, isMutating }: Props) => {
-    const { colors } = useTheme();
+export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: Props) => {
+  const { colors } = useTheme();
+  const { data: options, isLoading: optionsLoading } = useNutritionOptions();
 
-    const handleDietPref = useCallback(
-      (value: DietPreference) => {
-        if (!preferences || value === preferences.dietPreference) return;
-        onUpdate({ ...preferences, dietPreference: value });
-      },
-      [preferences, onUpdate],
-    );
+  // Optimistic local state — switches instantly on tap
+  const [localDietPref, setLocalDietPref] = useState<DietPreference | undefined>(undefined);
+  const [localGoal, setLocalGoal]         = useState<DietaryGoal | undefined>(undefined);
 
-    const handleGoal = useCallback(
-      (value: DietaryGoal) => {
-        if (!preferences || value === preferences.dietaryGoal) return;
-        onUpdate({ ...preferences, dietaryGoal: value });
-      },
-      [preferences, onUpdate],
-    );
+  const activeDietPref = localDietPref ?? preferences?.dietPreference;
+  const activeGoal     = localGoal     ?? preferences?.dietaryGoal;
 
-    return (
-      <Card style={styles.card}>
-        {/* ── Diet type ── */}
-        <AppText variant="headline">Dietary Preference</AppText>
+  // Clear optimistic state once mutation settles
+  useEffect(() => {
+    if (!isMutating) {
+      setLocalDietPref(undefined);
+      setLocalGoal(undefined);
+    }
+  }, [isMutating]);
+
+  const handleDietPref = useCallback(
+    (value: string) => {
+      if (!preferences || value === activeDietPref) return;
+      setLocalDietPref(value as DietPreference);
+      onUpdate({ ...preferences, dietPreference: value as DietPreference });
+    },
+    [preferences, activeDietPref, onUpdate],
+  );
+
+  const handleGoal = useCallback(
+    (value: string) => {
+      if (!preferences || value === activeGoal) return;
+      setLocalGoal(value as DietaryGoal);
+      onUpdate({ ...preferences, dietaryGoal: value as DietaryGoal });
+    },
+    [preferences, activeGoal, onUpdate],
+  );
+
+  const dietPrefs  = options?.dietPreferences ?? [];
+  const dietGoals  = options?.dietaryGoals    ?? [];
+
+  return (
+    <Card style={styles.card}>
+      <AppText variant="headline">Dietary Preference</AppText>
+      {optionsLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} style={{ alignSelf: 'flex-start' }} />
+      ) : (
         <AppView style={styles.row}>
-          {DIET_PREFS.map(p => (
+          {dietPrefs.map(p => (
             <Chip
               key={p.value}
               value={p.value}
               label={p.label}
               emoji={p.emoji}
-              isActive={preferences?.dietPreference === p.value}
+              isActive={activeDietPref === p.value}
               activeColor={colors.primary}
               onPress={handleDietPref}
               disabled={isMutating}
             />
           ))}
         </AppView>
+      )}
 
-        {/* ── Dietary goal ── */}
-        <AppText variant="headline" style={styles.goalLabel}>
-          Your Goal
-        </AppText>
+      <AppText variant="headline" style={styles.goalLabel}>Your Goal</AppText>
+      {optionsLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} style={{ alignSelf: 'flex-start' }} />
+      ) : (
         <AppView style={styles.row}>
-          {DIETARY_GOALS.map(g => (
+          {dietGoals.map(g => (
             <Chip
               key={g.value}
               value={g.value}
               label={g.label}
               emoji={g.emoji}
-              isActive={preferences?.dietaryGoal === g.value}
+              isActive={activeGoal === g.value}
               activeColor={colors.primary}
               onPress={handleGoal}
               disabled={isMutating}
             />
           ))}
         </AppView>
-      </Card>
-    );
-  },
-);
+      )}
+
+      {/* Always mounted — fades in/out smoothly via Reanimated */}
+      <SavingOverlay visible={!!isMutating} colors={colors} />
+    </Card>
+  );
+});
 
 DietPreferenceChips.displayName = 'DietPreferenceChips';
 
@@ -156,10 +221,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
   },
-  chipInactive: {
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
   chipEmoji: { fontSize: 14 },
   chipLabel: { fontSize: 13 },
+  overlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinnerWrap: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 });

@@ -191,7 +191,27 @@ export const FOOD_CATEGORY_META: Record<
   snacks: { label: 'Snacks', emoji: '🍎' },
 };
 
-// ─── Diet Recommendations (Phase 1, unchanged) ────────────────────────────────
+// ─── Nutrition Options (from AppConfig) ──────────────────────────────────────
+
+export interface NutritionOption {
+  value: string;
+  label: string;
+  emoji: string;
+}
+
+export interface CatalogFilter {
+  id: string;
+  label: string;
+  emoji: string;
+}
+
+export interface NutritionOptions {
+  dietPreferences: NutritionOption[];
+  dietaryGoals: NutritionOption[];
+  catalogFilters: CatalogFilter[];
+}
+
+export type NutritionOptionsResponse = ApiResponse<NutritionOptions>;
 
 export const DIET_RECOMMENDATIONS: Record<
   DietaryGoal,

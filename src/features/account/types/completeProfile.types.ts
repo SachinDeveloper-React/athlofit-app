@@ -49,6 +49,8 @@ export interface PickerSheetProps {
 export interface Step1Props {
   onNext: (v: PersonalFormValues) => void;
   colors: ReturnType<typeof useTheme>['colors'];
+  avatarUri?: string | null;
+  onAvatarPress?: () => void;
 }
 
 export interface Step2Props {

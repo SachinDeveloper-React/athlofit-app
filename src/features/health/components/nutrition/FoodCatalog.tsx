@@ -1,9 +1,8 @@
 // ─── FoodCatalog.tsx ──────────────────────────────────────────────────────────
 // Inline food catalog widget for NutritionAndGoalSection.
-// Shows filter chips (All / Veg / Non-Veg / Vegan / ❤️ Fav) +
-// a horizontal preview of FoodCards + "View All" button.
+// Filter chips are loaded from the API via useCatalogFilters (useMutation).
 
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -11,68 +10,71 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolateColor,
+} from 'react-native-reanimated';
 import { AppText, AppView, Card } from '../../../../components';
 import { Icon } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
-import { withOpacity } from '../../../../utils/withOpacity';
 import { FoodCard } from './FoodCard';
 import {
   useFoodCatalog,
   useFavourites,
   useToggleFavourite,
+  useCatalogFilters,
+  DEFAULT_CATALOG_FILTERS,
 } from '../../hooks/useNutrition';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
-import type { DietFilter, FoodItem } from '../../types/nutrition.types';
+import type { DietFilter, FoodItem, CatalogFilter } from '../../types/nutrition.types';
 
-// ─── Filter Config ────────────────────────────────────────────────────────────
-
-type FilterId = DietFilter | 'favourites';
-
-interface FilterChip {
-  id: FilterId;
-  label: string;
-  emoji: string;
-}
-
-const FILTER_CHIPS: FilterChip[] = [
-  { id: 'all', label: 'All', emoji: '🍽️' },
-  { id: 'veg', label: 'Veg', emoji: '🥦' },
-  { id: 'non-veg', label: 'Non-Veg', emoji: '🍗' },
-  { id: 'vegan', label: 'Vegan', emoji: '🌱' },
-  { id: 'favourites', label: 'Favourites', emoji: '❤️' },
-];
-
-// ─── Filter Chip Sub-component ────────────────────────────────────────────────
+// ─── Animated Filter Chip ─────────────────────────────────────────────────────
 
 interface ChipProps {
-  chip: FilterChip;
+  chip: CatalogFilter;
   isActive: boolean;
   activeColor: string;
-  onPress: (id: FilterId) => void;
+  onPress: (id: string) => void;
 }
 
-const Chip = memo(({ chip, isActive, activeColor, onPress }: ChipProps) => (
-  <TouchableOpacity
-    onPress={() => onPress(chip.id)}
-    activeOpacity={0.75}
-    style={[
-      styles.chip,
-      isActive
-        ? { backgroundColor: activeColor, borderColor: activeColor }
-        : styles.chipInactive,
-    ]}
-  >
-    <AppText style={styles.chipEmoji}>{chip.emoji}</AppText>
-    <AppText
-      variant="caption1"
-      weight={isActive ? 'semiBold' : 'regular'}
-      color={isActive ? '#ffffff' : undefined}
-    >
-      {chip.label}
-    </AppText>
-  </TouchableOpacity>
-));
+const Chip = memo(({ chip, isActive, activeColor, onPress }: ChipProps) => {
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
+  }, [isActive]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      ['rgba(0,0,0,0.03)', activeColor],
+    ),
+    borderColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      ['rgba(0,0,0,0.1)', activeColor],
+    ),
+  }));
+
+  return (
+    <TouchableOpacity onPress={() => onPress(chip.id)} activeOpacity={0.75}>
+      <Animated.View style={[styles.chip, animStyle]}>
+        <AppText style={styles.chipEmoji}>{chip.emoji}</AppText>
+        <AppText
+          variant="caption1"
+          weight={isActive ? 'semiBold' : 'regular'}
+          color={isActive ? '#ffffff' : undefined}
+        >
+          {chip.label}
+        </AppText>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
 
 Chip.displayName = 'Chip';
 
@@ -90,32 +92,40 @@ EmptyState.displayName = 'EmptyState';
 
 export const FoodCatalog = memo(() => {
   const { colors } = useTheme();
-  const [activeFilter, setActiveFilter] = useState<FilterId>('all');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  // ── Fetch filter chips from API via useMutation ───────────────────────────
+  const {
+    mutate: fetchFilters,
+    data: filtersResponse,
+    isPending: filtersLoading,
+  } = useCatalogFilters();
+
+  useEffect(() => {
+    fetchFilters();
+  }, [fetchFilters]);
+
+  // Use API chips if available, fall back to defaults while loading or on error
+  const filterChips: CatalogFilter[] =
+    filtersResponse?.data?.catalogFilters ?? DEFAULT_CATALOG_FILTERS;
+
+  // ── Food data ─────────────────────────────────────────────────────────────
   const catalogParams =
     activeFilter === 'favourites' || activeFilter === 'all'
       ? undefined
       : { dietType: activeFilter as DietFilter, limit: 10 };
 
-  const { data: catalogData, isLoading: catalogLoading } =
-    useFoodCatalog(catalogParams);
-  const { data: favourites, isLoading: favLoading } = useFavourites();
-  const { mutate: toggleFav, variables: togglingId } = useToggleFavourite();
+  const { data: catalogData, isLoading: catalogLoading } = useFoodCatalog(catalogParams);
+  const { data: favourites, isLoading: favLoading }      = useFavourites();
+  const { mutate: toggleFav, variables: togglingId }     = useToggleFavourite();
 
-  // ── Displayed list ────────────────────────────────────────────────────────
   const displayedFoods: FoodItem[] =
-    activeFilter === 'favourites'
-      ? (favourites ?? [])
-      : (catalogData?.foods ?? []);
+    activeFilter === 'favourites' ? (favourites ?? []) : (catalogData?.foods ?? []);
 
-  const isLoading =
-    activeFilter === 'favourites' ? favLoading : catalogLoading;
+  const isLoading = activeFilter === 'favourites' ? favLoading : catalogLoading;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleFilterPress = useCallback((id: FilterId) => {
-    setActiveFilter(id);
-  }, []);
+  const handleFilterPress = useCallback((id: string) => setActiveFilter(id), []);
 
   const handleCardPress = useCallback((item: FoodItem) => {
     navigate(RootRoutes.HEALTH_NAVIGATOR, {
@@ -124,17 +134,10 @@ export const FoodCatalog = memo(() => {
     } as any);
   }, []);
 
-  const handleFavToggle = useCallback(
-    (id: string) => {
-      toggleFav(id);
-    },
-    [toggleFav],
-  );
+  const handleFavToggle = useCallback((id: string) => toggleFav(id), [toggleFav]);
 
   const handleViewAll = useCallback(() => {
-    navigate(RootRoutes.HEALTH_NAVIGATOR, {
-      screen: HealthRoutes.FOOD_CATALOG,
-    } as any);
+    navigate(RootRoutes.HEALTH_NAVIGATOR, { screen: HealthRoutes.FOOD_CATALOG } as any);
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -147,32 +150,38 @@ export const FoodCatalog = memo(() => {
           <AppText variant="caption2">{catalogData?.total ?? 0} items</AppText>
         </AppView>
         <TouchableOpacity onPress={handleViewAll} activeOpacity={0.75} style={styles.viewAllBtn}>
-          <AppText variant="caption1" color={colors.primary} weight="semiBold">
-            View All
-          </AppText>
+          <AppText variant="caption1" color={colors.primary} weight="semiBold">View All</AppText>
           <Icon name="ChevronRight" size={14} color={colors.primary} />
         </TouchableOpacity>
       </AppView>
 
-      {/* Filter chips */}
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={FILTER_CHIPS}
-        keyExtractor={c => c.id}
-        contentContainerStyle={styles.chipRow}
-        ItemSeparatorComponent={() => <View style={{ width: 8 }} />}
-        renderItem={({ item: chip }) => (
-          <Chip
-            chip={chip}
-            isActive={activeFilter === chip.id}
-            activeColor={colors.primary}
-            onPress={handleFilterPress}
-          />
-        )}
-      />
+      {/* Filter chips — skeleton while loading */}
+      {filtersLoading ? (
+        <AppView style={styles.chipRow}>
+          {DEFAULT_CATALOG_FILTERS.map(f => (
+            <View key={f.id} style={[styles.chipSkeleton, { backgroundColor: colors.border }]} />
+          ))}
+        </AppView>
+      ) : (
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={filterChips}
+          keyExtractor={c => c.id}
+          contentContainerStyle={styles.chipRowList}
+          ItemSeparatorComponent={() => <View style={{ width: 8 }} />}
+          renderItem={({ item: chip }) => (
+            <Chip
+              chip={chip}
+              isActive={activeFilter === chip.id}
+              activeColor={colors.primary}
+              onPress={handleFilterPress}
+            />
+          )}
+        />
+      )}
 
-      {/* Food card list */}
+      {/* Food list */}
       {isLoading ? (
         <AppView style={styles.loader}>
           <ActivityIndicator color={colors.primary} />
@@ -209,19 +218,12 @@ FoodCatalog.displayName = 'FoodCatalog';
 
 const styles = StyleSheet.create({
   card: { gap: 14 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerLeft: { gap: 2 },
-  viewAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingVertical: 4,
-  },
-  chipRow: { paddingRight: 4 },
+  viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4 },
+  chipRowList: { paddingRight: 4 },
+  chipRow: { flexDirection: 'row', gap: 8 },
+  chipSkeleton: { width: 72, height: 32, borderRadius: 20, opacity: 0.4 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -231,21 +233,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
   },
-  chipInactive: {
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
   chipEmoji: { fontSize: 13 },
   foodList: { paddingVertical: 4, paddingRight: 4 },
   cardWrap: { width: 148 },
-  loader: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
-  empty: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    gap: 8,
-    opacity: 0.5,
-  },
+  loader: { paddingVertical: 24, alignItems: 'center' },
+  empty: { alignItems: 'center', paddingVertical: 24, gap: 8, opacity: 0.5 },
 });

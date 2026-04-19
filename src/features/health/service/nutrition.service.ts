@@ -9,6 +9,7 @@ import type {
   NutritionPreferencesResponse,
   UpdatePreferencesRequest,
   UpdatePreferencesResponse,
+  NutritionOptionsResponse,
   // Phase 2
   FoodListResponse,
   FoodDetailResponse,
@@ -113,6 +114,14 @@ export const nutritionService = {
    */
   getFavourites: async (): Promise<FavouritesResponse> => {
     const response = await api.get<FavouritesResponse>('nutrition/favourites');
+    return response;
+  },
+
+  /**
+   * Get diet preference chips and dietary goal chips from AppConfig.
+   */
+  getNutritionOptions: async (): Promise<NutritionOptionsResponse> => {
+    const response = await api.get<NutritionOptionsResponse>('nutrition/options');
     return response;
   },
 };

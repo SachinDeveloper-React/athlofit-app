@@ -17,7 +17,9 @@ const Loader = memo(({ message, size = 'large', fullscreen = false }: Props) => 
 
   return (
     <AppView
-      style={[styles.container, fullscreen && styles.fullscreen]}
+      style={[styles.container, fullscreen && styles.fullscreen,{
+        backgroundColor: colors.background
+      }]}
       center
     >
       <ActivityIndicator size={size} color={colors.primary} />

@@ -1,31 +1,37 @@
-import React, { useMemo } from 'react';
+import React, { useRef, useMemo } from 'react';
 import {
   BottomTabNavigationOptions,
   createBottomTabNavigator,
 } from '@react-navigation/bottom-tabs';
+import { Platform, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { TabRoutes } from './routes';
 import type { TabParamList } from '../types/navigation.types';
-
-// ─── Health Screens ───────────────────────────────────────────────────────────
 import TrackerScreen from '../features/health/screens/TrackerScreen';
-// ─── Shop Screens ─────────────────────────────────────────────────────────────
 import ShopScreen from '../features/shop/screens/ShopScreen';
+import AccountScreen from '../features/account/screens/AccountScreen';
 import { useTheme } from '../hooks/useTheme';
-import { Platform, ViewStyle } from 'react-native';
 import { withOpacity } from '../utils/withOpacity';
 import { SCREEN_WIDTH } from '../utils/measure';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AccountScreen from '../features/account/screens/AccountScreen';
 import { Icon } from '../components';
+
+const TAB_ORDER = [TabRoutes.TRACKER, TabRoutes.SHOP, TabRoutes.ACCOUNT] as const;
+
+function getTabIndex(name: string): number {
+  return TAB_ORDER.indexOf(name as (typeof TAB_ORDER)[number]);
+}
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
 const TabNavigator: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
   const { colors, radius } = useTheme();
+  // Tracks the current active index so we know slide direction
+  const activeIndexRef = useRef(0);
 
-  const tabBarStyle = useMemo(() => {
-    const style: ViewStyle = {
+  const tabBarStyle = useMemo<ViewStyle>(
+    () => ({
       position: 'absolute',
       backgroundColor: withOpacity(colors.card, 0.8),
       borderTopColor: 'transparent',
@@ -44,10 +50,12 @@ const TabNavigator: React.FC = () => {
             shadowOpacity: 0.25,
             shadowRadius: 3.84,
           }),
-    };
+    }),
+    [bottom, colors.card, radius.full],
+  );
 
-    return style;
-  }, [bottom, colors.background, radius.full]);
+  // direction: +1 = navigating right (e.g. Tracker→Shop), -1 = navigating left
+  const directionRef = useRef(1);
 
   const screenOptions = useMemo<BottomTabNavigationOptions>(
     () => ({
@@ -56,17 +64,56 @@ const TabNavigator: React.FC = () => {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.foreground,
-      animation: 'fade',
       lazy: false,
       tabBarAllowFontScaling: true,
+      transitionSpec: {
+        animation: 'spring',
+        config: {
+          stiffness: 280,
+          damping: 28,
+          mass: 0.8,
+          overshootClamping: true,
+          restDisplacementThreshold: 0.01,
+          restSpeedThreshold: 0.01,
+        },
+      },
+      // interpolator only receives { current } — no route info
+      // direction is pre-computed in screenListeners and stored in directionRef
+      sceneStyleInterpolator: ({ current }) => {
+        const SLIDE = SCREEN_WIDTH * 0.07 * directionRef.current;
+        return {
+          sceneStyle: {
+            opacity: current.progress.interpolate({
+              inputRange: [-1, 0, 1],
+              outputRange: [0, 1, 0],
+            }),
+            transform: [
+              {
+                translateX: current.progress.interpolate({
+                  inputRange: [-1, 0, 1],
+                  outputRange: [-SLIDE, 0, SLIDE],
+                }),
+              },
+            ],
+          },
+        };
+      },
     }),
-    [tabBarStyle, colors.primary, colors.ring, colors.background],
+    [tabBarStyle, colors.primary, colors.foreground],
   );
+
   return (
     <Tab.Navigator
       initialRouteName={TabRoutes.TRACKER}
       screenOptions={screenOptions}
-      // sceneContainerStyle={{ backgroundColor: colors.background }}
+      screenListeners={{
+        tabPress: e => {
+          const targetName = (e.target as string).split('-')[0];
+          const nextIndex = getTabIndex(targetName);
+          directionRef.current = nextIndex > activeIndexRef.current ? 1 : -1;
+          activeIndexRef.current = nextIndex;
+        },
+      }}
     >
       <Tab.Screen
         name={TabRoutes.TRACKER}

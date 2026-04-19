@@ -8,6 +8,7 @@ export interface ReferralUser {
   avatarUrl: string | null;
   joinedAt: string;
   bonusAwarded: boolean;
+  referrerBonus: number;
 }
 
 export interface ReferralStats {

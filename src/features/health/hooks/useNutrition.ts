@@ -8,6 +8,8 @@ import type {
   NutritionPreferences,
   UpdatePreferencesRequest,
   FoodQueryParams,
+  NutritionOption,
+  CatalogFilter,
 } from '../types/nutrition.types';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
@@ -15,6 +17,7 @@ import type {
 export const nutritionKeys = {
   summary: (date: string) => ['nutrition-summary', date] as const,
   preferences: () => ['nutrition-preferences'] as const,
+  options: () => ['nutrition-options'] as const,
   // Phase 2
   foods: (params?: FoodQueryParams) => ['nutrition-foods', params] as const,
   food: (id: string) => ['nutrition-food', id] as const,
@@ -184,5 +187,37 @@ export function useToggleFavourite() {
       client.invalidateQueries({ queryKey: ['nutrition-foods'] });
       client.invalidateQueries({ queryKey: nutritionKeys.favourites() });
     },
+  });
+}
+
+/**
+ * Fetches diet preference options and dietary goal options from AppConfig.
+ * Cached for 10 minutes — changes only when admin updates config.
+ */
+export const DEFAULT_CATALOG_FILTERS = [
+  { id: 'all',        label: 'All',        emoji: '🍽️' },
+  { id: 'veg',        label: 'Veg',        emoji: '🥦' },
+  { id: 'non-veg',    label: 'Non-Veg',    emoji: '🍗' },
+  { id: 'vegan',      label: 'Vegan',       emoji: '🌱' },
+  { id: 'favourites', label: 'Favourites', emoji: '❤️' },
+];
+
+export function useNutritionOptions() {
+  return useQuery({
+    queryKey: nutritionKeys.options(),
+    queryFn: () => nutritionService.getNutritionOptions(),
+    select: response => response.data,
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+}
+
+/**
+ * useMutation-based hook to fetch catalog filter chips from AppConfig.
+ * Call mutate() on mount; data falls back to DEFAULT_CATALOG_FILTERS if API fails.
+ */
+export function useCatalogFilters() {
+  return useMutation({
+    mutationFn: () => nutritionService.getNutritionOptions(),
   });
 }

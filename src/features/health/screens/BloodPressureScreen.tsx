@@ -1,5 +1,4 @@
 import React, { useState, useCallback } from 'react';
-import { StatusBar } from 'react-native';
 import { AppView, Header, Screen } from '../../../components';
 import { InputMode, ParsedBPMeasurement } from '../types/bloodpressure.types';
 import { useBPReadings } from '../hooks/useBPReadings';
@@ -50,12 +49,12 @@ export const BloodPressureScreen: React.FC = () => {
       safeArea={false}
       header={<Header title="Blood Pressure" bordered showBack backLabel="" />}
     >
-      {/* <StatusBar barStyle="light-content" backgroundColor="#0f172a" /> */}
+
 
       {latestReading && <LatestReadingCard reading={latestReading} />}
-
-      <ModeToggle value={mode} onChange={setMode} />
-
+      <AppView mt={3}>
+        <ModeToggle value={mode} onChange={setMode} />
+      </AppView>
       {mode === 'manual' && (
         <ManualEntryCard
           onSubmit={(sys, dia, pls) => addReading(sys, dia, pls, 'manual')}

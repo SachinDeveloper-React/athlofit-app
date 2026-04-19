@@ -30,6 +30,9 @@ import {
 } from '../constants/completeProfile.constant';
 import { PickerSheet } from '../components/complete-profile/PickerSheet';
 import { NumericStepper } from '../components/complete-profile/NumericStepper';
+import AvatarPickerModal from '../components/AvatarPickerModal';
+import { useAvatarUpload } from '../hooks/useAvatarUpload';
+import { ActivityIndicator } from 'react-native';
 
 const EditProfileScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -39,6 +42,8 @@ const EditProfileScreen: React.FC = () => {
   const user = useAuthStore(s => s.user);
 
   const { mutate: updateProfile, isPending } = useEditProfile();
+  const { mutate: uploadAvatar, isPending: isUploading } = useAvatarUpload();
+  const [pickerVisible, setPickerVisible] = React.useState(false);
 
   const {
     control,
@@ -80,24 +85,39 @@ const EditProfileScreen: React.FC = () => {
     >
       {/* Avatar Section */}
       <AppView center style={styles.avatarSection}>
-        <AppView style={styles.avatarWrapper}>
+        <TouchableOpacity
+          onPress={() => setPickerVisible(true)}
+          activeOpacity={0.8}
+          style={styles.avatarWrapper}
+        >
           <Avatar
             uri={user?.avatarUrl || undefined}
             name={user?.name}
             size="2xl"
             style={{ width: 110, height: 110, borderRadius: 55 }}
           />
-          <TouchableOpacity
-            style={[styles.editBadge, { backgroundColor: colors.primary }]}
-            activeOpacity={0.8}
-          >
-            <Icon name="Camera" size={20} color="#fff" />
-          </TouchableOpacity>
-        </AppView>
+          <AppView style={[styles.editBadge, { backgroundColor: colors.primary }]}>
+            {isUploading
+              ? <ActivityIndicator size={14} color="#fff" />
+              : <Icon name="Camera" size={18} color="#fff" />}
+          </AppView>
+        </TouchableOpacity>
         <AppText variant="subhead" style={styles.avatarHint}>
-          Tap to change photo
+          {isUploading ? 'Uploading…' : 'Tap to change photo'}
         </AppText>
       </AppView>
+
+      <AvatarPickerModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onPick={uri => {
+          // Instantly upload — auth store updates automatically on success
+          uploadAvatar(uri, {
+            onSuccess: () => toast.success('Photo updated! ✨'),
+            onError: (err: any) => toast.error(err?.message ?? 'Upload failed'),
+          });
+        }}
+      />
 
       {/* Form Sections */}
       <AppView style={styles.form}>

@@ -74,17 +74,17 @@ const RootNavigator: React.FC = () => {
             <Stack.Screen
               name={RootRoutes.HEALTH_NAVIGATOR}
               component={HealthNavigator}
-              options={{ gestureEnabled: false, animation: 'fade' }}
+              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
             />
             <Stack.Screen
               name={RootRoutes.ACCOUNT_NAVIGATOR}
               component={AccountNavigator}
-              options={{ gestureEnabled: false, animation: 'fade' }}
+              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
             />
             <Stack.Screen
               name={RootRoutes.SHOP_NAVIGATOR}
               component={ShopNavigator}
-              options={{ gestureEnabled: false, animation: 'fade' }}
+              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
             />
           </Stack.Group>
         )}

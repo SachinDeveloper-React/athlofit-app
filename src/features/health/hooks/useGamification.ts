@@ -3,16 +3,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { gamificationService } from '../service/gamification.service';
 import { useGamificationStore } from '../store/gamificationStore';
 
+// src/features/health/hooks/useGamification.ts
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { gamificationService } from '../service/gamification.service';
+import { useGamificationStore } from '../store/gamificationStore';
+
 export function useGamification() {
   const syncWithService = useGamificationStore(s => s.syncWithService);
 
-  return useMutation({
+  // useQuery so it fires automatically on mount and keeps data fresh —
+  // no need to manually call mutate() in useEffect
+  const query = useQuery({
+    queryKey: ['gamification'],
+    queryFn: () => gamificationService.getGamification(),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Sync to Zustand store whenever fresh data arrives
+  if (query.data?.success && query.data?.data) {
+    syncWithService(query.data.data);
+  }
+
+  // Keep the same mutate interface so TrackerScreen doesn't need changes
+  const mutation = useMutation({
     mutationFn: () => gamificationService.getGamification(),
     onSuccess: (response) => {
       if (!response.success || !response.data) return;
       syncWithService(response.data);
     },
   });
+
+  return mutation;
 }
 
 export function useCoinData() {

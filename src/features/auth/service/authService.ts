@@ -71,8 +71,21 @@ export const authService = {
     };
   },
 
-  googleLogin: async (idToken: string) => {
-    const response = await api.post<AuthResponse>('auth/google', { idToken }, { auth: false });
+  googleLogin: async (idToken: string, extra?: {
+    givenName?: string | null;
+    familyName?: string | null;
+    photo?: string | null;
+    scopes?: string[];
+    serverAuthCode?: string | null;
+  }) => {
+    const response = await api.post<AuthResponse>('auth/google', {
+      idToken,
+      givenName:      extra?.givenName      ?? null,
+      familyName:     extra?.familyName     ?? null,
+      photo:          extra?.photo          ?? null,
+      scopes:         extra?.scopes         ?? [],
+      serverAuthCode: extra?.serverAuthCode ?? null,
+    }, { auth: false });
     return {
       success: !!(response?.data?.accessToken && response?.data?.refreshToken && response?.data?.user),
       message: response.message,

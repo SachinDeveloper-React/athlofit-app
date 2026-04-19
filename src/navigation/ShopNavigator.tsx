@@ -13,36 +13,30 @@ import AddEditAddressScreen from '../features/shop/screens/AddEditAddressScreen'
 const Stack = createNativeStackNavigator<ShopStackParamList>();
 const ShopNavigator: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen
         name={ShopRoutes.SHOP_SEARCH}
         component={ShopSearchScreen}
-        options={{ animation: 'fade' }}
       />
       <Stack.Screen
         name={ShopRoutes.PRODUCT_DETAIL}
         component={ProductDetailScreen}
-        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name={ShopRoutes.CART}
         component={CartScreen}
-        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name={ShopRoutes.CHECKOUT}
         component={CheckoutScreen}
-        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name={ShopRoutes.ORDER_HISTORY}
         component={OrderHistoryScreen}
-        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name={ShopRoutes.ADDRESSES}
         component={AddressesScreen}
-        options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen
         name={ShopRoutes.ADD_EDIT_ADDRESS}

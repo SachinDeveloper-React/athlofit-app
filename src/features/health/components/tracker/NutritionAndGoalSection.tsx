@@ -1,8 +1,3 @@
-// ─── NutritionAndGoalSection.tsx ──────────────────────────────────────────────
-// Diet & Nutrition module entry point, rendered as the "Nutrition & Goal" tab
-// on the TrackerScreen.  All data flows through React Query (useQuery +
-// useMutation) via the `useNutrition*` hooks.
-
 import React, { memo, useCallback } from 'react';
 import { StyleSheet, RefreshControl, ScrollView, ActivityIndicator, View } from 'react-native';
 import { AppText, AppView } from '../../../../components';
