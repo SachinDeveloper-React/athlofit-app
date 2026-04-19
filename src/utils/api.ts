@@ -10,13 +10,13 @@ import { useSystemStore } from '../store/systemStore';
 
 import { Platform } from 'react-native';
 
-// const BASE_URL = "https://athlofit-backend.vercel.app/"
+const BASE_URL = "https://athlofit-backend.vercel.app/"
 
-export const BASE_URL =
-  Platform.OS === 'android'
-    // ? 'http://192.168.0.129:5001/'
-    ? 'http://192.168.1.19:5001/'
-    : 'http://localhost:5001/';
+// export const BASE_URL =
+//   Platform.OS === 'android'
+//     // ? 'http://192.168.0.129:5001/'
+//     ? 'http://192.168.1.19:5001/'
+//     : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
