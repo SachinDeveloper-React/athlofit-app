@@ -1,8 +1,5 @@
 import React from 'react';
 import {
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -18,6 +15,7 @@ import {
   Button,
   Divider,
   Input,
+  Screen,
   useToast,
 } from '../../../components';
 import { useLogin } from '../hooks/useLogin';
@@ -55,134 +53,124 @@ const LoginScreen: React.FC<Props> = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Hero ── */}
-        <AppView style={[styles.hero, { paddingTop: insets.top + 40 }]}>
-          <AppView
-            style={[styles.logoBox, { backgroundColor: colors.primary + '18' }]}
-          >
-            {/* Replace with your logo SVG / Image */}
-            <AppText variant="title1">❤️</AppText>
-          </AppView>
-          <AppText variant="largeTitle" weight="bold" style={styles.title}>
-            Welcome back
-          </AppText>
-          <AppText variant="callout" align="center">
-            Sign in to continue tracking your health
-          </AppText>
+    <Screen safeArea={false} scroll>
+
+
+      <AppView style={[styles.hero, { paddingTop: insets.top + 40 }]}>
+        <AppView
+          style={[styles.logoBox, { backgroundColor: colors.primary + '18' }]}
+        >
+          {/* Replace with your logo SVG / Image */}
+          <AppText variant="title1">❤️</AppText>
         </AppView>
+        <AppText variant="largeTitle" weight="bold" style={styles.title}>
+          Welcome back
+        </AppText>
+        <AppText variant="callout" align="center">
+          Sign in to continue tracking your health
+        </AppText>
+      </AppView>
 
-        {/* ── Form ── */}
-        <AppView px={5} mt={8}>
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Input
-                label="Email"
-                placeholder="you@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="next"
-                onChangeText={onChange}
-                onBlur={onBlur}
-                value={value}
-                error={errors.email?.message}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Input
-                label="Password"
-                placeholder="••••••••"
-                isPassword
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit(onSubmit)}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                value={value}
-                error={errors.password?.message}
-              />
-            )}
-          />
-
-          {/* Forgot password */}
-          <AppView row justify="flex-end" mb={6} style={{ marginTop: -8 }}>
-            <Button
-              label="Forgot password?"
-              variant="ghost"
-              size="sm"
-              onPress={() => navigation.navigate(AuthRoutes.FORGOT_PASSWORD)}
-              labelStyle={{ color: colors.primary }}
+      {/* ── Form ── */}
+      <AppView px={5} mt={8}>
+        <Controller
+          control={control}
+          name="email"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <Input
+              label="Email"
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+              onChangeText={onChange}
+              onBlur={onBlur}
+              value={value}
+              error={errors.email?.message}
             />
-          </AppView>
+          )}
+        />
 
+        <Controller
+          control={control}
+          name="password"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <Input
+              label="Password"
+              placeholder="••••••••"
+              isPassword
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit(onSubmit)}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              value={value}
+              error={errors.password?.message}
+            />
+          )}
+        />
+
+        {/* Forgot password */}
+        <AppView row justify="flex-end" mb={6} style={{ marginTop: -8 }}>
           <Button
-            label="Sign In"
-            onPress={handleSubmit(onSubmit)}
-            loading={isPending}
-            fullWidth
-            size="lg"
-          />
-
-          <Divider label="or" my={6} />
-
-          {/* Social buttons placeholder */}
-          <Button
-            label="Continue with Apple"
-            variant="secondary"
-            onPress={() => {}}
-            fullWidth
-            size="lg"
-            style={styles.socialBtn}
-          />
-
-          <Button
-            label={isGooglePending ? 'Signing in...' : 'Continue with Google'}
-            variant="outline"
-            onPress={() =>
-              googleLogin(undefined, {
-                onError: (err: any) =>
-                  toast.error(err?.message ?? 'Google sign-in failed. Please try again.'),
-              })
-            }
-            loading={isGooglePending}
-            fullWidth
-            size="lg"
-          />
-        </AppView>
-
-        {/* ── Footer ── */}
-        <AppView row center mt={8} gap={1}>
-          <AppText variant="subhead" secondary>
-            Don't have an account?
-          </AppText>
-          <Button
-            label="Sign up"
+            label="Forgot password?"
             variant="ghost"
             size="sm"
-            onPress={() => navigation.navigate(AuthRoutes.SIGNUP)}
-            labelStyle={{ color: colors.primary, fontWeight: '600' }}
+            onPress={() => navigation.navigate(AuthRoutes.FORGOT_PASSWORD)}
+            labelStyle={{ color: colors.primary }}
           />
         </AppView>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        <Button
+          label="Sign In"
+          onPress={handleSubmit(onSubmit)}
+          loading={isPending}
+          fullWidth
+          size="lg"
+        />
+
+        <Divider label="or" my={6} />
+
+        {/* Social buttons placeholder */}
+        <Button
+          label="Continue with Apple"
+          variant="secondary"
+          onPress={() => { }}
+          fullWidth
+          size="lg"
+          style={styles.socialBtn}
+        />
+
+        <Button
+          label={isGooglePending ? 'Signing in...' : 'Continue with Google'}
+          variant="outline"
+          onPress={() =>
+            googleLogin(undefined, {
+              onError: (err: any) =>
+                toast.error(err?.message ?? 'Google sign-in failed. Please try again.'),
+            })
+          }
+          loading={isGooglePending}
+          fullWidth
+          size="lg"
+        />
+      </AppView>
+
+      {/* ── Footer ── */}
+      <AppView row center mt={8} gap={1}>
+        <AppText variant="subhead" secondary>
+          Don't have an account?
+        </AppText>
+        <Button
+          label="Sign up"
+          variant="ghost"
+          size="sm"
+          onPress={() => navigation.navigate(AuthRoutes.SIGNUP)}
+          labelStyle={{ color: colors.primary, fontWeight: '600' }}
+        />
+      </AppView>
+
+    </Screen>
   );
 };
 

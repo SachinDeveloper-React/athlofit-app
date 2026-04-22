@@ -1,8 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Animated,
 } from 'react-native';
@@ -11,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../../hooks/useTheme';
 import { useToast } from '../../../components/Toast';
-import { AppView, AppText, Button, Loader } from '../../../components';
+import { AppView, AppText, Button, Loader, Screen, Header } from '../../../components';
 import { useVerifyOtp, useResendOtp } from '../hooks/useOtp';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
@@ -195,26 +193,7 @@ const OtpScreen: React.FC<Props> = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={[s.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* ── Nav bar ── */}
-      <AppView
-        style={[
-          s.navbar,
-          { paddingTop: insets.top + 8, borderBottomColor: colors.border },
-        ]}
-      >
-        <Button
-          label="‹ Back"
-          variant="ghost"
-          size="sm"
-          onPress={() => navigation.goBack()}
-          labelStyle={{ color: colors.primary, fontSize: 17, fontWeight: '400' }}
-        />
-      </AppView>
-
+  <Screen safeArea={false} scroll header={<Header backLabel="Back" showBack />}>
       <AppView style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
         {/* ── Hero ── */}
         <AppView style={s.hero}>
@@ -366,7 +345,7 @@ const OtpScreen: React.FC<Props> = () => {
           labelStyle={{ color: colors.mutedForeground, fontSize: 14 }}
         />
       </AppView>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 };
 

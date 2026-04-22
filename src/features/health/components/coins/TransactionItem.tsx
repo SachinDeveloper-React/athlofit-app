@@ -23,30 +23,33 @@ const TransactionItem = ({ item }: Props) => {
   const bgColor = withOpacity(iconColor, 0.1);
 
   return (
-    <Animated.View 
-      entering={FadeInDown.delay(100)}
-      layout={Layout.springify()}
-      style={[
-        styles.transactionCard, 
-        { 
-          backgroundColor: colors.card, 
-          borderRadius: radius.lg, 
-          marginBottom: spacing[2] 
-        }
-      ]}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: bgColor }]}>
-        <Icon name={iconName} size={20} color={iconColor} />
-      </View>
-      <View style={styles.transactionInfo}>
-        <AppText variant="label">{item.source}</AppText>
-        <AppText variant="caption2" secondary>
-          {new Date(item.createdAt).toLocaleDateString()}
+    // Outer wrapper handles layout reflow animation (item reorder/removal)
+    <Animated.View layout={Layout.springify()}>
+      {/* Inner wrapper handles enter animation — separate from layout to avoid transform conflict */}
+      <Animated.View
+        entering={FadeInDown.delay(100)}
+        style={[
+          styles.transactionCard,
+          {
+            backgroundColor: colors.card,
+            borderRadius: radius.lg,
+            marginBottom: spacing[2],
+          },
+        ]}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: bgColor }]}>
+          <Icon name={iconName} size={20} color={iconColor} />
+        </View>
+        <View style={styles.transactionInfo}>
+          <AppText variant="label">{item.source}</AppText>
+          <AppText variant="caption2" secondary>
+            {new Date(item.createdAt).toLocaleDateString()}
+          </AppText>
+        </View>
+        <AppText variant="label" color={iconColor} weight="bold">
+          {isEarned ? '+' : '-'}{item.amount}
         </AppText>
-      </View>
-      <AppText variant="label" color={iconColor} weight="bold">
-        {isEarned ? '+' : '-'}{item.amount}
-      </AppText>
+      </Animated.View>
     </Animated.View>
   );
 };

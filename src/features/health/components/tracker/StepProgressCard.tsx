@@ -20,11 +20,10 @@ import Animated, {
   useAnimatedStyle,
   useAnimatedReaction,
   withTiming,
-  withSpring,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-import { AppText, AppView, Icon, Button, IconButton } from '../../../../components';
+import { AppText, AppView, Icon, IconButton } from '../../../../components';
 import { Skeleton } from '../../../../components/SkeletonLoader';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
@@ -53,8 +52,6 @@ type Props = {
   todayIndex?: number;
   style?: ViewStyle;
   isWeekPending?: boolean;
-  onClaim?: (coinsToAdd: number) => void;
-  claimPending?: boolean;
   claimedToday?: boolean;
 };
 
@@ -324,73 +321,30 @@ DayBar.displayName = 'DayBar';
 type ClaimProps = {
   steps: number;
   goal: number;
-  onClaim?: (coinsToAdd: number) => void;
-  claimPending?: boolean;
   claimedToday?: boolean;
 };
 
 const COINS_FOR_GOAL = 50;
 const COINS_PARTIAL = 10;
 
-const ClaimCoinsButton = memo(({ steps, goal, onClaim, claimPending, claimedToday }: ClaimProps) => {
+const ClaimCoinsButton = memo(({ steps, goal, claimedToday }: ClaimProps) => {
   const { colors } = useTheme();
   const pct = steps / goal;
   const goalMet = pct >= 1;
-  const partialMet = pct >= 0.5 && !goalMet;
-  const coinsAvailable = goalMet ? COINS_FOR_GOAL : COINS_PARTIAL;
-  const visible = (goalMet || partialMet) && !claimedToday;
 
-  const scale = useSharedValue(1);
-  const shimmer = useSharedValue(0);
+  // Only show the claimed badge when goal is met — coins are auto-credited
+  if (!goalMet && !claimedToday) return null;
 
-  useEffect(() => {
-    if (visible) {
-      // Gentle pulse to draw attention
-      scale.value = withSpring(1.03, { damping: 6 }, () => {
-        scale.value = withSpring(1, { damping: 6 });
-      });
-    }
-  }, [visible]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  if (!visible && !claimedToday) return null;
-
-  const goldFrom = '#F5C518';
-  const goldTo = '#E8970A';
   const claimedBg = withOpacity(colors.primary, 0.12);
 
-  if (claimedToday) {
-    return (
-      <AppView style={styles.claimWrap}>
-        <AppView style={[styles.claimedBadge, { backgroundColor: claimedBg }]}>
-          <AppText style={[styles.claimedText, { color: colors.primary }]}>
-            ✓ Coins claimed today!
-          </AppText>
-        </AppView>
-      </AppView>
-    );
-  }
-
   return (
-    <Animated.View style={[styles.claimWrap, animStyle]}>
-      <Button
-        label={claimPending ? 'Claiming…' : `Claim ${coinsAvailable} Coins`}
-        onPress={() => onClaim?.(coinsAvailable)}
-        variant="tinted"
-        size="lg"
-        fullWidth
-        disabled={claimPending}
-        loading={claimPending}
-        leftIcon={
-          <AppText style={styles.coinEmoji}>🪙</AppText>
-        }
-        style={styles.claimBtn}
-        labelStyle={styles.claimTitle}
-      />
-    </Animated.View>
+    <AppView style={styles.claimWrap}>
+      <AppView style={[styles.claimedBadge, { backgroundColor: claimedBg }]}>
+        <AppText style={[styles.claimedText, { color: colors.primary }]}>
+          {claimedToday ? '✓ Coins credited today!' : '🎯 Goal reached — coins incoming!'}
+        </AppText>
+      </AppView>
+    </AppView>
   );
 });
 
@@ -406,8 +360,6 @@ export const StepProgressCard = memo(
     todayIndex,
     style,
     isWeekPending,
-    onClaim,
-    claimPending,
     claimedToday,
   }: Props) => {
     const { colors, radius } = useTheme();
@@ -437,12 +389,10 @@ export const StepProgressCard = memo(
           onEditGoal={onEditGoal}
         />
 
-        {/* Claim Coins Button */}
+        {/* Goal reached badge — coins are auto-credited via useSyncHealth */}
         <ClaimCoinsButton
           steps={steps}
           goal={goal}
-          onClaim={onClaim}
-          claimPending={claimPending}
           claimedToday={claimedToday}
         />
 

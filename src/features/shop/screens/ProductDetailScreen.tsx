@@ -34,6 +34,7 @@ import { useProductDetail } from '../hooks/useShop';
 import { useCart } from '../context/CartContext';
 import { RootRoutes, ShopRoutes } from '../../../navigation/routes';
 import type { ShopStackParamList } from '../../../types/navigation.types';
+import ReviewSection from '../components/ReviewSection';
 
 const { width: W, height: H } = Dimensions.get('window');
 const HERO_H = H * 0.46;
@@ -108,7 +109,8 @@ const ProductDetailScreen = () => {
     scrollY.value = e.contentOffset.y;
   });
 
-  const headerBgStyle = useAnimatedStyle(() => ({
+  // 0 = over hero (transparent), 1 = past hero (solid header)
+  const headerProgress = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [HERO_H - 80, HERO_H - 20], [0, 1], 'clamp'),
   }));
 
@@ -140,25 +142,47 @@ const ProductDetailScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Animated floating header */}
-      <Animated.View
+      {/* ── Unified header — transparent over hero, solid when scrolled ── */}
+      <View
         style={[
-          styles.floatingHeader,
-          headerBgStyle,
-          { backgroundColor: colors.background, paddingTop: insets.top, borderBottomColor: colors.border },
+          styles.header,
+          { paddingTop: insets.top, height: insets.top + 56 },
         ]}
+        pointerEvents="box-none"
       >
-        <AppText variant="headline" weight="semiBold" numberOfLines={1} style={{ flex: 1, marginHorizontal: 12 }}>
-          {product.name}
-        </AppText>
-      </Animated.View>
+        {/* Solid background — fades in as you scroll past the hero */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            headerProgress,
+            { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+          ]}
+          pointerEvents="none"
+        />
 
-      {/* Back + Cart buttons (always visible) */}
-      <View style={[styles.topBtns, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => navigation.goBack()} style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}>
+        {/* Back button — always visible */}
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}
+          hitSlop={8}
+        >
           <Icon name="ArrowLeft" size={20} color={colors.foreground} />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate(ShopRoutes.CART)} style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}>
+
+        {/* Product title — fades in with the header */}
+        <Animated.Text
+          numberOfLines={1}
+          style={[styles.headerTitle, { color: colors.foreground, flex: 1, marginHorizontal: 10 }, headerProgress]}
+        >
+          {product.name}
+        </Animated.Text>
+
+        {/* Cart button — always visible */}
+        <Pressable
+          onPress={() => navigation.navigate(ShopRoutes.CART)}
+          style={[styles.circleBtn, { backgroundColor: withOpacity(colors.card, 0.88), borderColor: withOpacity(colors.border, 0.6) }]}
+          hitSlop={8}
+        >
           <Icon name="ShoppingCart" size={20} color={colors.foreground} />
           {inCartQty > 0 && (
             <View style={[styles.cartDot, { backgroundColor: colors.primary }]}>
@@ -188,7 +212,7 @@ const ProductDetailScreen = () => {
 
           {/* Discount badge */}
           {hasDiscount && (
-            <View style={[styles.discBadge, { top: insets.top + 56, left: 16, backgroundColor: '#EF4444' }]}>
+            <View style={[styles.discBadge, { top: insets.top + 64, left: 16, backgroundColor: '#EF4444' }]}>
               <AppText variant="caption1" weight="bold" color="#fff">SAVE {discountPct}%</AppText>
             </View>
           )}
@@ -353,6 +377,13 @@ const ProductDetailScreen = () => {
               </View>
             ))}
           </View>
+
+          {/* Reviews */}
+          <ReviewSection
+            productId={productId}
+            initialRating={product.rating}
+            initialReviewCount={product.reviewCount}
+          />
         </Animated.View>
       </Animated.ScrollView>
 
@@ -407,15 +438,16 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  floatingHeader: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50,
-    flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 16, paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  // ── Unified header ──────────────────────────────────────────────────────────
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 60,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingBottom: 8,
   },
-  topBtns: {
-    position: 'absolute', left: 16, right: 16, zIndex: 60,
-    flexDirection: 'row', justifyContent: 'space-between',
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
   circleBtn: {
     width: 42, height: 42, borderRadius: 21,

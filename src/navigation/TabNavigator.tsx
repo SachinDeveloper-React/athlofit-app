@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   BottomTabNavigationOptions,
   createBottomTabNavigator,
@@ -16,19 +16,11 @@ import { withOpacity } from '../utils/withOpacity';
 import { SCREEN_WIDTH } from '../utils/measure';
 import { Icon } from '../components';
 
-const TAB_ORDER = [TabRoutes.TRACKER, TabRoutes.SHOP, TabRoutes.ACCOUNT] as const;
-
-function getTabIndex(name: string): number {
-  return TAB_ORDER.indexOf(name as (typeof TAB_ORDER)[number]);
-}
-
 const Tab = createBottomTabNavigator<TabParamList>();
 
 const TabNavigator: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
   const { colors, radius } = useTheme();
-  // Tracks the current active index so we know slide direction
-  const activeIndexRef = useRef(0);
 
   const tabBarStyle = useMemo<ViewStyle>(
     () => ({
@@ -55,7 +47,6 @@ const TabNavigator: React.FC = () => {
   );
 
   // direction: +1 = navigating right (e.g. Tracker→Shop), -1 = navigating left
-  const directionRef = useRef(1);
 
   const screenOptions = useMemo<BottomTabNavigationOptions>(
     () => ({
@@ -66,54 +57,17 @@ const TabNavigator: React.FC = () => {
       tabBarInactiveTintColor: colors.foreground,
       lazy: false,
       tabBarAllowFontScaling: true,
-      transitionSpec: {
-        animation: 'spring',
-        config: {
-          stiffness: 280,
-          damping: 28,
-          mass: 0.8,
-          overshootClamping: true,
-          restDisplacementThreshold: 0.01,
-          restSpeedThreshold: 0.01,
-        },
-      },
-      // interpolator only receives { current } — no route info
-      // direction is pre-computed in screenListeners and stored in directionRef
-      sceneStyleInterpolator: ({ current }) => {
-        const SLIDE = SCREEN_WIDTH * 0.07 * directionRef.current;
-        return {
-          sceneStyle: {
-            opacity: current.progress.interpolate({
-              inputRange: [-1, 0, 1],
-              outputRange: [0, 1, 0],
-            }),
-            transform: [
-              {
-                translateX: current.progress.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: [-SLIDE, 0, SLIDE],
-                }),
-              },
-            ],
-          },
-        };
-      },
+      sceneContainerStyle: { backgroundColor: colors.background },
+      // Use the built-in ShiftTransition — subtle slide + fade, no blank screen issues
+      ...require('@react-navigation/bottom-tabs').ShiftTransition,
     }),
-    [tabBarStyle, colors.primary, colors.foreground],
+    [tabBarStyle, colors.primary, colors.foreground, colors.background],
   );
 
   return (
     <Tab.Navigator
       initialRouteName={TabRoutes.TRACKER}
       screenOptions={screenOptions}
-      screenListeners={{
-        tabPress: e => {
-          const targetName = (e.target as string).split('-')[0];
-          const nextIndex = getTabIndex(targetName);
-          directionRef.current = nextIndex > activeIndexRef.current ? 1 : -1;
-          activeIndexRef.current = nextIndex;
-        },
-      }}
     >
       <Tab.Screen
         name={TabRoutes.TRACKER}

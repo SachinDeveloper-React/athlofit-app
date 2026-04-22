@@ -147,8 +147,8 @@ const TrackerScreen = memo(() => {
 
   const {
     data: weekData,
-    mutate: refreshWeek,
-    isPending: isWeekPending,
+    refetch: refreshWeek,
+    isLoading: isWeekPending,
   } = useWeeklySteps();
 
   // Gamification & Streaks
@@ -274,7 +274,7 @@ const TrackerScreen = memo(() => {
           goal={dailyStepGoal || 8000}
           activeTab={activeTab}
           data={data}
-          weekData={weekData?.data || []}
+          weekData={weekData || []}
           isWeekPending={isWeekPending}
           metricRows={metricRows}
           streakData={streakData}

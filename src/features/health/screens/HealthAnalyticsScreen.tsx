@@ -114,8 +114,13 @@ const HealthAnalyticsScreen = () => {
 
       {data ? (
         <>
-          {data.rings && <GoalsSection rings={data.rings} />}
+          {/* ── Chart first ── */}
+          <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
+            {METRIC_CONFIG[selectedMetric].label} Trend
+          </AppText>
+          <ChartSection selectedMetric={selectedMetric} data={data} />
 
+          {/* ── Key Metrics ── */}
           <Animated.View entering={FadeInDown.duration(300)}>
             <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
               Key Metrics
@@ -135,10 +140,8 @@ const HealthAnalyticsScreen = () => {
             </View>
           </Animated.View>
 
-          <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
-            {METRIC_CONFIG[selectedMetric].label} Trend
-          </AppText>
-          <ChartSection selectedMetric={selectedMetric} data={data} />
+          {/* ── Daily Goals — compact ── */}
+          {data.rings && <GoalsSection rings={data.rings} />}
 
           <SummaryRow data={data} timeframe={activeTab} />
           <InsightCard data={data} />

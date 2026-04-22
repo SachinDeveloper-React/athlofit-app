@@ -14,57 +14,33 @@ import FoodDetailScreen from '../features/health/screens/FoodDetailScreen';
 import BmiCalculatorScreen from '../features/health/screens/BmiCalculatorScreen';
 import LeaderboardScreen from '../features/health/screens/LeaderboardScreen';
 import StreakScreen from '../features/health/screens/StreakScreen';
+import { useTheme } from '../hooks/useTheme';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
 
 const HealthNavigator: React.FC = () => {
+  const { colors } = useTheme();
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      <Stack.Screen
-        name={HealthRoutes.HEART_RATE}
-        component={HeartRateScreen}
-        options={{ gestureEnabled: false }}
-      />
-      <Stack.Screen
-        name={HealthRoutes.BLOOD_PRESSURE}
-        component={BloodPressureScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.HYDRATION}
-        component={HydrationScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.EDIT_STEPS_GOAL}
-        component={EditStepsGoalScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.HEALTH_ANALYTICS}
-        component={HealthAnalyticsScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.COINS}
-        component={CoinScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.FOOD_CATALOG}
-        component={FoodCatalogScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.FOOD_DETAIL}
-        component={FoodDetailScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.BMI_CALCULATOR}
-        component={BmiCalculatorScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.LEADERBOARD}
-        component={LeaderboardScreen}
-      />
-      <Stack.Screen
-        name={HealthRoutes.STREAK}
-        component={StreakScreen}
-      />
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        gestureEnabled: true,
+        fullScreenGestureEnabled: true,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
+      <Stack.Screen name={HealthRoutes.HEART_RATE}       component={HeartRateScreen}       options={{ gestureEnabled: false }} />
+      <Stack.Screen name={HealthRoutes.BLOOD_PRESSURE}   component={BloodPressureScreen} />
+      <Stack.Screen name={HealthRoutes.HYDRATION}        component={HydrationScreen} />
+      <Stack.Screen name={HealthRoutes.EDIT_STEPS_GOAL}  component={EditStepsGoalScreen} />
+      <Stack.Screen name={HealthRoutes.HEALTH_ANALYTICS} component={HealthAnalyticsScreen} />
+      <Stack.Screen name={HealthRoutes.COINS}            component={CoinScreen} />
+      <Stack.Screen name={HealthRoutes.FOOD_CATALOG}     component={FoodCatalogScreen} />
+      <Stack.Screen name={HealthRoutes.FOOD_DETAIL}      component={FoodDetailScreen} />
+      <Stack.Screen name={HealthRoutes.BMI_CALCULATOR}   component={BmiCalculatorScreen} />
+      <Stack.Screen name={HealthRoutes.LEADERBOARD}      component={LeaderboardScreen} />
+      <Stack.Screen name={HealthRoutes.STREAK}           component={StreakScreen} />
     </Stack.Navigator>
   );
 };

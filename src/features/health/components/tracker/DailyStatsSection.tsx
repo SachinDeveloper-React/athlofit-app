@@ -110,8 +110,6 @@ const DailyStatsSection = memo(
           weekData={weekData}
           isWeekPending={isWeekPending}
           todayIndex={todayIndex}
-          onClaim={handleClaim}
-          claimPending={claimPending}
           claimedToday={claimedToday}
         />
 

@@ -1,8 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Animated,
 } from 'react-native';
@@ -20,7 +18,7 @@ import {
 } from '../utils/authValidation';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
-import { Header, AppView, AppText, Button } from '../../../components';
+import { Header, AppView, AppText, Button, Screen } from '../../../components';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.FORGOT_PASSWORD>;
 
@@ -91,11 +89,7 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[s.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <Header showBack />
+ <Screen safeArea={false} scroll header={<Header backLabel="Back" showBack />}>
 
       {/* ── Content ── */}
       <AppView style={[s.content, { paddingBottom: insets.bottom + 24 }]}>
@@ -214,7 +208,7 @@ const ForgotPasswordScreen: React.FC<Props> = () => {
           />
         </AppView>
       </AppView>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 };
 

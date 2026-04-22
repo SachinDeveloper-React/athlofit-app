@@ -1,15 +1,15 @@
-import { useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getLast7DaysRange } from '../utils/healthFormatters';
 import { healthService } from '../service/health.service';
 
 export function useWeeklySteps() {
   const { from, to } = getLast7DaysRange();
-  return useMutation({
-    mutationFn: () => healthService.getWeeklySteps({ from, to }),
-    onSuccess: response => {
-      const { success, data } = response;
 
-      if (!success) return;
-    },
+  return useQuery({
+    queryKey: ['weekly-steps', from, to],
+    queryFn: () => healthService.getWeeklySteps({ from, to }),
+    select: response => response.data ?? [],
+    staleTime: 5 * 60_000,   // 5 min — re-fetch on focus if stale
+    retry: 1,
   });
 }

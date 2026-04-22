@@ -96,6 +96,35 @@ export interface CancelOrderResult {
   refundedCoins: number;
 }
 
+export interface Review {
+  _id: string;
+  user: { _id: string; name: string; avatarUrl: string | null };
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export interface ReviewsData {
+  reviews: Review[];
+  rating: number;
+  reviewCount: number;
+  breakdown: Record<string, number>;
+  pagination: { page: number; limit: number; total: number; hasMore: boolean };
+}
+
+export interface AddReviewRequest {
+  rating: number;
+  comment: string;
+}
+
+export interface AddReviewResult {
+  rating: number;
+  reviewCount: number;
+}
+
+export type ReviewsResponse = ApiResponse<ReviewsData>;
+export type AddReviewResponse = ApiResponse<AddReviewResult>;
+
 export type CategoriesResponse = ApiResponse<Category[]>;
 export type ProductsResponse = ApiResponse<ProductsData>;
 export type FeaturedProductsResponse = ApiResponse<Product[]>;

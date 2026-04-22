@@ -32,6 +32,22 @@ export function useProductDetail() {
   });
 }
 
+// ─── useProductReviews ────────────────────────────────────────────────────────
+export function useProductReviews(productId: string) {
+  return useMutation({
+    mutationFn: ({ page = 1, limit = 10 }: { page?: number; limit?: number } = {}) =>
+      shopService.getProductReviews(productId, page, limit),
+  });
+}
+
+// ─── useAddReview ─────────────────────────────────────────────────────────────
+export function useAddReview(productId: string) {
+  return useMutation({
+    mutationFn: (body: import('../types/shop.types').AddReviewRequest) =>
+      shopService.addReview(productId, body),
+  });
+}
+
 // ─── useSearchProducts ────────────────────────────────────────────────────────
 export function useSearchProducts() {
   return useMutation({
@@ -191,6 +207,20 @@ export function useShopState() {
     });
   }, [fetchProducts, sortBy]);
 
+  // Sort change — re-fetch products with new sort, keep current category
+  const handleSortChange = useCallback((sort: GetProductsParams['sort']) => {
+    setSortBy(sort);
+    setProducts([]);
+    fetchProducts({ category: selectedCategory, sort }, {
+      onSuccess: (res) => {
+        if (res.success && res.data) {
+          setProducts(res.data.products);
+          setPagination(res.data.pagination);
+        }
+      },
+    });
+  }, [fetchProducts, selectedCategory]);
+
   const loadMore = useCallback(() => {
     if (!pagination?.hasMore || isProductsPending) return;
     fetchProducts({ category: selectedCategory, page: (pagination.page) + 1, sort: sortBy }, {
@@ -203,7 +233,8 @@ export function useShopState() {
     });
   }, [pagination, selectedCategory, sortBy, isProductsPending, fetchProducts]);
 
-  const isLoading = isCategoryPending || isFeaturedPending || isProductsPending;
+  // isLoading = only initial load (no products yet), NOT category/sort switches
+  const isLoading = (isCategoryPending || isFeaturedPending) && products.length === 0;
 
   return {
     categories,
@@ -217,7 +248,7 @@ export function useShopState() {
     isRefreshing,
     isProductsPending,
     setSearchQuery,
-    setSortBy,
+    setSortBy: handleSortChange,
     loadInitialData,
     loadByCategory,
     loadMore,

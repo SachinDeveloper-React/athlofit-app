@@ -22,14 +22,14 @@ export type MeasurementState =
   | 'error';
 
 const FPS = 30;
-const WARMUP_FRAMES = FPS * 2;
+const WARMUP_FRAMES = FPS * 3;   // 3s warmup — gives torch time to heat up
 const MEASURE_FRAMES = MEASURE_DURATION_S * FPS;
 const MIN_PEAK_GAP_FRAMES = 8;
 const MAX_PEAK_GAP_FRAMES = 45;
 const SMOOTH_FAST = 0.2;
 const SMOOTH_SLOW = 0.05;
 const MIN_VALID_INTERVALS = 4;
-const COVERED_THRESHOLD = 60;
+const COVERED_THRESHOLD = 80;    // raised: torch-lit finger is much brighter than ambient
 const SAMPLE_BLOCK = 40;
 
 function finalizeResult(
@@ -73,6 +73,7 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [torchReady, setTorchReady] = useState(false);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -98,12 +99,14 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
   const setMeasureStateRef = useRef(setMeasureState);
   const setResultRef = useRef(setResult);
   const setErrorRef = useRef(setError);
+  const setTorchReadyRef = useRef(setTorchReady);
 
   useEffect(() => {
     setProgressRef.current = setProgress;
     setMeasureStateRef.current = setMeasureState;
     setResultRef.current = setResult;
     setErrorRef.current = setError;
+    setTorchReadyRef.current = setTorchReady;
   });
 
   // Created once — stable forever
@@ -303,6 +306,7 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
     setResult(null);
     setProgress(0);
     setSaved(false);
+    setTorchReady(false);
 
     let granted = hasPermission;
     if (!granted) {
@@ -332,10 +336,16 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
     svLastPeakFrame.value = 0;
     svIntervalsJson.value = '[]';
     svDone.value = 0;
-    svRunning.value = 1;
+    svRunning.value = 0;   // keep paused until torch is warm
 
     setMeasureState('measuring');
   }, [hasPermission, requestPermission, device]);
+
+  // Called by the screen after the torch warmup delay
+  const onTorchReady = useCallback(() => {
+    svRunning.value = 1;
+    setTorchReady(true);
+  }, []);
 
   const cancelMeasurement = useCallback(() => {
     svRunning.value = 0;
@@ -346,6 +356,7 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
     setResult(null);
     setError(null);
     setSaved(false);
+    setTorchReady(false);
   }, []);
 
   const saveResult = useCallback(
@@ -373,12 +384,14 @@ export function useHeartRate(platform: HealthPlatform = 'unavailable') {
     error,
     isSaving,
     saved,
+    torchReady,
     device,
     format,
     hasPermission,
     frameProcessor,
     startMeasurement,
     cancelMeasurement,
+    onTorchReady,
     saveResult,
     reset: cancelMeasurement,
   };

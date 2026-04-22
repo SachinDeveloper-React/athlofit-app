@@ -127,13 +127,20 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
   const activeDietPref = localDietPref ?? preferences?.dietPreference;
   const activeGoal     = localGoal     ?? preferences?.dietaryGoal;
 
-  // Clear optimistic state once mutation settles
+  // Clear optimistic state only when the server value has caught up to what we set.
+  // This prevents the chip from flashing back to the old value between mutation
+  // settling and the React Query cache being invalidated + refetched.
   useEffect(() => {
-    if (!isMutating) {
+    if (localDietPref !== undefined && preferences?.dietPreference === localDietPref) {
       setLocalDietPref(undefined);
+    }
+  }, [preferences?.dietPreference, localDietPref]);
+
+  useEffect(() => {
+    if (localGoal !== undefined && preferences?.dietaryGoal === localGoal) {
       setLocalGoal(undefined);
     }
-  }, [isMutating]);
+  }, [preferences?.dietaryGoal, localGoal]);
 
   const handleDietPref = useCallback(
     (value: string) => {

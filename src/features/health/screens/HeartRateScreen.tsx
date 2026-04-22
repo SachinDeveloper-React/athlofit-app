@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, StatusBar } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, StatusBar, View, Animated as RNAnimated } from 'react-native';
 import { Camera } from 'react-native-vision-camera';
 import { useHeartRate } from '../hooks/useHeartRate';
 import { Button, Header, Screen, AppText, AppView } from '../../../components';
@@ -11,6 +11,9 @@ import { HeartRateResultCard } from '../components/heart-rate/HeartRateResultCar
 import { SavedBanner } from '../components/heart-rate/SavedBanner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Torch warmup duration in ms — gives the LED time to reach full brightness
+const TORCH_WARMUP_MS = 1500;
+
 export default function HeartRateScreen() {
   const { bottom } = useSafeAreaInsets();
   const {
@@ -20,22 +23,40 @@ export default function HeartRateScreen() {
     error,
     isSaving,
     saved,
+    torchReady,
     device,
     format,
     frameProcessor,
     startMeasurement,
     cancelMeasurement,
+    onTorchReady,
     saveResult,
   } = useHeartRate();
 
   const [showManual, setShowManual] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  // Warmup progress 0→1 for the UI bar
+  const warmupAnim = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
     if (measureState !== 'measuring') {
       setTorchOn(false);
+      warmupAnim.setValue(0);
     }
   }, [measureState]);
+
+  const handleCameraInit = () => {
+    setTorchOn(true);
+    // Animate warmup bar over TORCH_WARMUP_MS
+    warmupAnim.setValue(0);
+    RNAnimated.timing(warmupAnim, {
+      toValue: 1,
+      duration: TORCH_WARMUP_MS,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) onTorchReady();
+    });
+  };
 
   const handleManualSave = async (bpm: number) => {
     await saveResult(bpm);
@@ -76,10 +97,7 @@ export default function HeartRateScreen() {
 
   if (measureState === 'measuring') {
     return (
-      <AppView style={[
-        styles.fullScreen,
-        { marginBottom: bottom },
-      ]}>
+      <AppView style={[styles.fullScreen, { marginBottom: bottom }]}>
         <StatusBar hidden />
 
         {device && format ? (
@@ -95,10 +113,7 @@ export default function HeartRateScreen() {
             audio={false}
             pixelFormat="yuv"
             frameProcessor={frameProcessor}
-            onInitialized={() => {
-              console.log('Camera initialized, enabling torch');
-              setTorchOn(true);
-            }}
+            onInitialized={handleCameraInit}
           />
         ) : (
           <AppView style={[StyleSheet.absoluteFill, styles.blackBg]} />
@@ -106,15 +121,35 @@ export default function HeartRateScreen() {
 
         <AppView style={styles.overlay}>
           <AppView style={styles.topBanner}>
-            <AppText style={styles.topTitle}>Keep finger on camera</AppText>
-            <AppText style={styles.topSub}>
-              Cover the lens and flash • Stay still
-            </AppText>
+            {!torchReady ? (
+              <>
+                <AppText style={styles.topTitle}>Warming up torch…</AppText>
+                <AppText style={styles.topSub}>
+                  Hold your finger over the lens and flash
+                </AppText>
+                {/* Warmup progress bar */}
+                <View style={styles.warmupTrack}>
+                  <RNAnimated.View
+                    style={[
+                      styles.warmupFill,
+                      { width: warmupAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+                    ]}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <AppText style={styles.topTitle}>Keep finger on camera</AppText>
+                <AppText style={styles.topSub}>
+                  Cover the lens and flash • Stay still
+                </AppText>
+              </>
+            )}
           </AppView>
 
           <AppView style={styles.centerArea}>
-            <ProgressRing progress={progress} />
-            <PulseIndicator active />
+            <ProgressRing progress={torchReady ? progress : 0} />
+            {torchReady && <PulseIndicator active />}
           </AppView>
 
           <AppView style={styles.bottomArea}>
@@ -276,6 +311,19 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.72)',
     marginTop: 6,
     textAlign: 'center',
+  },
+  warmupTrack: {
+    marginTop: 14,
+    width: 200,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  warmupFill: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#F97316',  // warm orange — matches torch glow
   },
   centerArea: {
     alignItems: 'center',

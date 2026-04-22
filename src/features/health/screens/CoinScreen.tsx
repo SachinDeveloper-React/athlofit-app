@@ -87,21 +87,23 @@ const CoinScreen = () => {
 
   const renderHero = () => {
     return (
-      <Animated.View
-        entering={FadeInDown.duration(500)}
-        layout={LinearTransition.springify()}
-        style={[
-          styles.heroCard,
-          {
-            marginHorizontal: spacing[4],
-            marginTop: spacing[3],
-            padding: spacing[5],
-            borderRadius: radius?.xl ?? 24,
-            backgroundColor: colors.card,
-            borderColor: withOpacity(colors.border, 0.7),
-          },
-        ]}
-      >
+      // Outer: layout animation for reflow
+      <Animated.View layout={LinearTransition.springify()}>
+        {/* Inner: enter animation — separate view to avoid transform conflict */}
+        <Animated.View
+          entering={FadeInDown.duration(500)}
+          style={[
+            styles.heroCard,
+            {
+              marginHorizontal: spacing[4],
+              marginTop: spacing[3],
+              padding: spacing[5],
+              borderRadius: radius?.xl ?? 24,
+              backgroundColor: colors.card,
+              borderColor: withOpacity(colors.border, 0.7),
+            },
+          ]}
+        >
         <View
           style={[
             styles.heroGlow,
@@ -153,6 +155,7 @@ const CoinScreen = () => {
           Track rewards, review coin activity, and unlock more benefits through
           challenges and goals.
         </AppText>
+        </Animated.View>
       </Animated.View>
     );
   };

@@ -7,6 +7,7 @@ export { default as BottomSheet } from './BottomSheet';
 export { default as Button } from './Button';
 export { default as Card } from './Card';
 export { default as Chip } from './Chip';
+export { CoinBadge } from './CoinBadge';
 export { default as Divider } from './Divider';
 export { default as Header } from './Header';
 export { default as Input } from './Input';

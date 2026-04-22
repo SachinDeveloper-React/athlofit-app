@@ -1,14 +1,10 @@
 import React, { useRef } from 'react';
 import {
   TextInput,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
 import { useTheme } from '../../../hooks/useTheme';
@@ -20,13 +16,12 @@ import {
 } from '../utils/authValidation';
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
-import { Header, Input, AppView, AppText, Button } from '../../../components';
+import { Header, Input, AppView, AppText, Button, Screen } from '../../../components';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.SIGNUP>;
 
 const SignupScreen: React.FC<Props> = () => {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Props['navigation']>();
   const toast = useToast();
 
@@ -70,38 +65,8 @@ const SignupScreen: React.FC<Props> = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[s.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <Header backLabel="Back" showBack />
-      {/* ── Nav bar ── */}
-      {/* <View
-        style={[
-          s.navbar,
-          {
-            paddingTop: insets.top + 8,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[s.backText, { color: colors.primary }]}>‹ Back</Text>
-        </TouchableOpacity>
-      </View> */}
-
-      <ScrollView
-        contentContainerStyle={[
-          s.scroll,
-          { paddingBottom: insets.bottom + 32 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Hero ── */}
+    <Screen safeArea={false} scroll header={<Header backLabel="Back" showBack />}>
+        
         <AppView style={s.hero}>
           <AppView
             style={[s.iconWrap, { backgroundColor: colors.primary + '15' }]}
@@ -218,8 +183,7 @@ const SignupScreen: React.FC<Props> = () => {
             labelStyle={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}
           />
         </AppView>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 };
 

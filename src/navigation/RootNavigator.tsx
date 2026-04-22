@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { RootRoutes } from './routes';
@@ -15,6 +14,7 @@ import AccountNavigator from './AccountNavigator';
 import ShopNavigator from './ShopNavigator';
 import { CartProvider } from '../features/shop/context/CartContext';
 import { useAppConfig } from '../hooks/useAppConfig';
+import { useTheme } from '../hooks/useTheme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -22,6 +22,7 @@ const RootNavigator: React.FC = () => {
   const { isAuthenticated, user, setTokensFromStorage } = useAuthStore();
   const hasFinishedOnboarding = useOnboardingStore(s => s.hasFinished);
   const [isBootstrapping, setIsBootstrapping] = useState<boolean>(true);
+  const { colors } = useTheme();
 
   // Fetch live server config (coin rate, step goals, feature flags)
   // Only runs when authenticated; falls back to persisted/default config
@@ -30,7 +31,7 @@ const RootNavigator: React.FC = () => {
   useEffect(() => {
     async function bootstrap(): Promise<void> {
       try {
-        await setTokensFromStorage(); // reads from react-native-keychain
+        await setTokensFromStorage();
       } catch {
         // No stored session — user stays on AuthStack
       } finally {
@@ -47,7 +48,7 @@ const RootNavigator: React.FC = () => {
 
   return (
     <CartProvider>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         {!isAuthenticated ? (
           // ── State 1 & 2: Not logged in ──────────────────────────────────────
           <Stack.Screen
@@ -74,17 +75,17 @@ const RootNavigator: React.FC = () => {
             <Stack.Screen
               name={RootRoutes.HEALTH_NAVIGATOR}
               component={HealthNavigator}
-              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
+              options={{ gestureEnabled: true, animation: 'slide_from_right', fullScreenGestureEnabled: true }}
             />
             <Stack.Screen
               name={RootRoutes.ACCOUNT_NAVIGATOR}
               component={AccountNavigator}
-              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
+              options={{ gestureEnabled: true, animation: 'slide_from_right', fullScreenGestureEnabled: true }}
             />
             <Stack.Screen
               name={RootRoutes.SHOP_NAVIGATOR}
               component={ShopNavigator}
-              options={{ gestureEnabled: false, animation: 'slide_from_right' }}
+              options={{ gestureEnabled: true, animation: 'slide_from_right', fullScreenGestureEnabled: true }}
             />
           </Stack.Group>
         )}
@@ -92,13 +93,5 @@ const RootNavigator: React.FC = () => {
     </CartProvider>
   );
 };
-
-const styles = StyleSheet.create({
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
 
 export default RootNavigator;

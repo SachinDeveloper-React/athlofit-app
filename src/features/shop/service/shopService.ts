@@ -42,6 +42,21 @@ export const shopService = {
     return { success: response.success, message: response.message, data: response.data };
   },
 
+  getProductReviews: async (id: string, page = 1, limit = 10) => {
+    const response = await api.get<import('../types/shop.types').ReviewsResponse>(
+      `shop/products/${id}/reviews?page=${page}&limit=${limit}`,
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  addReview: async (id: string, body: import('../types/shop.types').AddReviewRequest) => {
+    const response = await api.post<import('../types/shop.types').AddReviewResponse>(
+      `shop/products/${id}/review`,
+      body,
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
   searchProducts: async (q: string, limit = 10) => {
     const response = await api.get<FeaturedProductsResponse>(
       `shop/search?q=${encodeURIComponent(q)}&limit=${limit}`,
