@@ -5,6 +5,7 @@ import { tokenService } from '../service/tokenService';
 import { authService } from '../service/authService';
 import type { AuthState, AuthTokens, User } from '../../../types/auth.types';
 import { mmkvStorage } from '../../../store';
+import { clearFcmToken } from '../../../services/fcmService';
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,10 @@ export const useAuthStore = create<AuthState>()(
           state.accessToken = tokens.accessToken;
           state.isAuthenticated = true;
         });
+        // Register FCM token now that we have a session
+        import('../../../services/fcmService').then(({ registerFcmToken }) =>
+          registerFcmToken(),
+        );
       },
 
       // ── Called on app launch — restore session from Keychain ────────────────
@@ -59,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
       // ── Logout ──────────────────────────────────────────────────────────────
       logout: async () => {
         try {
+          await clearFcmToken();
           await authService.logout();
         } catch {
           /* silent */

@@ -1,5 +1,5 @@
 // src/features/account/service/accountScreenService.ts
-import { Activity, Award, Coins, Gift, Swords, Droplets, Footprints, Package, ShoppingBag, Zap } from 'lucide-react-native';
+import { Activity, Award, Coins, Gift, Swords, Droplets, Footprints, Package, ShoppingBag, Zap, Trophy } from 'lucide-react-native';
 import { MenuRow, Stat } from '../types/account.types';
 import { formatInt } from './accountService';
 import { navigate } from '../../../navigation/navigationRef';
@@ -93,6 +93,17 @@ export const accountScreenService = {
       onPress: () => {
         navigate(RootRoutes.HEALTH_NAVIGATOR, {
           screen: HealthRoutes.HEALTH_ANALYTICS,
+        });
+      },
+    },
+    {
+      key: 'challenges',
+      title: 'CHALLENGES',
+      icon: Trophy,
+      tint: 'orange',
+      onPress: () => {
+        navigate(RootRoutes.HEALTH_NAVIGATOR, {
+          screen: HealthRoutes.CHALLENGES,
         });
       },
     },

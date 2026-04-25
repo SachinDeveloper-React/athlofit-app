@@ -1,4 +1,4 @@
-export type NotificationType = 'GOAL' | 'HYDRATION' | 'PRODUCT' | 'SECURITY' | 'HEART';
+export type NotificationType = 'GOAL' | 'HYDRATION' | 'PRODUCT' | 'SECURITY' | 'HEART' | 'CHALLENGE' | 'COIN';
 
 export type NotificationItem = {
   id: string;
@@ -6,5 +6,6 @@ export type NotificationItem = {
   title: string;
   message: string;
   createdAt: number;
-  read?: boolean;
+  read: boolean;
+  data?: Record<string, string>;
 };

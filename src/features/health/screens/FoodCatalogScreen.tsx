@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -15,6 +15,7 @@ import { Icon } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { withOpacity } from '../../../utils/withOpacity';
 import { useFoodCatalog, useFavourites, useToggleFavourite } from '../hooks/useNutrition';
+import { useSearchLog } from '../hooks/useSearchLog';
 import { FoodCard } from '../components/nutrition/FoodCard';
 import FilterPill from '../components/nutrition/FilterPill';
 import { DIET_TYPE_META, FOOD_CATEGORY_META } from '../types/nutrition.types';
@@ -30,6 +31,24 @@ const FoodCatalogScreen = memo(() => {
   const [categoryFilter, setCategoryFilter] = useState<FoodCategory>('all');
   const [showFavsOnly, setShowFavsOnly] = useState(false);
 
+  // ── Search logging ──────────────────────────────────────────────────────────
+  const { logQuery, logClick } = useSearchLog({ screen: 'FoodCatalog' });
+
+  // Debounce: fire logQuery 600 ms after the user stops typing
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = useCallback(
+    (text: string) => {
+      setSearch(text);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (text.trim().length >= 2) {
+        debounceRef.current = setTimeout(() => logQuery(text), 600);
+      }
+    },
+    [logQuery],
+  );
+  // Clean up on unmount
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
   const params = useMemo(
     () => ({ dietType: dietFilter, category: categoryFilter, search: search.length >= 2 ? search : undefined, limit: 30 }),
     [dietFilter, categoryFilter, search],
@@ -41,9 +60,13 @@ const FoodCatalogScreen = memo(() => {
 
   const displayedFoods: FoodItem[] = showFavsOnly ? favourites ?? [] : data?.foods ?? [];
 
-  const handleCardPress = useCallback((item: FoodItem) => {
+  const handleCardPress = useCallback((item: FoodItem, index: number) => {
+    // Log the click with position metadata
+    if (search.trim().length >= 2) {
+      logClick({ query: search, item, position: index });
+    }
     navigate(RootRoutes.HEALTH_NAVIGATOR, { screen: HealthRoutes.FOOD_DETAIL, params: { foodId: item._id } } as any);
-  }, []);
+  }, [search, logClick]);
 
   const handleFavToggle = useCallback((id: string) => toggleFav(id), [toggleFav]);
 
@@ -52,7 +75,7 @@ const FoodCatalogScreen = memo(() => {
       <Animated.View entering={FadeInDown.delay(index * 40).duration(300)} style={styles.gridCell}>
         <FoodCard
           item={item}
-          onPress={handleCardPress}
+          onPress={item => handleCardPress(item, index)}
           onFavouriteToggle={handleFavToggle}
           isTogglingFav={isTogglingAny && togglingId === item._id}
         />
@@ -72,14 +95,14 @@ const FoodCatalogScreen = memo(() => {
             <Icon name="Search" size={16} color={colors.mutedForeground} />
             <TextInput
               value={search}
-              onChangeText={setSearch}
+              onChangeText={handleSearchChange}
               placeholder="Search foods…"
               placeholderTextColor={colors.mutedForeground}
               style={[styles.searchInput, { color: colors.foreground }]}
               returnKeyType="search"
             />
             {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
+              <TouchableOpacity onPress={() => { setSearch(''); }}>
                 <Icon name="X" size={14} color={colors.mutedForeground} />
               </TouchableOpacity>
             )}

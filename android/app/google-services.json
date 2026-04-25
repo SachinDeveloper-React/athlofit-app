@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408694605210",
+    "project_id": "athlofit-6e24a",
+    "storage_bucket": "athlofit-6e24a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408694605210:android:2343afa3d137e1ed7fa623",
+        "android_client_info": {
+          "package_name": "com.athlofit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLoXy6prk34NQde4ql3y-d6a3S-70mpns"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

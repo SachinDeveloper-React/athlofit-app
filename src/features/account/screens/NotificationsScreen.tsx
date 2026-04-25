@@ -1,41 +1,64 @@
 // src/features/account/screens/NotificationsScreen.tsx
-import { SectionList, StyleSheet, ActivityIndicator, View } from 'react-native';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
-import { NotificationItem } from '../types/notification.types';
-import { groupSections, SectionT } from '../service/notificationService';
+import { Icon } from '../../../components/Icon';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotificationStyles } from '../styles/useNotificationStyles';
 import { NotificationRow } from '../components/notification/NotificationRow';
-import { useNotifications } from '../hooks/useNotifications';
-import { Icon } from '../../../components/Icon';
+import {
+  useNotifications,
+  useMarkRead,
+  useMarkAllRead,
+  useDeleteNotification,
+} from '../hooks/useNotifications';
+import { groupSections, SectionT } from '../service/notificationService';
+import { handleNotificationNavigation } from '../../../services/pushNotificationService';
+import type { NotificationItem } from '../types/notification.types';
 
 const NotificationsScreen = () => {
   const { colors } = useTheme();
   const s = useMemo(() => useNotificationStyles(colors), [colors]);
 
-  const { mutate: loadNotifications, data: items, isPending } = useNotifications();
+  const { data, isLoading, isRefetching, refetch } = useNotifications();
+  const { mutate: markRead }    = useMarkRead();
+  const { mutate: markAll }     = useMarkAllRead();
+  const { mutate: deleteNotif } = useDeleteNotification();
 
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+  const notifications = data?.notifications ?? [];
+  const unreadCount   = data?.unreadCount   ?? 0;
+
+  const sections = useMemo(() => groupSections(notifications), [notifications]);
 
   const keyExtractor = useCallback((it: NotificationItem) => it.id, []);
 
-  const sections = useMemo(
-    () => groupSections(items ?? []),
-    [items],
+  const handlePress = useCallback(
+    (item: NotificationItem) => {
+      if (!item.read) markRead(item.id);
+      if (item.data?.screen) {
+        handleNotificationNavigation(item.data as Record<string, string>);
+      }
+    },
+    [markRead],
   );
 
   const renderItem = useCallback(
     ({ item }: { item: NotificationItem }) => (
       <NotificationRow
         item={item}
-        onPress={() => {}}
+        onPress={handlePress}
+        onDelete={deleteNotif}
         style={{ marginBottom: 10 }}
       />
     ),
-    [],
+    [handlePress, deleteNotif],
   );
 
   const renderSectionHeader = useCallback(
@@ -47,8 +70,16 @@ const NotificationsScreen = () => {
     [s.sectionHeader, s.sectionTitle],
   );
 
-  // ── Loading state ──────────────────────────────────────────────────────────
-  if (isPending) {
+  const markAllBtn = unreadCount > 0 ? (
+    <Pressable onPress={() => markAll()} style={styles.markAllBtn}>
+      <AppText variant="caption1" style={{ color: colors.primary }}>
+        Mark all read
+      </AppText>
+    </Pressable>
+  ) : undefined;
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (isLoading) {
     return (
       <Screen
         scroll={false}
@@ -65,8 +96,8 @@ const NotificationsScreen = () => {
     );
   }
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-  if (!isPending && sections.length === 0) {
+  // ── Empty ──────────────────────────────────────────────────────────────────
+  if (sections.length === 0) {
     return (
       <Screen
         scroll={false}
@@ -74,12 +105,7 @@ const NotificationsScreen = () => {
         header={<Header title="Notifications" backLabel="" showBack />}
       >
         <View style={styles.center}>
-          <View
-            style={[
-              styles.emptyIconWrap,
-              { backgroundColor: colors.primary + '18' },
-            ]}
-          >
+          <View style={[styles.emptyIconWrap, { backgroundColor: colors.primary + '18' }]}>
             <Icon name="BellOff" size={36} color={colors.primary} />
           </View>
           <AppText variant="title3" weight="semiBold" style={{ marginTop: 16 }}>
@@ -91,8 +117,7 @@ const NotificationsScreen = () => {
             align="center"
             style={{ marginTop: 8, lineHeight: 22, paddingHorizontal: 32 }}
           >
-            Activity alerts, order updates, and streak milestones will appear
-            here as you use the app.
+            Activity alerts, order updates, and streak milestones will appear here.
           </AppText>
         </View>
       </Screen>
@@ -104,7 +129,14 @@ const NotificationsScreen = () => {
     <Screen
       scroll
       safeArea={false}
-      header={<Header title="Notifications" backLabel="" showBack />}
+      header={
+        <Header
+          title={unreadCount > 0 ? `Notifications (${unreadCount})` : 'Notifications'}
+          backLabel=""
+          showBack
+          rightAction={markAllBtn}
+        />
+      }
     >
       <SectionList
         sections={sections}
@@ -114,11 +146,16 @@ const NotificationsScreen = () => {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={colors.primary}
+          />
+        }
         removeClippedSubviews
-        initialNumToRender={10}
+        initialNumToRender={15}
         windowSize={10}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={16}
         SectionSeparatorComponent={() => <AppView style={{ height: 6 }} />}
         scrollEnabled={false}
       />
@@ -129,16 +166,7 @@ const NotificationsScreen = () => {
 export default NotificationsScreen;
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  center:        { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
+  markAllBtn:    { paddingHorizontal: 12, paddingVertical: 6 },
 });

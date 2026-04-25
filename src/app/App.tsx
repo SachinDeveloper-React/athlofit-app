@@ -1,10 +1,3 @@
-// src/app/App.tsx
-//
-// Root entry point. Wires together:
-//   NavigationContainer  →  RootNavigator  →  Auth | Tab
-//   React Query          →  server state & caching
-//   SafeAreaProvider     →  notch / home bar safety
-
 import React, { useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -12,12 +5,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import notifee, { AuthorizationStatus, EventType } from '@notifee/react-native';
 import { navigationRef } from '../navigation/navigationRef';
 import RootNavigator from '../navigation/RootNavigator';
 import { enableScreens } from 'react-native-screens';
 import { ToastProvider } from '../components/Toast';
 import { useTheme } from '../hooks/useTheme';
-import notifee, { EventType } from '@notifee/react-native';
 import { useHydrationStore } from '../features/health/store/hydrationStore';
 import {
   handleMidnightForegroundEvent,
@@ -25,7 +18,10 @@ import {
   scheduleMidnightReset,
   setupMidnightChannel,
 } from '../features/health/service/hydrationMidnightReset.service';
+import { setupNotifChannels } from '../features/health/hooks/useSyncHealth';
 import { SystemOverlay } from '../components';
+import { useNotificationSetup } from '../hooks/useNotificationSetup';
+import { linking } from '../navigation/linkingConfig';
 
 enableScreens(true);
 
@@ -36,6 +32,7 @@ GoogleSignin.configure({
       '248456486264-046ntrivtk80o2u60vt8mudj5mme7gnn.apps.googleusercontent.com',
   offlineAccess: true,
 });
+
 // ─── React Query Client ───────────────────────────────────────────────────────
 
 const queryClient = new QueryClient({
@@ -52,7 +49,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── Notifee background event (hydration midnight reset) ─────────────────────
 
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (
@@ -65,29 +62,34 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   }
 });
 
-const App: React.FC = () => {
-  const { isDark } = useTheme();
+// ─── App ──────────────────────────────────────────────────────────────────────
 
+// AppShell renders inside QueryClientProvider so hooks like useQueryClient work.
+const AppShell: React.FC = () => {
+  const { isDark } = useTheme();
   const checkAndResetIfNewDay = useHydrationStore(s => s.checkAndResetIfNewDay);
 
+  // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
+  useNotificationSetup();
+
+  // ── Hydration midnight reset setup ───────────────────────────────────────
   useEffect(() => {
     const bootstrap = async () => {
-      // a) Reset store if it's a new day (covers app-killed / phone-off case)
       checkAndResetIfNewDay();
 
-      // b) Set up the silent notification channel
-      await setupMidnightChannel();
-
-      // c) Schedule the repeating midnight Notifee trigger
-      await scheduleMidnightReset();
+      const settings = await notifee.requestPermission();
+      if (settings.authorizationStatus >= AuthorizationStatus.AUTHORIZED) {
+        await Promise.all([
+          setupMidnightChannel(),
+          setupNotifChannels(),
+        ]);
+        await scheduleMidnightReset();
+      }
     };
 
     bootstrap();
 
-    // d) AppState listener — resets when user opens app on a new day
     const unsubscribe = initAppStateReset();
-
-    // e) Foreground event handler — fires when app is open at midnight
     const unsubscribeForeground = notifee.onForegroundEvent(
       handleMidnightForegroundEvent,
     );
@@ -99,6 +101,7 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── System navigation bar theming ─────────────────────────────────────────
   useEffect(() => {
     SystemNavigationBar.setNavigationColor(
       isDark ? '#000000' : '#ffffff',
@@ -110,21 +113,25 @@ const App: React.FC = () => {
   }, [isDark]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SafeAreaProvider>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor="transparent"
-        />
-        <NavigationContainer ref={navigationRef}>
-          <ToastProvider>
-            <RootNavigator />
-            <SystemOverlay />
-          </ToastProvider>
-        </NavigationContainer>
-      </SafeAreaProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+      />
+      <NavigationContainer ref={navigationRef} linking={linking}>
+        <ToastProvider>
+          <RootNavigator />
+          <SystemOverlay />
+        </ToastProvider>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 };
+
+const App: React.FC = () => (
+  <QueryClientProvider client={queryClient}>
+    <AppShell />
+  </QueryClientProvider>
+);
 
 export default App;

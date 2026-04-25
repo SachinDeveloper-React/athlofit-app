@@ -124,4 +124,33 @@ export const nutritionService = {
     const response = await api.get<NutritionOptionsResponse>('nutrition/options');
     return response;
   },
+
+  // ─── Search Logging ─────────────────────────────────────────────────────────
+
+  /**
+   * Log a search query event.
+   */
+  logSearchQuery: async (query: string, meta?: Record<string, unknown>) => {
+    return api.post('nutrition/search/log-query', { query, meta: meta ?? {} });
+  },
+
+  /**
+   * Log a result-click event.
+   */
+  logSearchClick: async (params: {
+    query: string;
+    clickedFoodId: string;
+    clickedFoodName: string;
+    resultPosition?: number;
+    meta?: Record<string, unknown>;
+  }) => {
+    return api.post('nutrition/search/log-click', params);
+  },
+
+  /**
+   * Fetch the current user's recent search history.
+   */
+  getSearchHistory: async (limit = 20) => {
+    return api.get(`nutrition/search/history?limit=${limit}`);
+  },
 };

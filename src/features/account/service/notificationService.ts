@@ -1,12 +1,29 @@
-import { Bell, Heart, ShieldCheck, ShoppingBag, Trophy } from 'lucide-react-native';
+import { Bell, Coins, Heart, ShieldCheck, ShoppingBag, Trophy, Zap } from 'lucide-react-native';
 import { api } from '../../../utils/api';
 import { NotificationItem, NotificationType } from '../types/notification.types';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
-export const fetchNotifications = async (): Promise<NotificationItem[]> => {
-  const res = await api.get<{ data: NotificationItem[] }>('user/notifications');
-  return res.data ?? [];
+export const fetchNotifications = async (): Promise<{
+  notifications: NotificationItem[];
+  unreadCount: number;
+}> => {
+  const res = await api.get<{ notifications: NotificationItem[]; unreadCount: number }>(
+    'user/notifications',
+  );
+  return { notifications: res.data?.notifications ?? [], unreadCount: res.data?.unreadCount ?? 0 };
+};
+
+export const markRead = async (id: string): Promise<void> => {
+  await api.patch(`user/notifications/${id}/read`, {});
+};
+
+export const markAllRead = async (): Promise<void> => {
+  await api.patch('user/notifications/read-all', {});
+};
+
+export const deleteNotification = async (id: string): Promise<void> => {
+  await api.delete(`user/notifications/${id}`);
 };
 
 // ─── Grouping helpers ─────────────────────────────────────────────────────────
@@ -41,6 +58,10 @@ export const iconFor = (type: NotificationType) => {
   switch (type) {
     case 'GOAL':
       return Trophy;
+    case 'CHALLENGE':
+      return Zap;
+    case 'COIN':
+      return Coins;
     case 'HYDRATION':
       return Bell;
     case 'PRODUCT':

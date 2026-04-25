@@ -117,7 +117,11 @@ export const FoodCatalog = memo(() => {
 
   const { data: catalogData, isLoading: catalogLoading } = useFoodCatalog(catalogParams);
   const { data: favourites, isLoading: favLoading }      = useFavourites();
-  const { mutate: toggleFav, variables: togglingId }     = useToggleFavourite();
+  const {
+    mutate: toggleFav,
+    variables: togglingId,
+    isPending: isTogglingFav,
+  } = useToggleFavourite();
 
   const displayedFoods: FoodItem[] =
     activeFilter === 'favourites' ? (favourites ?? []) : (catalogData?.foods ?? []);
@@ -202,7 +206,7 @@ export const FoodCatalog = memo(() => {
                 item={item}
                 onPress={handleCardPress}
                 onFavouriteToggle={handleFavToggle}
-                isTogglingFav={togglingId === item._id}
+                isTogglingFav={isTogglingFav && togglingId === item._id}
               />
             </View>
           )}

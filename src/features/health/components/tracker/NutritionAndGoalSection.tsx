@@ -7,6 +7,7 @@ import { DietPreferenceChips } from '../nutrition/DietPreferenceChips';
 import { MealSection } from '../nutrition/MealSection';
 import { DietRecommendationCard } from '../nutrition/DietRecommendationCard';
 import { FoodCatalog } from '../nutrition/FoodCatalog';
+import ChallengeNutritionCard from '../nutrition/ChallengeNutritionCard';
 import {
   useNutritionSummary,
   useNutritionPreferences,
@@ -165,6 +166,10 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
       <DietRecommendationCard
         goal={preferences?.dietaryGoal ?? 'maintenance'}
       />
+
+      {/* ─ 5. Nutrition Challenges ────────────────────────────────────────────── */}
+      <SectionLabel label="Challenges" />
+      <ChallengeNutritionCard />
 
       {/* Bottom spacing */}
       <View style={styles.bottomSpacer} />

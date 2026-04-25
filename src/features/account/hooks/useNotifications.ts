@@ -1,14 +1,42 @@
 // src/features/account/hooks/useNotifications.ts
-import { useMutation } from '@tanstack/react-query';
-import { fetchNotifications } from '../service/notificationService';
-import { NotificationItem } from '../types/notification.types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  fetchNotifications,
+  markRead,
+  markAllRead,
+  deleteNotification,
+} from '../service/notificationService';
 
-/**
- * useNotifications — fetches in-app notifications via useMutation.
- * Call `mutate()` to load; data is available in `data` after success.
- */
-export const useNotifications = () => {
-  return useMutation<NotificationItem[], Error, void>({
-    mutationFn: () => fetchNotifications(),
+export const NOTIF_KEY = ['notifications'] as const;
+
+export const useNotifications = () =>
+  useQuery({
+    queryKey: NOTIF_KEY,
+    queryFn:  fetchNotifications,
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+export const useMarkRead = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: NOTIF_KEY }),
+  });
+};
+
+export const useMarkAllRead = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: markAllRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: NOTIF_KEY }),
+  });
+};
+
+export const useDeleteNotification = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteNotification(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: NOTIF_KEY }),
   });
 };

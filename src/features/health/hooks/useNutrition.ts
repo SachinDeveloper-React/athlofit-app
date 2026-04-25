@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { nutritionService } from '../service/nutrition.service';
+import { challengeKeys } from './useChallenges';
 import type {
   LogMealRequest,
   NutritionPreferences,
@@ -82,7 +83,7 @@ export function useNutritionPreferences() {
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /**
- * Logs a new meal entry — optimistically invalidates the daily summary.
+ * Logs a new meal entry — invalidates the daily summary and challenges.
  */
 export function useLogMeal() {
   const client = useQueryClient();
@@ -91,6 +92,8 @@ export function useLogMeal() {
     mutationFn: (body: LogMealRequest) => nutritionService.logMeal(body),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
+      // Backend syncs challenge progress on meal log — refetch so UI reflects completion
+      client.invalidateQueries({ queryKey: challengeKeys.all() });
     },
   });
 }
@@ -105,6 +108,7 @@ export function useDeleteMeal() {
     mutationFn: (id: string) => nutritionService.deleteMeal(id),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
+      client.invalidateQueries({ queryKey: challengeKeys.all() });
     },
   });
 }
@@ -175,17 +179,18 @@ export function useFavourites() {
 
 /**
  * Toggle favourite/unfavourite a food item.
- * Optimistically invalidates the catalog + favourites lists.
+ * Optimistically invalidates the catalog + favourites lists + food detail.
  */
 export function useToggleFavourite() {
   const client = useQueryClient();
 
   return useMutation({
     mutationFn: (foodId: string) => nutritionService.toggleFavourite(foodId),
-    onSuccess: () => {
-      // Refresh all catalog views (any filter combo) and the favourites list
+    onSuccess: (_data, foodId) => {
+      // Refresh all catalog views, favourites list, and the specific food detail
       client.invalidateQueries({ queryKey: ['nutrition-foods'] });
       client.invalidateQueries({ queryKey: nutritionKeys.favourites() });
+      client.invalidateQueries({ queryKey: nutritionKeys.food(foodId) });
     },
   });
 }

@@ -9,6 +9,7 @@ import {
   TrackerStreaksSkeleton,
 } from './TrackerStreaksBadges';
 import { TrackerMotivation } from './TrackerMotivation';
+import ChallengeTrackerCard from './ChallengeTrackerCard';
 
 import { navigate } from '../../../../navigation/navigationRef';
 import { WeeklyStepEntry } from '../../types/healthTypes';
@@ -180,6 +181,9 @@ const DailyStatsSection = memo(
           </Pressable>
         ) : null}
 
+        {/* Daily challenges widget */}
+        <ChallengeTrackerCard />
+
         <TrackerMotivation
           steps={steps}
           goalSteps={goal || 10000}
@@ -188,6 +192,8 @@ const DailyStatsSection = memo(
             syncDailyProgress(coinsToday, streakWillContinue);
           }}
         />
+
+        
       </AppView>
     );
   },

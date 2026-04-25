@@ -51,6 +51,9 @@ export type HealthStackParamList = {
   [HealthRoutes.BMI_CALCULATOR]: undefined;
   // Leaderboard
   [HealthRoutes.LEADERBOARD]: undefined;
+  // Challenges
+  [HealthRoutes.CHALLENGES]: undefined;
+  [HealthRoutes.CHALLENGE_DETAIL]: { challengeId: string };
 };
 
 // ─── Shop Stack ───────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ export const HealthRoutes = {
   BMI_CALCULATOR: 'BmiCalculatorScreen',
   // Leaderboard
   LEADERBOARD: 'LeaderboardScreen',
+  CHALLENGES: 'ChallengesScreen',
+  CHALLENGE_DETAIL: 'ChallengeDetailScreen',
 } as const;
 
 export const ShopRoutes = {

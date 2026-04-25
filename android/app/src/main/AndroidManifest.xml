@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+<!-- NOTIFICATION -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- BLUETOOTH -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -77,6 +79,20 @@
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+        <!-- Deep linking: athlofit:// -->
+        <intent-filter android:autoVerify="true">
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="athlofit" />
+        </intent-filter>
+        <!-- Universal links: https://athlofit.app -->
+        <intent-filter android:autoVerify="true">
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="athlofit.app" />
         </intent-filter>
         <!-- For supported versions through Android 13, create an activity to show the rationale
          of Health Connect permissions once users click the privacy policy link. -->
