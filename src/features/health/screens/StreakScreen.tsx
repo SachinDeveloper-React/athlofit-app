@@ -1,12 +1,61 @@
 // src/features/health/screens/StreakScreen.tsx
 import React from 'react';
-import { StyleSheet, RefreshControl, ScrollView } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { useStreakScreen } from '../hooks/useStreakScreen';
 import { StreakRing } from '../components/streaks/StreakRing';
 import { BadgeItem } from '../components/streaks/BadgeItem';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, shadow }) => ({
+  container: { paddingTop: spacing[3] },
+  heroCard: {
+    borderRadius: radius['3xl'],
+    borderWidth: 1,
+    padding: spacing[6],
+    marginBottom: spacing[4],
+    ...shadow.sm,
+  },
+  nextMilestonePill: {
+    alignSelf: 'center' as const,
+    paddingHorizontal: spacing[3.5 as any] ?? 14,
+    paddingVertical: spacing[1.5],
+    borderRadius: radius['2xl'],
+    marginBottom: spacing[1],
+  },
+  statsRow: {
+    borderRadius: radius.xl,
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  statBox: {
+    flex: 1,
+    alignItems: 'center' as const,
+    paddingVertical: spacing[3],
+    gap: spacing[0.5],
+  },
+  statDivider: { width: 1, marginVertical: spacing[2] },
+  infoCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    padding: spacing[4],
+    marginBottom: spacing[5],
+  },
+  badgesHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: spacing[3],
+  },
+  badgesScrollContent: {
+    gap: spacing[3],
+    paddingRight: spacing[6],
+  },
+}));
 
 const StreakScreen: React.FC = () => {
+  const styles = useStyles();
   const {
     colors,
     streakDays,
@@ -208,54 +257,3 @@ const StreakScreen: React.FC = () => {
 };
 
 export default StreakScreen;
-
-const styles = StyleSheet.create({
-  container: { paddingTop: 12 },
-  heroCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 24,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  nextMilestonePill: {
-    alignSelf: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 4,
-  },
-  statsRow: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 2,
-  },
-  statDivider: { width: 1, marginVertical: 8 },
-  infoCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
-  },
-  badgesHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  badgesScrollContent: {
-    gap: 12,
-    paddingRight: 24,
-  },
-});

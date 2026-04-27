@@ -1,14 +1,11 @@
 // ─── CalorieSummaryCard.tsx ────────────────────────────────────────────────────
-// Shows Calories In vs Goal as a progress ring + Calories Out bar.
-
 import React, { memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { AppText, AppView, Card } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface Props {
   caloriesIn: number;
@@ -19,16 +16,12 @@ interface Props {
   fat: number;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const RING_SIZE = 100;
 const STROKE = 10;
 const R = (RING_SIZE - STROKE) / 2;
 const CIRCUM = 2 * Math.PI * R;
 const CX = RING_SIZE / 2;
 const CY = RING_SIZE / 2;
-
-// ─── Ring ─────────────────────────────────────────────────────────────────────
 
 interface RingProps {
   percent: number;
@@ -43,25 +36,10 @@ const CalorieRing = memo(({ percent, color, trackColor }: RingProps) => {
 
   return (
     <Svg width={RING_SIZE} height={RING_SIZE}>
-      {/* Track */}
+      <Circle cx={CX} cy={CY} r={R} stroke={trackColor} strokeWidth={STROKE} fill="none" />
       <Circle
-        cx={CX}
-        cy={CY}
-        r={R}
-        stroke={trackColor}
-        strokeWidth={STROKE}
-        fill="none"
-      />
-      {/* Fill */}
-      <Circle
-        cx={CX}
-        cy={CY}
-        r={R}
-        stroke={color}
-        strokeWidth={STROKE}
-        fill="none"
-        strokeDasharray={`${dash} ${gap}`}
-        strokeLinecap="round"
+        cx={CX} cy={CY} r={R} stroke={color} strokeWidth={STROKE} fill="none"
+        strokeDasharray={`${dash} ${gap}`} strokeLinecap="round"
         transform={`rotate(-90 ${CX} ${CY})`}
       />
     </Svg>
@@ -70,8 +48,6 @@ const CalorieRing = memo(({ percent, color, trackColor }: RingProps) => {
 
 CalorieRing.displayName = 'CalorieRing';
 
-// ─── Macro Pill ───────────────────────────────────────────────────────────────
-
 interface MacroPillProps {
   label: string;
   value: number;
@@ -79,24 +55,83 @@ interface MacroPillProps {
   color: string;
 }
 
-const MacroPill = memo(({ label, value, unit, color }: MacroPillProps) => (
-  <AppView style={styles.macroPill}>
-    <View style={[styles.macroDot, { backgroundColor: color }]} />
-    <AppText variant="caption2" weight="semiBold" color={color}>
-      {value}
-      {unit}
-    </AppText>
-    <AppText variant="caption2">{label}</AppText>
-  </AppView>
-));
+const MacroPill = memo(({ label, value, unit, color }: MacroPillProps) => {
+  const styles = useStyles();
+  return (
+    <AppView style={styles.macroPill}>
+      <View style={[styles.macroDot, { backgroundColor: color }]} />
+      <AppText variant="caption2" weight="semiBold" color={color}>
+        {value}{unit}
+      </AppText>
+      <AppText variant="caption2">{label}</AppText>
+    </AppView>
+  );
+});
 
 MacroPill.displayName = 'MacroPill';
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  card: { gap: spacing[4] },
+  header: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  body: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[5],
+  },
+  ringWrap: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  ringCenter: {
+    position: 'absolute' as const,
+    alignItems: 'center' as const,
+  },
+  statsCol: { flex: 1, gap: spacing[2.5] },
+  statRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[2.5] },
+  statDot: { width: 8, height: 8, borderRadius: radius.full },
+  burnRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[2],
+  },
+  burnBarBg: {
+    flex: 1,
+    height: 6,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    overflow: 'hidden' as const,
+  },
+  burnBarFill: {
+    height: 6,
+    borderRadius: radius.sm,
+  },
+  macroRow: {
+    flexDirection: 'row' as const,
+    gap: spacing[2],
+  },
+  macroPill: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[1],
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: radius['2xl'],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1.5],
+  },
+  macroDot: { width: 6, height: 6, borderRadius: radius.sm },
+}));
 
 export const CalorieSummaryCard = memo(
   ({ caloriesIn, caloriesOut, calorieGoal, protein, carbs, fat }: Props) => {
     const { colors } = useTheme();
+    const styles = useStyles();
 
     const inPercent = useMemo(
       () => (calorieGoal > 0 ? (caloriesIn / calorieGoal) * 100 : 0),
@@ -117,7 +152,6 @@ export const CalorieSummaryCard = memo(
 
     return (
       <Card style={styles.card}>
-        {/* ── Header ── */}
         <AppView style={styles.header}>
           <AppText variant="headline">Calories Today</AppText>
           <AppText variant="caption1" color={netColor} weight="semiBold">
@@ -125,9 +159,7 @@ export const CalorieSummaryCard = memo(
           </AppText>
         </AppView>
 
-        {/* ── Body ── */}
         <AppView style={styles.body}>
-          {/* Ring */}
           <AppView style={styles.ringWrap}>
             <CalorieRing
               percent={inPercent}
@@ -142,58 +174,35 @@ export const CalorieSummaryCard = memo(
             </AppView>
           </AppView>
 
-          {/* Stats column */}
           <AppView style={styles.statsCol}>
-            {/* Calories In */}
             <AppView style={styles.statRow}>
-              <View
-                style={[
-                  styles.statDot,
-                  { backgroundColor: colors.primary },
-                ]}
-              />
+              <View style={[styles.statDot, { backgroundColor: colors.primary }]} />
               <AppView>
-                <AppText variant="subhead" weight="semiBold">
-                  {caloriesIn} kcal
-                </AppText>
+                <AppText variant="subhead" weight="semiBold">{caloriesIn} kcal</AppText>
                 <AppText variant="caption2">Calories In</AppText>
               </AppView>
             </AppView>
 
-            {/* Calories Out */}
             <AppView style={styles.statRow}>
               <View style={[styles.statDot, { backgroundColor: '#E07B39' }]} />
               <AppView>
-                <AppText variant="subhead" weight="semiBold">
-                  {caloriesOut} kcal
-                </AppText>
+                <AppText variant="subhead" weight="semiBold">{caloriesOut} kcal</AppText>
                 <AppText variant="caption2">Calories Out</AppText>
               </AppView>
             </AppView>
 
-            {/* Goal */}
             <AppView style={styles.statRow}>
-              <View
-                style={[
-                  styles.statDot,
-                  { backgroundColor: colors.mutedForeground },
-                ]}
-              />
+              <View style={[styles.statDot, { backgroundColor: colors.mutedForeground }]} />
               <AppView>
-                <AppText variant="subhead" weight="semiBold">
-                  {calorieGoal} kcal
-                </AppText>
+                <AppText variant="subhead" weight="semiBold">{calorieGoal} kcal</AppText>
                 <AppText variant="caption2">Daily Goal</AppText>
               </AppView>
             </AppView>
           </AppView>
         </AppView>
 
-        {/* ── Burn bar ── */}
         <AppView style={styles.burnRow}>
-          <AppText variant="caption1" weight="semiBold">
-            Burned
-          </AppText>
+          <AppText variant="caption1" weight="semiBold">Burned</AppText>
           <AppView style={styles.burnBarBg}>
             <View
               style={[
@@ -208,7 +217,6 @@ export const CalorieSummaryCard = memo(
           <AppText variant="caption2">{caloriesOut} kcal</AppText>
         </AppView>
 
-        {/* ── Macros ── */}
         <AppView style={styles.macroRow}>
           <MacroPill label=" Protein" value={protein} unit="g" color="#2E7D62" />
           <MacroPill label=" Carbs" value={carbs} unit="g" color="#3A5FA0" />
@@ -220,63 +228,3 @@ export const CalorieSummaryCard = memo(
 );
 
 CalorieSummaryCard.displayName = 'CalorieSummaryCard';
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  card: { gap: 16 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  body: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  ringWrap: {
-    width: RING_SIZE,
-    height: RING_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  statsCol: { flex: 1, gap: 10 },
-  statRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  statDot: { width: 8, height: 8, borderRadius: 4 },
-  burnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  burnBarBg: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    overflow: 'hidden',
-  },
-  burnBarFill: {
-    height: 6,
-    borderRadius: 3,
-  },
-  macroRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  macroPill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  macroDot: { width: 6, height: 6, borderRadius: 3 },
-});

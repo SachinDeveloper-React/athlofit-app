@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,9 +20,28 @@ import GaugeSection from '../components/bmi/GaugeSection';
 import BmiHistoryChart from '../components/bmi/BmiHistoryChart';
 import BmiHistoryList from '../components/bmi/BmiHistoryList';
 import { calcBmi, getCategory, idealWeightRange, CATEGORY_META } from '../components/bmi/bmiHelpers';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  container: { flex: 1 },
+  scroll: { padding: spacing[4], gap: spacing[4] },
+  sdkCard: { borderRadius: radius.xl, borderWidth: 0.5, padding: spacing[4] },
+  sdkRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[3] },
+  refreshBtn: { width: 38, height: 38, borderRadius: radius.full, alignItems: 'center' as const, justifyContent: 'center' as const },
+  sliderCard: { borderRadius: radius.xl, borderWidth: 0.5, padding: spacing[4] },
+  sliderRow: { gap: spacing[1.5] },
+  sliderLabelWrap: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: spacing[1] },
+  slider: { width: '100%' as const, height: 36 },
+  sliderRange: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginTop: -4 },
+  divider: { height: 0.5, marginVertical: spacing[3.5 as any] ?? 14 },
+  idealCard: { borderRadius: radius.xl, borderWidth: 0.5, padding: spacing[4] },
+  idealRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[3] },
+  idealIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center' as const, justifyContent: 'center' as const },
+}));
 
 const BmiCalculatorScreen = memo(() => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   const { weight: sdkWeight, height: sdkHeight, isLoading: sdkLoading, permissionDenied, error: sdkError, refresh: refreshSdk } = useHealthMetrics();
 
@@ -192,20 +210,3 @@ const BmiCalculatorScreen = memo(() => {
 
 BmiCalculatorScreen.displayName = 'BmiCalculatorScreen';
 export default BmiCalculatorScreen;
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { padding: 16, gap: 16 },
-  sdkCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16 },
-  sdkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  refreshBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  sliderCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16 },
-  sliderRow: { gap: 6 },
-  sliderLabelWrap: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  slider: { width: '100%', height: 36 },
-  sliderRange: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4 },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
-  idealCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16 },
-  idealRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  idealIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-});

@@ -4,6 +4,10 @@ export type RowBase = {
   icon: React.ComponentType<{ size?: number; color?: string }>;
   iconColorKey?: 'primary' | 'secondary' | 'destructive' | 'foreground';
   onPress?: () => void;
+  badge?: {
+    text: string;
+    variant: 'default' | 'warning' | 'destructive' | 'success';
+  };
 };
 
 export type ToggleRow = RowBase & {

@@ -1,17 +1,13 @@
 // ─── MealSection.tsx ──────────────────────────────────────────────────────────
-// Collapsible accordion for a single meal group (Breakfast / Lunch / Dinner / Snacks).
-// Lists logged entries, allows adding new ones and deleting existing ones.
-
 import React, { memo, useCallback, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, Animated } from 'react-native';
+import { TouchableOpacity, View, Animated } from 'react-native';
 import { AppText, AppView, Card } from '../../../../components';
 import { Icon } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { MealLogBottomSheet } from './MealLogBottomSheet';
 import type { MealEntry, MealMeta, LogMealRequest } from '../../types/nutrition.types';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface Props {
   meta: MealMeta;
@@ -22,23 +18,82 @@ interface Props {
   isDeleting?: boolean;
 }
 
-// ─── Entry Row ────────────────────────────────────────────────────────────────
-
 interface EntryRowProps {
   entry: MealEntry;
   accentColor: string;
   onDelete: (id: string) => void;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  card: { gap: 0, padding: 0, overflow: 'hidden' as const },
+  headerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[3],
+    padding: spacing[4],
+  },
+  emojiBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  emoji: { fontSize: 22 },
+  titleCol: { flex: 1 },
+  rightSide: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[2],
+  },
+  entryCount: {
+    minWidth: spacing[5],
+    height: spacing[5],
+    borderRadius: spacing[2.5],
+    paddingHorizontal: spacing[1.5],
+    textAlign: 'center' as const,
+    lineHeight: spacing[5],
+    overflow: 'hidden' as const,
+  },
+  body: { paddingHorizontal: spacing[4], paddingBottom: spacing[4], gap: spacing[3] },
+  divider: { height: 1, marginHorizontal: -spacing[4] },
+  entries: { gap: spacing[3], marginTop: spacing[1] },
+  entryRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[2.5],
+  },
+  entryDot: { width: 8, height: 8, borderRadius: radius.full },
+  entryInfo: { flex: 1 },
+  entryMacros: { flexDirection: 'row' as const, gap: spacing[1.5], marginTop: spacing[0.5] },
+  deleteBtn: { padding: spacing[1] },
+  empty: {
+    alignItems: 'center' as const,
+    paddingVertical: spacing[4],
+    gap: spacing[1.5],
+    opacity: 0.5,
+  },
+  emptyEmoji: { fontSize: 28 },
+  addBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing[1.5],
+    borderWidth: 1.5,
+    borderRadius: spacing[2.5],
+    borderStyle: 'dashed' as const,
+    paddingVertical: spacing[2.5],
+  },
+  addLabel: { fontSize: 14 },
+}));
+
 const EntryRow = memo(({ entry, accentColor, onDelete }: EntryRowProps) => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   return (
     <View style={styles.entryRow}>
-      {/* Color dot */}
       <View style={[styles.entryDot, { backgroundColor: accentColor }]} />
-
-      {/* Name + macros */}
       <AppView style={styles.entryInfo}>
         <AppText variant="subhead" weight="semiBold" numberOfLines={1}>
           {entry.name}
@@ -60,14 +115,10 @@ const EntryRow = memo(({ entry, accentColor, onDelete }: EntryRowProps) => {
           )}
         </AppView>
       </AppView>
-
-      {/* Calories */}
       <AppText variant="subhead" weight="bold" color={accentColor}>
         {entry.calories}
         <AppText variant="caption2"> kcal</AppText>
       </AppText>
-
-      {/* Delete */}
       <TouchableOpacity
         onPress={() => onDelete(entry._id)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -81,22 +132,22 @@ const EntryRow = memo(({ entry, accentColor, onDelete }: EntryRowProps) => {
 
 EntryRow.displayName = 'EntryRow';
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-const EmptyMeal = memo(({ emoji }: { emoji: string }) => (
-  <AppView style={styles.empty}>
-    <AppText style={styles.emptyEmoji}>{emoji}</AppText>
-    <AppText variant="caption1">Nothing logged yet</AppText>
-  </AppView>
-));
+const EmptyMeal = memo(({ emoji }: { emoji: string }) => {
+  const styles = useStyles();
+  return (
+    <AppView style={styles.empty}>
+      <AppText style={styles.emptyEmoji}>{emoji}</AppText>
+      <AppText variant="caption1">Nothing logged yet</AppText>
+    </AppView>
+  );
+});
 
 EmptyMeal.displayName = 'EmptyMeal';
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export const MealSection = memo(
   ({ meta, entries, onAddMeal, onDeleteMeal, isAdding, isDeleting }: Props) => {
     const { colors } = useTheme();
+    const styles = useStyles();
     const [expanded, setExpanded] = useState(false);
     const [sheetVisible, setSheetVisible] = useState(false);
 
@@ -117,24 +168,20 @@ export const MealSection = memo(
     return (
       <>
         <Card style={styles.card}>
-          {/* ── Header row (always visible) ── */}
           <TouchableOpacity
             onPress={toggle}
             activeOpacity={0.75}
             style={styles.headerRow}
           >
-            {/* Emoji badge */}
             <View style={[styles.emojiBadge, { backgroundColor: meta.bg }]}>
               <AppText style={styles.emoji}>{meta.emoji}</AppText>
             </View>
 
-            {/* Title + count */}
             <AppView style={styles.titleCol}>
               <AppText variant="headline">{meta.label}</AppText>
               <AppText variant="caption2">{meta.timeHint}</AppText>
             </AppView>
 
-            {/* Calorie summary & chevron */}
             <AppView style={styles.rightSide}>
               <AppText
                 variant="subhead"
@@ -161,10 +208,8 @@ export const MealSection = memo(
             </AppView>
           </TouchableOpacity>
 
-          {/* ── Expanded body ── */}
           {expanded && (
             <AppView style={styles.body}>
-              {/* Divider */}
               <View
                 style={[
                   styles.divider,
@@ -172,7 +217,6 @@ export const MealSection = memo(
                 ]}
               />
 
-              {/* Entries */}
               {entries.length === 0 ? (
                 <EmptyMeal emoji={meta.emoji} />
               ) : (
@@ -188,7 +232,6 @@ export const MealSection = memo(
                 </AppView>
               )}
 
-              {/* Add button */}
               <TouchableOpacity
                 onPress={openSheet}
                 activeOpacity={0.8}
@@ -208,7 +251,6 @@ export const MealSection = memo(
           )}
         </Card>
 
-        {/* ── Log Bottom Sheet ── */}
         <MealLogBottomSheet
           visible={sheetVisible}
           meal={meta}
@@ -222,68 +264,3 @@ export const MealSection = memo(
 );
 
 MealSection.displayName = 'MealSection';
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  card: { gap: 0, padding: 0, overflow: 'hidden' },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-  },
-  emojiBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 22 },
-  titleCol: { flex: 1 },
-  rightSide: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  entryCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    textAlign: 'center',
-    lineHeight: 20,
-    overflow: 'hidden',
-  },
-  body: { paddingHorizontal: 16, paddingBottom: 16, gap: 12 },
-  divider: { height: 1, marginHorizontal: -16 },
-  entries: { gap: 12, marginTop: 4 },
-  entryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  entryDot: { width: 8, height: 8, borderRadius: 4 },
-  entryInfo: { flex: 1 },
-  entryMacros: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  deleteBtn: { padding: 4 },
-  empty: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    gap: 6,
-    opacity: 0.5,
-  },
-  emptyEmoji: { fontSize: 28 },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderRadius: 10,
-    borderStyle: 'dashed',
-    paddingVertical: 10,
-  },
-  addLabel: { fontSize: 14 },
-});

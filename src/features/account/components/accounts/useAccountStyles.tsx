@@ -2,12 +2,14 @@ import { StyleSheet } from 'react-native';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { ThemeColors } from '../../../../constants/colors';
 import { SCREEN_WIDTH } from '../../../../utils/measure';
+import { Spacing } from '../../../../constants/spacing';
+import { Radius } from '../../../../constants/spacing';
+import { FontSize, FontWeight } from '../../../../constants/typography';
 
 export const useAccountStyles = (colors: ThemeColors) => {
   return StyleSheet.create({
     listContent: {
-      paddingTop: 14,
-      // paddingBottom: verticalScale(20),
+      paddingTop: Spacing[3.5] ?? 14,
     },
 
     profileCard: {
@@ -22,14 +24,14 @@ export const useAccountStyles = (colors: ThemeColors) => {
 
     topRight: {
       flexDirection: 'row',
-      gap: 10,
+      gap: Spacing[2.5],
       alignItems: 'center',
     },
 
     iconPill: {
       width: 38,
       height: 38,
-      borderRadius: 999,
+      borderRadius: Radius.full,
       backgroundColor: withOpacity(colors.foreground, 0.04),
       alignItems: 'center',
       justifyContent: 'center',
@@ -38,18 +40,18 @@ export const useAccountStyles = (colors: ThemeColors) => {
 
     dot: {
       position: 'absolute',
-      top: 10,
+      top: Spacing[2.5],
       right: 11,
       width: 6,
       height: 6,
-      borderRadius: 99,
+      borderRadius: Radius.full,
       backgroundColor: colors.destructive,
     },
 
     avatarWrap: {
       width: 76,
       height: 76,
-      borderRadius: 22,
+      borderRadius: Radius['3xl'],
       overflow: 'hidden',
       backgroundColor: withOpacity(colors.foreground, 0.06),
     },
@@ -59,73 +61,73 @@ export const useAccountStyles = (colors: ThemeColors) => {
       backgroundColor: withOpacity(colors.foreground, 0.08),
     },
 
-    nameBlock: { marginTop: 12, gap: 6 },
+    nameBlock: { marginTop: Spacing[3], gap: Spacing[1.5] },
 
     name: {
-      fontSize: 30,
-      fontWeight: '900',
+      fontSize: FontSize['5xl'],
+      fontWeight: FontWeight.bold,
       letterSpacing: 0.3,
       color: colors.foreground,
     },
 
     premium: {
-      fontSize: 8,
-      fontWeight: '600',
+      fontSize: FontSize.xs,
+      fontWeight: FontWeight.semiBold,
       letterSpacing: 2.2,
       textTransform: 'uppercase',
       color: colors.primary,
     },
 
     statsRow: {
-      marginTop: 16,
+      marginTop: Spacing[4],
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 12,
+      gap: Spacing[3],
       justifyContent: 'space-between',
     },
 
     statPill: {
       width: SCREEN_WIDTH / 2 - (32 + 10),
-      borderRadius: 18,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
+      borderRadius: Radius['2xl'],
+      paddingVertical: Spacing[3],
+      paddingHorizontal: Spacing[3.5] ?? 14,
       backgroundColor: withOpacity(colors.foreground, 0.03),
-      gap: 8,
+      gap: Spacing[2],
     },
 
     statTop: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Spacing[2],
     },
 
     statLabel: {
-      fontSize: 8,
-      fontWeight: '900',
+      fontSize: FontSize.xs,
+      fontWeight: FontWeight.bold,
       letterSpacing: 1.8,
       textTransform: 'uppercase',
       color: withOpacity(colors.foreground, 0.45),
     },
 
     statValue: {
-      fontSize: 14,
-      fontWeight: '900',
+      fontSize: FontSize.md,
+      fontWeight: FontWeight.bold,
       letterSpacing: 0.2,
       color: colors.foreground,
     },
 
     tierCard: {
-      marginTop: 18,
-      borderRadius: 22,
-      padding: 18,
-      backgroundColor: '#0B1220', // matches dark tier panel
+      marginTop: Spacing[18] ?? 72,
+      borderRadius: Radius['3xl'],
+      padding: Spacing[18] ?? 72,
+      backgroundColor: colors.tierBackground,
       overflow: 'hidden',
     },
 
     tierWatermark: {
       position: 'absolute',
-      right: -16,
-      bottom: -18,
+      right: -Spacing[4],
+      bottom: -Spacing[18] ?? -72,
       opacity: 1,
     },
 
@@ -133,67 +135,66 @@ export const useAccountStyles = (colors: ThemeColors) => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 14,
+      marginBottom: Spacing[3.5] ?? 14,
     },
 
     tierLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Spacing[2.5],
     },
 
     tierLabel: {
-      fontSize: 12,
-      fontWeight: '700',
+      fontSize: FontSize.sm,
+      fontWeight: FontWeight.bold,
       letterSpacing: 2,
       textTransform: 'uppercase',
-      color: '#FFFFFF',
+      color: colors.tierForeground,
     },
 
     tierXp: {
-      fontSize: 12,
-      color: withOpacity('#FFFFFF', 0.55),
+      fontSize: FontSize.sm,
+      color: withOpacity(colors.tierForeground, 0.55),
     },
 
     progressTrack: {
-      height: 8,
-      borderRadius: 999,
-      backgroundColor: withOpacity('#FFFFFF', 0.12),
+      height: Spacing[2],
+      borderRadius: Radius.full,
+      backgroundColor: withOpacity(colors.tierForeground, 0.12),
       overflow: 'hidden',
     },
 
     progressFill: {
-      height: 8,
-      borderRadius: 999,
-      backgroundColor: '#FFB000', // warm fill like design
+      height: Spacing[2],
+      borderRadius: Radius.full,
+      backgroundColor: colors.tierProgress,
     },
 
     tierHint: {
-      marginTop: 12,
-      fontSize: 8,
+      marginTop: Spacing[3],
+      fontSize: FontSize.xs,
       letterSpacing: 0.8,
-      color: withOpacity('#FFFFFF', 0.55),
+      color: withOpacity(colors.tierForeground, 0.55),
       textTransform: 'uppercase',
-      lineHeight: 16,
+      lineHeight: Spacing[4],
     },
 
     sectionTitle: {
-      marginTop: 22,
-      marginBottom: 10,
-      paddingHorizontal: 4,
-      fontSize: 11,
-      fontWeight: '900',
+      marginTop: Spacing[5.5] ?? 22,
+      marginBottom: Spacing[2.5],
+      paddingHorizontal: Spacing[1],
+      fontSize: FontSize.xs,
+      fontWeight: FontWeight.bold,
       letterSpacing: 1.8,
       textTransform: 'uppercase',
       color: withOpacity(colors.foreground, 0.35),
     },
 
-    // this is just a "background" card to match the large rounded container
     listCard: {
       position: 'absolute',
-      left: 16,
-      right: 16,
-      top: 14 + 76 + 18 + 22 + 10 + 18 + 140, // ignored visually; rows sit below anyway
+      left: Spacing[4],
+      right: Spacing[4],
+      top: 14 + 76 + 18 + 22 + 10 + 18 + 140,
     },
 
     rowPress: {
@@ -205,23 +206,23 @@ export const useAccountStyles = (colors: ThemeColors) => {
       backgroundColor: colors.card,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: Spacing[4],
       borderRadius: 0,
     },
 
     rowIconWrap: {
       width: 44,
       height: 44,
-      borderRadius: 16,
+      borderRadius: Radius.xl,
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 14,
+      marginRight: Spacing[3.5] ?? 14,
     },
 
     rowTitle: {
       flex: 1,
-      fontSize: 10,
-      fontWeight: '600',
+      fontSize: FontSize.xs,
+      fontWeight: FontWeight.semiBold,
       textTransform: 'uppercase',
       color: colors.foreground,
     },
@@ -229,28 +230,28 @@ export const useAccountStyles = (colors: ThemeColors) => {
     rowRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Spacing[2.5],
     },
 
     badge: {
       minWidth: 26,
       height: 26,
-      paddingHorizontal: 8,
-      borderRadius: 999,
+      paddingHorizontal: Spacing[2],
+      borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: withOpacity(colors.foreground, 0.06),
     },
 
     badgeText: {
-      fontSize: 11,
-      fontWeight: '900',
+      fontSize: FontSize.xs,
+      fontWeight: FontWeight.bold,
       color: withOpacity(colors.foreground, 0.55),
     },
 
     sep: {
       height: 1,
-      marginLeft: 16 + 44 + 14, // align to start after icon
+      marginLeft: Spacing[4] + 44 + Spacing[3.5] ?? 14,
       backgroundColor: withOpacity(colors.foreground, 0.06),
     },
   });

@@ -31,17 +31,17 @@ const sizeMap: Record<AvatarSize, { box: number; font: number }> = {
 };
 
 // Deterministic color from name string
-const AVATAR_COLORS = [
-  '#0099FF',
-  '#6B5CFF',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#EC4899',
-  '#8B5CF6',
-  '#06B6D4',
-];
-function colorFromName(name: string): string {
+function colorFromName(name: string, colors: any): string {
+  const AVATAR_COLORS = [
+    colors.avatarPrimary,
+    colors.avatarPurple,
+    colors.avatarGreen,
+    colors.avatarOrange,
+    colors.avatarRed,
+    colors.avatarPink,
+    colors.avatarIndigo,
+    colors.avatarCyan,
+  ];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
@@ -67,7 +67,7 @@ const Avatar: React.FC<AvatarProps> = ({
   const { colors } = useTheme();
   const { box, font } = sizeMap[size];
   const radius = shape === 'circle' ? box / 2 : Radius.xl;
-  const bgColor = bg ?? (name ? colorFromName(name) : colors.muted);
+  const bgColor = bg ?? (name ? colorFromName(name, colors) : colors.muted);
 
   const containerStyle: StyleProp<ViewStyle> = [
     styles.base,
@@ -89,7 +89,7 @@ const Avatar: React.FC<AvatarProps> = ({
         style={{
           fontSize: font,
           fontWeight: FontWeight.semiBold,
-          color: '#FFFFFF',
+          color: colors.primaryForeground,
         }}
       >
         {name ? initials(name) : '?'}

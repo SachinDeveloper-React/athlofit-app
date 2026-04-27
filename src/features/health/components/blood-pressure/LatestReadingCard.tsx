@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
 import { AppText, AppView, Card } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { BPReading } from '../../types/bloodpressure.types';
 import { CATEGORY_META } from '../../constants/bpClassifier.constant';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface LatestReadingCardProps {
   reading: BPReading;
@@ -14,10 +14,21 @@ const formatTime = (date: Date) =>
   ' · ' +
   date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  card: { marginBottom: spacing[4] },
+  top: { marginBottom: spacing[2] },
+  label: { marginBottom: spacing[2] },
+  bpRow: { marginBottom: spacing[1] },
+  unit: { marginBottom: spacing[2.5], marginLeft: spacing[1] },
+  pulse: { marginTop: spacing[1] },
+  time: { marginTop: spacing[1] },
+  advice: { marginTop: spacing[3] },
+}));
+
 export const LatestReadingCard: React.FC<LatestReadingCardProps> = ({
   reading,
 }) => {
-  const { colors } = useTheme();
+  const styles = useStyles();
   const meta = CATEGORY_META[reading.category];
 
   return (
@@ -62,14 +73,3 @@ export const LatestReadingCard: React.FC<LatestReadingCardProps> = ({
     </Card>
   );
 };
-
-const styles = StyleSheet.create({
-  card: { marginBottom: 16 },
-  top: { marginBottom: 8 },
-  label: { marginBottom: 8 },
-  bpRow: { marginBottom: 4 },
-  unit: { marginBottom: 10, marginLeft: 4 },
-  pulse: { marginTop: 4 },
-  time: { marginTop: 4 },
-  advice: { marginTop: 12 },
-});

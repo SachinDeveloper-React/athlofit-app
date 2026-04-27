@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, Dimensions } from 'react-native';
 import { ProgressChart } from 'react-native-chart-kit';
 import { AppText, Card } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { ActivityRingsData } from '../types/analytics';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -11,21 +12,35 @@ interface Props {
   rings: ActivityRingsData;
 }
 
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  container: {
+    marginBottom: spacing[6],
+    paddingTop: spacing[2],
+  },
+  header: {
+    alignItems: 'center' as const,
+    marginBottom: spacing[2],
+  },
+  chartContainer: {
+    alignItems: 'center' as const,
+  },
+}));
+
 export const ActivityRings: React.FC<Props> = ({ rings }) => {
   const { colors, isDark } = useTheme();
+  const styles = useStyles();
 
   const data = {
-    labels: ['Move', 'Exercise', 'Stand'], // Not directly shown but required for structure
+    labels: ['Move', 'Exercise', 'Stand'],
     data: [
       rings.stepsGoalPercent,
       rings.caloriesGoalPercent,
       rings.timeGoalPercent,
     ],
-    // Let's color code them (Red, Green, Blue) like standard activity rings
     colors: [
-      `rgba(255, 59, 48, 1)`,  // Red - Move
-      `rgba(52, 199, 89, 1)`,  // Green - Exercise
-      `rgba(0, 122, 255, 1)`,  // Blue - Stand (mapped to Time)
+      `rgba(255, 59, 48, 1)`,
+      `rgba(52, 199, 89, 1)`,
+      `rgba(0, 122, 255, 1)`,
     ]
   };
 
@@ -38,7 +53,7 @@ export const ActivityRings: React.FC<Props> = ({ rings }) => {
       <View style={styles.chartContainer}>
         <ProgressChart
           data={data}
-          width={screenWidth - 32} // Match container padding
+          width={screenWidth - 32}
           height={200}
           strokeWidth={14}
           radius={28}
@@ -48,7 +63,7 @@ export const ActivityRings: React.FC<Props> = ({ rings }) => {
             backgroundGradientTo: colors.background,
             backgroundGradientFromOpacity: 0,
             backgroundGradientToOpacity: 0,
-            color: (opacity = 1) => `rgba(${isDark ? '255, 255, 255' : '0, 0, 0'}, ${opacity * 0.1})`, // Ring track color
+            color: (opacity = 1) => `rgba(${isDark ? '255, 255, 255' : '0, 0, 0'}, ${opacity * 0.1})`,
             labelColor: (opacity = 1) => colors.mutedForeground,
           }}
           hideLegend={false}
@@ -58,17 +73,3 @@ export const ActivityRings: React.FC<Props> = ({ rings }) => {
     </Card>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 24,
-    paddingTop: 8,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  chartContainer: {
-    alignItems: 'center',
-  }
-});

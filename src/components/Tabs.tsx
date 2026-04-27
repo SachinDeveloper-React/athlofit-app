@@ -55,6 +55,8 @@ type TabButtonProps = {
   paddingV: number;
   activeColor: string;
   inactiveColor: string;
+  labelFontSize: number;
+  labelFontWeight: string;
   onPress: () => void;
 };
 
@@ -67,6 +69,8 @@ const TabButton = memo(
     paddingV,
     activeColor,
     inactiveColor,
+    labelFontSize,
+    labelFontWeight,
     onPress,
   }: TabButtonProps) => {
     const scale = useSharedValue(1);
@@ -109,15 +113,15 @@ const TabButton = memo(
         style={[containerStyle, aStyle]}
       >
         <AppText
-          variant="caption1"
-          style={[styles.label, { color: textColor }]}
+          variant="caption2"
+          style={[styles.label, { color: textColor, fontSize: labelFontSize, fontWeight: labelFontWeight as any }]}
         >
           {label.toUpperCase()}
         </AppText>
       </AnimatedPressable>
     );
   },
-  // Custom comparator — skip re-render if only `isActive` flips on inactive→inactive
+  // Custom comparator
   (prev, next) => {
     if (prev.isActive !== next.isActive) return false;
     if (prev.label !== next.label) return false;
@@ -126,6 +130,8 @@ const TabButton = memo(
     if (prev.radius !== next.radius) return false;
     if (prev.activeColor !== next.activeColor) return false;
     if (prev.inactiveColor !== next.inactiveColor) return false;
+    if (prev.labelFontSize !== next.labelFontSize) return false;
+    if (prev.labelFontWeight !== next.labelFontWeight) return false;
     if (prev.onPress !== next.onPress) return false;
     return true;
   },
@@ -140,7 +146,7 @@ const AppTabsInner = <V extends number | string>({
   activeTab,
   onPress,
 }: Props<V>) => {
-  const { spacing, colors, radius, fontSize, shadow } = useTheme();
+  const { spacing, colors, radius, fontSize, fontWeight, shadow } = useTheme();
   const [containerW, setContainerW] = useState(0);
 
   // ── Derived values ──────────────────────────────────────────────────────────
@@ -253,6 +259,8 @@ const AppTabsInner = <V extends number | string>({
           paddingV={spacing[1]}
           activeColor={colors.primary}
           inactiveColor={colors.foreground}
+          labelFontSize={fontSize.xs}
+          labelFontWeight={fontWeight.semiBold}
           onPress={pressHandlers.get(item.id)!}
         />
       ))}
@@ -275,9 +283,7 @@ const styles = {
     overflow: 'hidden' as const,
   },
   label: {
-    fontSize: 10,
     textAlign: 'center' as const,
     letterSpacing: 1,
-    fontWeight: '600' as const,
   },
 };

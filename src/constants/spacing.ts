@@ -4,6 +4,7 @@ export const Spacing = {
   0: 0,
   0.5: 2,
   1: 4,
+  1.25: 5,
   1.5: 6,
   2: 8,
   2.5: 10,
@@ -15,7 +16,10 @@ export const Spacing = {
   8: 32,
   10: 40,
   12: 48,
+  14: 56,
+  15: 60,
   16: 64,
+  18: 72,
   20: 80,
 } as const;
 
@@ -35,6 +39,13 @@ export const Radius = {
 // iOS-style shadows (softer, more diffuse)
 export const Shadow = {
   none: {},
+  shadow1: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   xs: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },

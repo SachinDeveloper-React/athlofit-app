@@ -4,11 +4,42 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  StyleSheet,
   TextInput,
 } from 'react-native';
 import { AppText, AppView, Button } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { makeStyles } from '../../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    padding: spacing[6],
+  },
+  modalCard: {
+    width: '100%' as const,
+    borderRadius: radius['2xl'],
+    padding: spacing[6],
+  },
+  modalTitle: { marginBottom: spacing[1.5] },
+  modalSub: { marginBottom: spacing[5], lineHeight: 18 },
+  bpmRow: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    marginBottom: spacing[5],
+  },
+  bpmInput: {
+    flex: 1,
+    fontSize: 40,
+    fontWeight: fontWeight.medium,
+    paddingVertical: spacing[2.5],
+    textAlign: 'center' as const,
+  },
+  flex1: { flex: 1 },
+}));
 
 export const ManualEntryModal = memo(
   ({
@@ -23,6 +54,7 @@ export const ManualEntryModal = memo(
     const [value, setValue] = useState('');
     const [saving, setSaving] = useState(false);
     const { colors } = useTheme();
+    const styles = useStyles();
 
     const handleSave = async () => {
       const bpm = parseInt(value, 10);
@@ -99,34 +131,3 @@ export const ManualEntryModal = memo(
     );
   },
 );
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    borderRadius: 18,
-    padding: 24,
-  },
-  modalTitle: { marginBottom: 6 },
-  modalSub: { marginBottom: 20, lineHeight: 18 },
-  bpmRow: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  bpmInput: {
-    flex: 1,
-    fontSize: 40,
-    fontWeight: '500',
-    paddingVertical: 10,
-    textAlign: 'center',
-  },
-  flex1: { flex: 1 },
-});

@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native';
 import { AppView } from '../../../../components';
 import { StepProgressCard } from './StepProgressCard';
 import MetricCard, { type MetricCardProps } from '../MetricCard';
@@ -16,6 +16,7 @@ import { WeeklyStepEntry } from '../../types/healthTypes';
 import type { StreaksResponseData } from '../../types/gamification.type';
 import { useEarnCoins } from '../../hooks/useEarnCoins';
 import { useBmiHistory } from '../../hooks/useBmi';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 export type MetricRow = [MetricCardProps, MetricCardProps];
 
@@ -42,20 +43,32 @@ type Props = {
   onUpdate?: () => void;
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
 type RowProps = { row: MetricRow };
 
-const MetricRowPair = memo(({ row }: RowProps) => (
-  <AppView style={styles.metricRow}>
-    <MetricCard {...row[0]} />
-    <MetricCard {...row[1]} />
-  </AppView>
-));
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  container: {
+    gap: spacing[3],
+  },
+  hidden: {
+    display: 'none' as const,
+  },
+  metricRow: {
+    flexDirection: 'row' as const,
+    gap: spacing[4.5 as any] ?? 18,
+  },
+}));
+
+const MetricRowPair = memo(({ row }: RowProps) => {
+  const styles = useStyles();
+  return (
+    <AppView style={styles.metricRow}>
+      <MetricCard {...row[0]} />
+      <MetricCard {...row[1]} />
+    </AppView>
+  );
+});
 
 MetricRowPair.displayName = 'MetricRowPair';
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 const DailyStatsSection = memo(
   ({
@@ -73,6 +86,7 @@ const DailyStatsSection = memo(
     syncDailyProgress,
     onUpdate,
   }: Props) => {
+    const styles = useStyles();
     const { earnCoins, isPending: claimPending, claimedToday } = useEarnCoins();
     const { data: bmiHistory } = useBmiHistory(1);
     const latestBmi = bmiHistory?.[0];
@@ -80,29 +94,23 @@ const DailyStatsSection = memo(
     const handleClaim = useCallback(
       (coinsToAdd: number) => {
         earnCoins(coinsToAdd);
-        // Also update local streak/coin progress
         syncDailyProgress(coinsToAdd, steps >= (goal ?? 10000));
       },
       [earnCoins, syncDailyProgress, steps, goal],
     );
 
     const goToHeartRate = useCallback(() => {
-      navigate('HealthStack', {
-        screen: 'HeartRateScreen',
-      });
+      navigate('HealthStack', { screen: 'HeartRateScreen' });
     }, []);
 
     const goToBloodPressure = useCallback(() => {
-      navigate('HealthStack', {
-        screen: 'BloodPressureScreen',
-      });
+      navigate('HealthStack', { screen: 'BloodPressureScreen' });
     }, []);
 
     const goToBmiCalculator = useCallback(() => {
-      navigate('HealthStack', {
-        screen: 'BmiCalculatorScreen',
-      });
+      navigate('HealthStack', { screen: 'BmiCalculatorScreen' });
     }, []);
+
     return (
       <AppView style={[styles.container, hidden && styles.hidden]}>
         <StepProgressCard
@@ -181,7 +189,6 @@ const DailyStatsSection = memo(
           </Pressable>
         ) : null}
 
-        {/* Daily challenges widget */}
         <ChallengeTrackerCard />
 
         <TrackerMotivation
@@ -192,8 +199,6 @@ const DailyStatsSection = memo(
             syncDailyProgress(coinsToday, streakWillContinue);
           }}
         />
-
-        
       </AppView>
     );
   },
@@ -202,18 +207,3 @@ const DailyStatsSection = memo(
 DailyStatsSection.displayName = 'DailyStatsSection';
 
 export default DailyStatsSection;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  container: {
-    gap: 12,
-  },
-  hidden: {
-    display: 'none',
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 18,
-  },
-});

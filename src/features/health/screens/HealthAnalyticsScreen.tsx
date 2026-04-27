@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -24,9 +23,37 @@ import {
   SummaryRow,
   InsightCard,
 } from '../components/analytics';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, shadow }) => ({
+  tabsWrap: { marginBottom: spacing[1] },
+  sectionLabel: { marginBottom: spacing[3], marginTop: spacing[5] },
+  loading: { flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const, minHeight: 300 },
+  empty: { flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const, minHeight: 300, paddingHorizontal: spacing[8] },
+  syncBtn: { width: 36, height: 36, borderRadius: radius.full, alignItems: 'center' as const, justifyContent: 'center' as const },
+  metricsGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing[2.5] },
+  overlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  overlaySpinner: {
+    width: spacing[16],
+    height: spacing[16],
+    borderRadius: radius['2xl'],
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    ...shadow.md,
+  },
+}));
 
 const HealthAnalyticsScreen = () => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('steps');
   const { activeTab, setActiveTab, data, isLoading, isFetching, syncMutation } = useHealthAnalytics('Week');
 
@@ -114,7 +141,6 @@ const HealthAnalyticsScreen = () => {
 
       {data ? (
         <>
-          {/* ── Chart first ── */}
           <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
             {METRIC_CONFIG[selectedMetric].label} Trend
           </AppText>
@@ -173,29 +199,3 @@ const HealthAnalyticsScreen = () => {
 };
 
 export default HealthAnalyticsScreen;
-
-const styles = StyleSheet.create({
-  tabsWrap: { marginBottom: 4 },
-  sectionLabel: { marginBottom: 12, marginTop: 20 },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 300 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 300, paddingHorizontal: 32 },
-  syncBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlaySpinner: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-});

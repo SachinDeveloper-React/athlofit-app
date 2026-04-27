@@ -1,14 +1,27 @@
-import React, { useCallback } from 'react';
-import { StyleSheet, RefreshControl } from 'react-native';
+import React from 'react';
+import { RefreshControl } from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import Avatar from '../components/leaderboard/Avatar';
 import Podium from '../components/leaderboard/Podium';
 import RankRow from '../components/leaderboard/RankRow';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  container: { paddingTop: spacing[3] },
+  heroCard: {
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    padding: spacing[5],
+    marginBottom: spacing[6],
+    alignItems: 'center' as const,
+  },
+}));
 
 const LeaderboardScreen: React.FC = () => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const { entries, myEntry, isLoading, isRefetching, refetch } = useLeaderboard();
 
   const below3 = entries.slice(3);
@@ -70,14 +83,3 @@ const LeaderboardScreen: React.FC = () => {
 };
 
 export default LeaderboardScreen;
-
-const styles = StyleSheet.create({
-  container: { paddingTop: 12 },
-  heroCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 20,
-    marginBottom: 24,
-    alignItems: 'center',
-  },
-});

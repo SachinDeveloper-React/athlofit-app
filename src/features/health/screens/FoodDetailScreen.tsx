@@ -28,6 +28,7 @@ import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
 import type { MealType } from '../types/nutrition.types';
 import MealPicker from '../components/nutrition/MealPicker';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 type DetailRoute = RouteProp<HealthStackParamList, typeof HealthRoutes.FOOD_DETAIL>;
 
@@ -118,8 +119,115 @@ const nutrientStyles = StyleSheet.create({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  root:        { flex: 1 },
+  loaderScreen:{ flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const },
+
+  // Hero
+  hero: {
+    height: 280,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+  },
+  heroEmoji:   { fontSize: 80, lineHeight: 96 },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  heroInfo: {
+    position: 'absolute' as const,
+    bottom: spacing[5],
+    left: spacing[5],
+    right: spacing[5],
+    gap: spacing[1.5],
+  },
+  heroName: {
+    color: '#fff',
+    lineHeight: 32,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  heroServing: { color: 'rgba(255,255,255,0.7)' },
+  dietBadge: {
+    alignSelf: 'flex-start' as const,
+    paddingHorizontal: spacing[2.5],
+    paddingVertical: spacing[1],
+    borderRadius: radius['2xl'],
+  },
+
+  // Nav buttons
+  backBtn: {
+    position: 'absolute' as const,
+    left: spacing[4],
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  favBtn: {
+    position: 'absolute' as const,
+    right: spacing[4],
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+
+  // Content
+  scroll:   { padding: spacing[4], gap: spacing[3.5 as any] ?? 14 },
+  section:  { gap: spacing[3] },
+
+  // Calorie pill
+  calPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    alignSelf: 'center' as const,
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    gap: spacing[0.5],
+  },
+  calDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    marginHorizontal: spacing[2.5],
+  },
+
+  // Macro row
+  macroRow: { flexDirection: 'row' as const, gap: spacing[2.5] },
+
+  // Cards
+  card: {
+    borderRadius: radius['2xl'],
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing[4],
+  },
+  cardHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginBottom: spacing[1],
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    marginHorizontal: -spacing[4],
+    marginVertical: spacing[0.5],
+  },
+
+  logBtn: { marginTop: spacing[3.5 as any] ?? 14 },
+}));
+
 const FoodDetailScreen = memo(() => {
   const { colors, isDark } = useTheme();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<DetailRoute>();
@@ -231,7 +339,7 @@ const FoodDetailScreen = memo(() => {
         </Animated.View>
 
         {/* Food name + badge on hero */}
-        <Animated.View entering={FadeInDown.duration(400)} style={[styles.heroInfo, { paddingBottom: insets.bottom > 0 ? 0 : 0 }]}>
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.heroInfo}>
           <View style={[styles.dietBadge, { backgroundColor: withOpacity('#fff', 0.2) }]}>
             <AppText variant="caption1" weight="semiBold" style={{ color: '#fff' }}>
               {dietMeta.emoji}  {dietMeta.label}
@@ -340,111 +448,3 @@ const FoodDetailScreen = memo(() => {
 
 FoodDetailScreen.displayName = 'FoodDetailScreen';
 export default FoodDetailScreen;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  root:        { flex: 1 },
-  loaderScreen:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  // Hero
-  hero: {
-    height: 280,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  heroEmoji:   { fontSize: 80, lineHeight: 96 },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.28)',
-  },
-  heroInfo: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    gap: 6,
-  },
-  heroName: {
-    color: '#fff',
-    lineHeight: 32,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  heroServing: { color: 'rgba(255,255,255,0.7)' },
-  dietBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-
-  // Nav buttons
-  backBtn: {
-    position: 'absolute',
-    left: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  favBtn: {
-    position: 'absolute',
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Content
-  scroll:   { padding: 16, gap: 14 },
-  section:  { gap: 12 },
-
-  // Calorie pill
-  calPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 40,
-    borderWidth: 1,
-    gap: 2,
-  },
-  calDivider: {
-    width: 1,
-    height: 18,
-    backgroundColor: 'rgba(0,0,0,0.12)',
-    marginHorizontal: 10,
-  },
-
-  // Macro row
-  macroRow: { flexDirection: 'row', gap: 10 },
-
-  // Cards
-  card: {
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginHorizontal: -16,
-    marginVertical: 2,
-  },
-
-  logBtn: { marginTop: 14 },
-});

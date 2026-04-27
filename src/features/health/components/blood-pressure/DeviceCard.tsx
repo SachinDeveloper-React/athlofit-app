@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
 import { State, Device } from 'react-native-ble-plx';
 import { AppText, AppView, Button, Card, Loader } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { PulseRing } from './PulseRing';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface DeviceCardProps {
   bleState: State;
@@ -15,6 +15,28 @@ interface DeviceCardProps {
   onDisconnect: () => void;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  card: { marginBottom: spacing[4] },
+  title: { marginBottom: spacing[4] },
+  illustration: { paddingVertical: spacing[5] },
+  iconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.full,
+    marginBottom: spacing[4],
+  },
+  icon: { fontSize: 36 },
+  hint: { lineHeight: 20 },
+  connectedBox: { width: '100%' as const },
+  connectedHeader: { marginBottom: spacing[5] },
+  dot: { width: 8, height: 8, borderRadius: radius.full },
+  waitBox: { paddingVertical: spacing[5], gap: spacing[2] },
+  heartIcon: { fontSize: 48, textAlign: 'center' as const },
+  waitText: { marginTop: spacing[4] },
+  readyText: { marginBottom: spacing[2] },
+  disconnectBtn: { marginTop: spacing[3] },
+}));
+
 export const DeviceCard: React.FC<DeviceCardProps> = ({
   bleState,
   scanning,
@@ -25,6 +47,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({
   onDisconnect,
 }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const isOff = bleState !== State.PoweredOn;
 
   return (
@@ -93,25 +116,3 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({
     </Card>
   );
 };
-
-const styles = StyleSheet.create({
-  card: { marginBottom: 16 },
-  title: { marginBottom: 16 },
-  illustration: { paddingVertical: 20 },
-  iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 16,
-  },
-  icon: { fontSize: 36 },
-  hint: { lineHeight: 20 },
-  connectedBox: { width: '100%' },
-  connectedHeader: { marginBottom: 20 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  waitBox: { paddingVertical: 20, gap: 8 },
-  heartIcon: { fontSize: 48, textAlign: 'center' },
-  waitText: { marginTop: 16 },
-  readyText: { marginBottom: 8 },
-  disconnectBtn: { marginTop: 12 },
-});

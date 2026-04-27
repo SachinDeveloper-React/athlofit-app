@@ -11,7 +11,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['GOAL', 'HYDRATION', 'PRODUCT', 'SECURITY', 'HEART', 'CHALLENGE', 'COIN'],
+      enum: ['GOAL', 'HYDRATION', 'PRODUCT', 'SECURITY', 'HEART', 'CHALLENGE', 'COIN', 'SYSTEM'],
       required: true,
     },
     title:   { type: String, required: true },

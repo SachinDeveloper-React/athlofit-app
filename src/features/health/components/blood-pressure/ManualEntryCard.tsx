@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { TextInput, Alert, StyleSheet } from 'react-native';
+import { TextInput, Alert } from 'react-native';
 import { AppText, AppView, Button, Card } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface ManualEntryCardProps {
   onSubmit: (
@@ -11,11 +12,33 @@ interface ManualEntryCardProps {
   ) => void;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  card: { marginBottom: spacing[4] },
+  title: { marginBottom: spacing[4] },
+  inputRow: { marginBottom: spacing[4] },
+  group: { flex: 1 },
+  label: { marginBottom: spacing[1.5] },
+  input: {
+    borderWidth: 1.5,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[3.5 as any] ?? 14,
+    paddingVertical: spacing[3],
+    fontSize: 22,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center' as const,
+  },
+  unitLabel: { marginTop: spacing[1] },
+  divider: { marginTop: spacing[4] },
+  pulseRow: { marginBottom: spacing[5] },
+  pulseInput: { flex: 1, fontSize: fontSize.xl, paddingVertical: spacing[2.5] },
+}));
+
 export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) => {
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
   const [pulse, setPulse] = useState('');
   const { colors } = useTheme();
+  const styles = useStyles();
 
   const handleSubmit = () => {
     const sys = parseInt(systolic, 10);
@@ -54,7 +77,6 @@ export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) =>
     <Card style={styles.card}>
       <AppText variant="headline" style={styles.title}>Enter Reading</AppText>
 
-      {/* Systolic / Diastolic row */}
       <AppView row align="center" gap={2} style={styles.inputRow}>
         <AppView style={styles.group}>
           <AppText variant="overline" style={styles.label}>Systolic</AppText>
@@ -85,7 +107,6 @@ export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) =>
         </AppView>
       </AppView>
 
-      {/* Pulse row */}
       <AppView row align="center" gap={2} style={styles.pulseRow}>
         <AppText variant="overline" style={styles.label}>Pulse (optional)</AppText>
         <TextInput
@@ -110,24 +131,3 @@ export const ManualEntryCard: React.FC<ManualEntryCardProps> = ({ onSubmit }) =>
     </Card>
   );
 };
-
-const styles = StyleSheet.create({
-  card: { marginBottom: 16 },
-  title: { marginBottom: 16 },
-  inputRow: { marginBottom: 16 },
-  group: { flex: 1 },
-  label: { marginBottom: 6 },
-  input: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  unitLabel: { marginTop: 4 },
-  divider: { marginTop: 16 },
-  pulseRow: { marginBottom: 20 },
-  pulseInput: { flex: 1, fontSize: 18, paddingVertical: 10 },
-});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { AppText, Header, Screen } from '../../../components';
@@ -9,6 +9,7 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { useChallengeDetail } from '../hooks/useChallenges';
 import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 type RouteT = RouteProp<HealthStackParamList, typeof HealthRoutes.CHALLENGE_DETAIL>;
 
@@ -25,8 +26,26 @@ const CRITERIA_LABELS: Record<string, { label: string; unit: string; icon: strin
   SPECIFIC_FOOD:      { label: 'Food Logged',        unit: 'times', icon: 'Egg'             },
 };
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  loader: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, minHeight: 300 },
+  hero: { borderRadius: radius['2xl'], borderWidth: 1, padding: spacing[6], alignItems: 'center' as const, marginBottom: spacing[4] },
+  heroEmoji: { fontSize: 56 },
+  badgeRow: { flexDirection: 'row' as const, gap: spacing[2.5], marginTop: spacing[4] },
+  badge: { paddingHorizontal: spacing[3], paddingVertical: spacing[1.5], borderRadius: radius['2xl'] },
+  card: { borderRadius: radius.xl, borderWidth: 0.5, padding: spacing[4], marginBottom: spacing[3] },
+  cardHeader: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  metaIcon: { width: 44, height: 44, borderRadius: radius.lg, alignItems: 'center' as const, justifyContent: 'center' as const },
+  bigBarTrack: { height: 10, borderRadius: spacing[1.25 as any] ?? 5, overflow: 'hidden' as const },
+  bigBarFill: { height: 10, borderRadius: spacing[1.25 as any] ?? 5 },
+  progressNumbers: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginTop: spacing[2] },
+  statusRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const },
+  howRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const },
+  howIcon: { width: 30, height: 30, borderRadius: radius.md, alignItems: 'center' as const, justifyContent: 'center' as const, marginTop: 1 },
+}));
+
 const ChallengeDetailScreen: React.FC = () => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const route = useRoute<RouteT>();
   const { challengeId } = route.params as any;
   const { data: challenge, isPending } = useChallengeDetail(challengeId);
@@ -182,20 +201,3 @@ const ChallengeDetailScreen: React.FC = () => {
 };
 
 export default ChallengeDetailScreen;
-
-const styles = StyleSheet.create({
-  loader: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 300 },
-  hero: { borderRadius: 20, borderWidth: 1, padding: 24, alignItems: 'center', marginBottom: 16 },
-  heroEmoji: { fontSize: 56 },
-  badgeRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, marginBottom: 12 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  metaIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  bigBarTrack: { height: 10, borderRadius: 5, overflow: 'hidden' },
-  bigBarFill: { height: 10, borderRadius: 5 },
-  progressNumbers: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  statusRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  howRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  howIcon: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-});

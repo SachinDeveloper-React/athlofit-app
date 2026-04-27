@@ -118,6 +118,17 @@ export const useHydrationStore = create<HydrationStore>()(
         //   });
         // }
       },
+
+      // ── Reset all hydration data (called on logout) ────────────────────────
+      reset: () => set({
+        consumed: 0,
+        dailyGoal: 5000,
+        history: [],
+        isLoading: false,
+        isSyncing: false,
+        error: null,
+        lastResetDate: '',
+      }),
     })),
     {
       name: 'hydration-store',

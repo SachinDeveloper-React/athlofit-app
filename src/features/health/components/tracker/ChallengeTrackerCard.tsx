@@ -11,11 +11,27 @@ import { challengeService } from '../../service/challenge.service';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
 import type { Challenge } from '../../types/challenge.types';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 const FITNESS_CRITERIA = new Set(['STEPS', 'CALORIES', 'ACTIVE_MINUTES', 'DISTANCE', 'HYDRATION']);
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing[3.5 as any] ?? 14 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, marginBottom: spacing[2.5] },
+  headerIcon: { width: 28, height: 28, borderRadius: radius.md, alignItems: 'center' as const, justifyContent: 'center' as const },
+  overallBar: { height: 4, borderRadius: spacing[0.5], overflow: 'hidden' as const, marginBottom: spacing[3] },
+  overallFill: { height: 4, borderRadius: spacing[0.5], backgroundColor: '#10B981' },
+  row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[2.5], paddingVertical: spacing[2], borderBottomWidth: StyleSheet.hairlineWidth },
+  emoji: { fontSize: 18, width: 24, textAlign: 'center' as const },
+  bar: { height: 4, borderRadius: spacing[0.5], overflow: 'hidden' as const },
+  fill: { height: 4, borderRadius: spacing[0.5] },
+  right: { alignItems: 'flex-end' as const, gap: spacing[0.5] },
+  coin: { fontSize: 10, color: '#F5C518' },
+}));
+
 const MiniRow = memo(({ c, index }: { c: Challenge; index: number }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const pct = Math.min(1, c.targetValue > 0 ? c.currentValue / c.targetValue : 0);
 
   return (
@@ -48,8 +64,8 @@ MiniRow.displayName = 'MiniRow';
 
 const ChallengeTrackerCard = memo(() => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
-  // useQuery — staleTime:0 so invalidation immediately triggers a fresh fetch
   const { data, isLoading } = useQuery({
     queryKey: ['challenges'],
     queryFn:  () => challengeService.getAll(),
@@ -68,7 +84,6 @@ const ChallengeTrackerCard = memo(() => {
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={[styles.headerIcon, { backgroundColor: withOpacity(colors.primary, 0.1) }]}>
           <Icon name="Trophy" size={14} color={colors.primary} />
@@ -87,12 +102,10 @@ const ChallengeTrackerCard = memo(() => {
         </Pressable>
       </View>
 
-      {/* Progress bar for overall */}
       <View style={[styles.overallBar, { backgroundColor: colors.secondary }]}>
         <View style={[styles.overallFill, { width: `${Math.round((completed / fitnessChallenges.length) * 100)}%` as any }]} />
       </View>
 
-      {/* Challenge rows */}
       {fitnessChallenges.map((c, i) => (
         <MiniRow key={c._id} c={c} index={i} />
       ))}
@@ -102,17 +115,3 @@ const ChallengeTrackerCard = memo(() => {
 
 ChallengeTrackerCard.displayName = 'ChallengeTrackerCard';
 export default ChallengeTrackerCard;
-
-const styles = StyleSheet.create({
-  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  headerIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  overallBar: { height: 4, borderRadius: 2, overflow: 'hidden', marginBottom: 12 },
-  overallFill: { height: 4, borderRadius: 2, backgroundColor: '#10B981' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
-  emoji: { fontSize: 18, width: 24, textAlign: 'center' },
-  bar: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  fill: { height: 4, borderRadius: 2 },
-  right: { alignItems: 'flex-end', gap: 2 },
-  coin: { fontSize: 10, color: '#F5C518' },
-});

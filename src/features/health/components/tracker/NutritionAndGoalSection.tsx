@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from 'react';
-import { StyleSheet, RefreshControl, ScrollView, ActivityIndicator, View } from 'react-native';
+import { RefreshControl, ScrollView, ActivityIndicator, View } from 'react-native';
 import { AppText, AppView } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { CalorieSummaryCard } from '../nutrition/CalorieSummaryCard';
@@ -17,29 +17,45 @@ import {
 } from '../../hooks/useNutrition';
 import { MEAL_META } from '../../types/nutrition.types';
 import type { LogMealRequest, NutritionPreferences } from '../../types/nutrition.types';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 type Props = {
   hidden?: boolean;
 };
 
-// ─── Section Label ────────────────────────────────────────────────────────────
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  scroll: {
+    gap: spacing[3],
+    paddingBottom: spacing[5],
+  },
+  center: {
+    paddingVertical: spacing[15 as any] ?? 60,
+    alignItems: 'center' as const,
+  },
+  sectionLabel: {
+    marginBottom: -spacing[1],
+    marginTop: spacing[1],
+    paddingHorizontal: spacing[0.5],
+  },
+  bottomSpacer: {
+    height: spacing[5],
+  },
+}));
 
-const SectionLabel = memo(({ label }: { label: string }) => (
-  <AppText variant="overline" style={styles.sectionLabel}>
-    {label}
-  </AppText>
-));
+const SectionLabel = memo(({ label }: { label: string }) => {
+  const styles = useStyles();
+  return (
+    <AppText variant="overline" style={styles.sectionLabel}>
+      {label}
+    </AppText>
+  );
+});
 
 SectionLabel.displayName = 'SectionLabel';
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const { colors } = useTheme();
-
-  // ── Data ──────────────────────────────────────────────────────────────────
+  const styles = useStyles();
 
   const {
     data: summary,
@@ -54,25 +70,17 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
     refetch: refetchPrefs,
   } = useNutritionPreferences();
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
   const { mutate: logMeal, isPending: isAdding } = useLogMeal();
   const { mutate: deleteMeal, isPending: isDeleting } = useDeleteMeal();
   const { mutate: updatePrefs, isPending: isUpdatingPrefs } = useUpdatePreferences();
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
   const handleAddMeal = useCallback(
-    (entry: LogMealRequest) => {
-      logMeal(entry);
-    },
+    (entry: LogMealRequest) => { logMeal(entry); },
     [logMeal],
   );
 
   const handleDeleteMeal = useCallback(
-    (id: string) => {
-      deleteMeal(id);
-    },
+    (id: string) => { deleteMeal(id); },
     [deleteMeal],
   );
 
@@ -93,11 +101,7 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
     refetchPrefs();
   }, [refetchSummary, refetchPrefs]);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
   const isLoading = summaryLoading && prefsLoading;
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   if (hidden) return null;
 
@@ -124,7 +128,6 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
         />
       }
     >
-      {/* ─ 1. Calorie Summary ─────────────────────────────────────────────── */}
       <SectionLabel label="Daily Summary" />
       <CalorieSummaryCard
         caloriesIn={summary?.totalCaloriesIn ?? 0}
@@ -135,7 +138,6 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
         fat={summary?.totalFat ?? 0}
       />
 
-      {/* ─ 2. Diet Preference & Goal ───────────────────────────────────────── */}
       <SectionLabel label="Preference & Goal" />
       <DietPreferenceChips
         preferences={preferences}
@@ -143,11 +145,9 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
         isMutating={isUpdatingPrefs}
       />
 
-      {/* ─ 3. Food Catalog ────────────────────────────────────────────────────── */}
       <SectionLabel label="Food Catalog" />
       <FoodCatalog />
 
-      {/* ─ 4. Meal Log ─────────────────────────────────────────────────────── */}
       <SectionLabel label="Meal Log" />
       {MEAL_META.map(meta => (
         <MealSection
@@ -161,17 +161,12 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
         />
       ))}
 
-      {/* ─ 4. Diet Recommendation ─────────────────────────────────────────── */}
       <SectionLabel label="Recommendation" />
-      <DietRecommendationCard
-        goal={preferences?.dietaryGoal ?? 'maintenance'}
-      />
+      <DietRecommendationCard goal={preferences?.dietaryGoal ?? 'maintenance'} />
 
-      {/* ─ 5. Nutrition Challenges ────────────────────────────────────────────── */}
       <SectionLabel label="Challenges" />
       <ChallengeNutritionCard />
 
-      {/* Bottom spacing */}
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
@@ -180,24 +175,3 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
 NutritionAndGoalSection.displayName = 'NutritionAndGoalSection';
 
 export default NutritionAndGoalSection;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  scroll: {
-    gap: 12,
-    paddingBottom: 20,
-  },
-  center: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  sectionLabel: {
-    marginBottom: -4,
-    marginTop: 4,
-    paddingHorizontal: 2,
-  },
-  bottomSpacer: {
-    height: 20,
-  },
-});

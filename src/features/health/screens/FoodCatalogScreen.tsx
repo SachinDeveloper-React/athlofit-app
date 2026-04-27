@@ -22,16 +22,33 @@ import { DIET_TYPE_META, FOOD_CATEGORY_META } from '../types/nutrition.types';
 import type { DietFilter, FoodCategory, FoodItem } from '../types/nutrition.types';
 import { navigate } from '../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../navigation/routes';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize }) => ({
+  container: { flex: 1 },
+  searchRow: { paddingHorizontal: spacing[4], paddingTop: spacing[3], paddingBottom: spacing[1] },
+  searchBox: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[2], borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing[3], height: 44 },
+  searchInput: { flex: 1, fontSize: fontSize.base },
+  filterRow: { paddingHorizontal: spacing[4], paddingVertical: spacing[3], gap: spacing[2.5], alignItems: 'center' as const },
+  categoryRow: { paddingHorizontal: spacing[4], gap: spacing[2], paddingVertical: spacing[2.5] },
+  catChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[1.25] ?? 5, paddingHorizontal: spacing[3], borderRadius: radius['2xl'] },
+  grid: { paddingHorizontal: spacing[4], paddingTop: spacing[1] },
+  columnWrapper: { gap: spacing[2.5], marginBottom: spacing[2.5] },
+  gridCell: { flex: 1 },
+  loaderWrap: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: spacing[15] ?? 60 },
+  empty: { alignItems: 'center' as const, paddingTop: spacing[15] ?? 60 },
+}));
 
 const FoodCatalogScreen = memo(() => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   const [search, setSearch] = useState('');
   const [dietFilter, setDietFilter] = useState<DietFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<FoodCategory>('all');
   const [showFavsOnly, setShowFavsOnly] = useState(false);
 
-  // ── Search logging ──────────────────────────────────────────────────────────
+  // ── Search logging ──────────────────────────────────────────────────────────────────────
   const { logQuery, logClick } = useSearchLog({ screen: 'FoodCatalog' });
 
   // Debounce: fire logQuery 600 ms after the user stops typing
@@ -81,7 +98,7 @@ const FoodCatalogScreen = memo(() => {
         />
       </Animated.View>
     ),
-    [handleCardPress, handleFavToggle, togglingId, isTogglingAny],
+    [handleCardPress, handleFavToggle, togglingId, isTogglingAny, styles.gridCell],
   );
 
   return (
@@ -187,18 +204,3 @@ const FoodCatalogScreen = memo(() => {
 
 FoodCatalogScreen.displayName = 'FoodCatalogScreen';
 export default FoodCatalogScreen;
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  searchRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, height: 44 },
-  searchInput: { flex: 1, fontSize: 15 },
-  filterRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, alignItems: 'center' },
-  categoryRow: { paddingHorizontal: 16, gap: 8, paddingVertical: 10 },
-  catChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 20 },
-  grid: { paddingHorizontal: 16, paddingTop: 4 },
-  columnWrapper: { gap: 10, marginBottom: 10 },
-  gridCell: { flex: 1 },
-  loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  empty: { alignItems: 'center', paddingTop: 60 },
-});

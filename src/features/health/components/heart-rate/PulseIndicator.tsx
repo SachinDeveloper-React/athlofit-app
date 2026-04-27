@@ -1,8 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated } from 'react-native';
 import { AppText, AppView } from '../../../../components';
+import { makeStyles } from '../../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize }) => ({
+  pulseRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[2.5],
+    marginBottom: spacing[6],
+  },
+  pulseDot: {
+    width: 14,
+    height: 14,
+    borderRadius: radius.full,
+    backgroundColor: '#D85A30',
+  },
+  pulseTxt: { fontSize: fontSize.md, color: '#fff' },
+}));
 
 export function PulseIndicator({ active }: { active: boolean }) {
+  const styles = useStyles();
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
@@ -39,29 +57,13 @@ export function PulseIndicator({ active }: { active: boolean }) {
     return () => anim.stop();
   }, [active]);
   return (
-    <AppView style={s.pulseRow}>
+    <AppView style={styles.pulseRow}>
       <Animated.View
-        style={[s.pulseDot, { transform: [{ scale }], opacity }]}
+        style={[styles.pulseDot, { transform: [{ scale }], opacity }]}
       />
-      <AppText style={s.pulseTxt}>
+      <AppText style={styles.pulseTxt}>
         {active ? 'Detecting pulse…' : 'Ready'}
       </AppText>
     </AppView>
   );
 }
-
-const s = StyleSheet.create({
-  pulseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 24,
-  },
-  pulseDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#D85A30',
-  },
-  pulseTxt: { fontSize: 14, color: '#fff' },
-});

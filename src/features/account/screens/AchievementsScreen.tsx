@@ -215,8 +215,8 @@ const AchievementsScreen = () => {
   }, [achievements]);
 
   return (
-    <Screen safeArea={false}>
-      <Header title="Achievements" showBack bordered backLabel="" />
+    <Screen safeArea={false} header={<Header title="Achievements" showBack bordered backLabel="" />}>
+      
       <FlatList
         data={sortedAchievements}
         keyExtractor={item => item.id}
@@ -250,7 +250,7 @@ const AchievementsScreen = () => {
 
 const styles = StyleSheet.create({
   listContent: {
-    padding: 16,
+    paddingTop: 16,
     paddingBottom: 40,
   },
   card: {

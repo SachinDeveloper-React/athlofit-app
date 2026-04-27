@@ -25,6 +25,7 @@ import { ShopRoutes } from '../../../navigation/routes';
 import type { ShopStackParamList } from '../../../types/navigation.types';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import type { SavedAddress } from '../types/shop.types';
+import { Header, Screen } from '../../../components';
 
 type CartRouteProp = RouteProp<ShopStackParamList, typeof ShopRoutes.CART>;
 const COIN_RATE = 10;
@@ -101,15 +102,7 @@ const CartScreen = () => {
   // ── Empty state ──────────────────────────────────────────────────────────────
   if (items.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Icon name="ArrowLeft" size={22} color={colors.foreground} />
-          </Pressable>
-          <AppText variant="headline" weight="semiBold">Cart</AppText>
-          <View style={{ width: 40 }} />
-        </View>
+      <Screen safeArea={false} header={<Header backLabel='' bordered showBack title='My Cart'/>}>
 
         <Animated.View entering={FadeInUp.duration(350)} style={styles.emptyWrap}>
           <View style={[styles.emptyIcon, { backgroundColor: withOpacity('#F5C518', 0.12) }]}>
@@ -127,7 +120,8 @@ const CartScreen = () => {
             <AppText variant="body" weight="bold" color="#FEF3C7" style={{ marginLeft: 8 }}>Shop with Coins</AppText>
           </Pressable>
         </Animated.View>
-      </View>
+      
+      </Screen>
     );
   }
 

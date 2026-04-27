@@ -5,36 +5,77 @@ import {
   getHeartRateZone,
   HeartRateResult,
 } from '../../service/heartRate.service';
-import { StyleSheet } from 'react-native';
+import { makeStyles } from '../../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  resultCard: {
+    width: '100%' as const,
+    backgroundColor: colors.card,
+    borderRadius: radius['2xl'],
+    padding: spacing[7],
+    alignItems: 'center' as const,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    marginBottom: spacing[4],
+  },
+  resultBpm: {
+    fontSize: 84,
+    fontWeight: fontWeight.bold,
+    color: colors.foreground,
+    lineHeight: 92,
+  },
+  resultUnit: { fontSize: fontSize.xl, color: colors.mutedForeground, marginTop: spacing[0.5] },
+  zoneBadge: {
+    paddingHorizontal: spacing[3.5 as any] ?? 14,
+    paddingVertical: spacing[1.25 as any] ?? 5,
+    borderRadius: radius.md,
+    marginTop: spacing[3],
+    marginBottom: spacing[1.5],
+  },
+  zoneTxt: { fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  confTxt: { fontSize: fontSize.sm, marginBottom: spacing[5] },
+  statsRow: {
+    flexDirection: 'row' as const,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.border,
+    paddingTop: spacing[4],
+    width: '100%' as const,
+  },
+  stat: { flex: 1, alignItems: 'center' as const },
+  statVal: { fontSize: fontSize.base, fontWeight: fontWeight.semiBold, color: colors.foreground },
+  statLbl: { fontSize: fontSize.xs, color: colors.mutedForeground, marginTop: spacing[0.5] },
+  statDiv: { width: 0.5, backgroundColor: colors.border },
+}));
 
 export const HeartRateResultCard = memo(
   ({ result }: { result: HeartRateResult }) => {
+    const styles = useStyles();
     const zone = getHeartRateZone(result.bpm);
     const conf = getConfidenceLabel(result.confidence);
     return (
-      <AppView style={s.resultCard}>
-        <AppText style={s.resultBpm}>{result.bpm}</AppText>
-        <AppText style={s.resultUnit}>bpm</AppText>
-        <AppView style={[s.zoneBadge, { backgroundColor: zone.bg }]}>
-          <AppText style={[s.zoneTxt, { color: zone.color }]}>
+      <AppView style={styles.resultCard}>
+        <AppText style={styles.resultBpm}>{result.bpm}</AppText>
+        <AppText style={styles.resultUnit}>bpm</AppText>
+        <AppView style={[styles.zoneBadge, { backgroundColor: zone.bg }]}>
+          <AppText style={[styles.zoneTxt, { color: zone.color }]}>
             {zone.label}
           </AppText>
         </AppView>
-        <AppText style={[s.confTxt, { color: conf.color }]}>
+        <AppText style={[styles.confTxt, { color: conf.color }]}>
           {conf.text}
         </AppText>
-        <AppView style={s.statsRow}>
+        <AppView style={styles.statsRow}>
           {[
             { label: 'peaks', value: String(result.peaksDetected) },
             { label: 'frames', value: String(result.samplesUsed) },
             { label: 'seconds', value: String(result.durationS) },
           ].map((stat, i, arr) => (
             <Fragment key={stat.label}>
-              <AppView style={s.stat}>
-                <AppText style={s.statVal}>{stat.value}</AppText>
-                <AppText style={s.statLbl}>{stat.label}</AppText>
+              <AppView style={styles.stat}>
+                <AppText style={styles.statVal}>{stat.value}</AppText>
+                <AppText style={styles.statLbl}>{stat.label}</AppText>
               </AppView>
-              {i < arr.length - 1 && <AppView style={s.statDiv} />}
+              {i < arr.length - 1 && <AppView style={styles.statDiv} />}
             </Fragment>
           ))}
         </AppView>
@@ -42,43 +83,3 @@ export const HeartRateResultCard = memo(
     );
   },
 );
-
-const s = StyleSheet.create({
-  resultCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 28,
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.07)',
-    marginBottom: 16,
-  },
-  resultBpm: {
-    fontSize: 84,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    lineHeight: 92,
-  },
-  resultUnit: { fontSize: 18, color: '#aaa', marginTop: 2 },
-  zoneBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  zoneTxt: { fontSize: 13, fontWeight: '500' },
-  confTxt: { fontSize: 12, marginBottom: 20 },
-  statsRow: {
-    flexDirection: 'row',
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(0,0,0,0.07)',
-    paddingTop: 16,
-    width: '100%',
-  },
-  stat: { flex: 1, alignItems: 'center' },
-  statVal: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  statLbl: { fontSize: 10, color: '#aaa', marginTop: 2 },
-  statDiv: { width: 0.5, backgroundColor: 'rgba(0,0,0,0.07)' },
-});

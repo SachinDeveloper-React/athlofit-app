@@ -70,6 +70,16 @@ export const useAuthStore = create<AuthState>()(
           /* silent */
         }
         await tokenService.clear();
+        
+        // Clear user-specific stores to prevent data leakage between accounts
+        const { useGamificationStore } = await import('../../health/store/gamificationStore');
+        const { useHydrationStore } = await import('../../health/store/hydrationStore');
+        const { useHealthDataStore } = await import('../../health/store/healthDataStore');
+        
+        useGamificationStore.getState().reset();
+        useHydrationStore.getState().reset();
+        useHealthDataStore.getState().reset();
+        
         set(state => {
           state.user = null;
           state.accessToken = null;

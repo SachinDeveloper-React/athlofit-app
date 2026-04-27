@@ -5,13 +5,37 @@ import { StepsSlider } from '../components/edit-steps-goal/StepsSlider';
 import { PresetSelector } from '../components/edit-steps-goal/PresetSelector';
 import { StatsRow } from '../components/edit-steps-goal/StatsRow';
 import { SaveButton } from '../components/edit-steps-goal/SaveButton';
-import { StyleSheet } from 'react-native';
 import { useStepsGoal } from '../hooks/useStepsGoal';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../components/Toast';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, fontWeight }) => ({
+  container: {
+    paddingHorizontal: spacing[6],
+  },
+  sectionLabel: {
+    textTransform: 'uppercase' as const,
+    marginVertical: spacing[1.5],
+  },
+  title: {
+    color: colors.foreground,
+    marginBottom: spacing[1.5],
+  },
+  subtitle: {
+    lineHeight: 21,
+    marginBottom: spacing[6],
+  },
+  divider: {
+    height: 0.5,
+    backgroundColor: colors.border,
+    marginBottom: spacing[6],
+  },
+}));
 
 const EditStepsGoalScreen = memo(() => {
+  const styles = useStyles();
   const user = useAuthStore(state => state.user);
   const navigation = useNavigation();
   const { success, error } = useToast();
@@ -64,34 +88,12 @@ const EditStepsGoalScreen = memo(() => {
 
       <StatsRow stats={stats} />
 
-      <SaveButton 
-        onPress={handleSave} 
-        loading={saveMutation.isPending} 
+      <SaveButton
+        onPress={handleSave}
+        loading={saveMutation.isPending}
       />
     </Screen>
   );
 });
 
 export default EditStepsGoalScreen;
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 24,
-  },
-  sectionLabel: {
-    textTransform: 'uppercase',
-    marginVertical: 6,
-  },
-  title: {
-    color: '#111',
-    marginBottom: 6,
-  },
-  subtitle: {
-    lineHeight: 21,
-    marginBottom: 24,
-  },
-  divider: {
-    height: 0.5,
-    backgroundColor: '#E5E5E5',
-    marginBottom: 24,
-  },
-});

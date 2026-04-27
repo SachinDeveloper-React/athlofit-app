@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { AppText } from '../../../components';
+import { TouchableOpacity } from 'react-native';
+import { AppText, AppView } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { Timeframe } from '../types/analytics';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 interface Props {
   activeTab: Timeframe;
@@ -11,11 +12,28 @@ interface Props {
 
 const TABS: Timeframe[] = ['Day', 'Week', 'Month', 'Year'];
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  container: {
+    flexDirection: 'row' as const,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing[1],
+    marginVertical: spacing[4],
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing[2],
+    alignItems: 'center' as const,
+    borderRadius: radius.md,
+  },
+}));
+
 export const TimeframeTabs: React.FC<Props> = ({ activeTab, onTabChange }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <AppView style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab;
         return (
@@ -25,8 +43,8 @@ export const TimeframeTabs: React.FC<Props> = ({ activeTab, onTabChange }) => {
             onPress={() => onTabChange(tab)}
             activeOpacity={0.8}
           >
-            <AppText 
-              variant="subhead" 
+            <AppText
+              variant="subhead"
               color={isActive ? colors.background : colors.mutedForeground}
               weight={isActive ? 'semiBold' : 'medium'}
             >
@@ -35,22 +53,6 @@ export const TimeframeTabs: React.FC<Props> = ({ activeTab, onTabChange }) => {
           </TouchableOpacity>
         );
       })}
-    </View>
+    </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 4,
-    marginVertical: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-});

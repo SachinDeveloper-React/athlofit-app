@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  StyleSheet,
   View,
   FlatList,
   Pressable,
@@ -27,6 +26,7 @@ import TransactionItem from '../components/coins/TransactionItem';
 import ClaimableItem from '../components/coins/ClaimableItem';
 import { useGamificationStore } from '../store/gamificationStore';
 import { formatCoins } from '../../../config/appConfig';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 type TabKey = 'TRANSACTIONS' | 'REWARDS';
 
@@ -35,23 +35,111 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'REWARDS', label: 'Earn Coins', icon: 'Gift' },
 ];
 
+const useStyles = makeStyles(({ colors, spacing, radius, shadow }) => ({
+  container: {
+    flex: 1,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  heroCard: {
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    alignItems: 'center' as const,
+    position: 'relative' as const,
+  },
+  heroGlow: {
+    position: 'absolute' as const,
+    width: 180,
+    height: 180,
+    borderRadius: radius.full,
+    top: -40,
+    alignSelf: 'center' as const,
+  },
+  coinBadge: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+  },
+  balanceRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'center' as const,
+  },
+  statsRow: {
+    flexDirection: 'row' as const,
+  },
+  statCard: {
+    flex: 1,
+    borderWidth: 1,
+  },
+  statIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  tabsContainer: {
+    flexDirection: 'row' as const,
+  },
+  tab: {
+    flex: 1,
+    height: 48,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  tabInner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  activeTabShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  emptyState: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginTop: 70,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+}));
+
 const CoinScreen = () => {
   const { colors, spacing, radius } = useTheme();
+  const styles = useStyles();
   const { data, isLoading } = useCoinData();
   const [activeTab, setActiveTab] = useState<TabKey>('TRANSACTIONS');
 
-  // Zustand is the single source of truth for balance across all screens
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
 
-  // When API responds, sync latest balance to the store
   useEffect(() => {
     if (data?.balance != null && data.balance !== coinsBalance) {
       setCoinsBalance(data.balance);
     }
   }, [data?.balance]);
 
-  const balance = coinsBalance; // always use the store value
+  const balance = coinsBalance;
 
   const listData = useMemo(() => {
     if (activeTab === 'TRANSACTIONS') return data?.transactions || [];
@@ -87,9 +175,7 @@ const CoinScreen = () => {
 
   const renderHero = () => {
     return (
-      // Outer: layout animation for reflow
       <Animated.View layout={LinearTransition.springify()}>
-        {/* Inner: enter animation — separate view to avoid transform conflict */}
         <Animated.View
           entering={FadeInDown.duration(500)}
           style={[
@@ -98,7 +184,7 @@ const CoinScreen = () => {
               marginHorizontal: spacing[4],
               marginTop: spacing[3],
               padding: spacing[5],
-              borderRadius: radius?.xl ?? 24,
+              borderRadius: radius?.xl ?? 16,
               backgroundColor: colors.card,
               borderColor: withOpacity(colors.border, 0.7),
             },
@@ -181,7 +267,7 @@ const CoinScreen = () => {
               {
                 backgroundColor: colors.card,
                 borderColor: withOpacity(colors.border, 0.65),
-                borderRadius: radius?.lg ?? 18,
+                borderRadius: radius?.lg ?? 12,
                 padding: spacing[4],
               },
             ]}
@@ -224,7 +310,7 @@ const CoinScreen = () => {
             marginHorizontal: spacing[4],
             marginTop: spacing[4],
             padding: 4,
-            borderRadius: 999,
+            borderRadius: radius.full,
             backgroundColor: withOpacity(colors.border, 0.35),
           },
         ]}
@@ -239,7 +325,7 @@ const CoinScreen = () => {
               style={[
                 styles.tab,
                 {
-                  borderRadius: 999,
+                  borderRadius: radius.full,
                   backgroundColor: isActive ? colors.card : 'transparent',
                 },
                 isActive && styles.activeTabShadow,
@@ -401,109 +487,5 @@ const CoinScreen = () => {
     </Screen>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  loaderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  heroCard: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    alignItems: 'center',
-    position: 'relative',
-  },
-
-  heroGlow: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    top: -40,
-    alignSelf: 'center',
-  },
-
-  coinBadge: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-
-  statsRow: {
-    flexDirection: 'row',
-  },
-
-  statCard: {
-    flex: 1,
-    borderWidth: 1,
-  },
-
-  statIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  tabsContainer: {
-    flexDirection: 'row',
-  },
-
-  tab: {
-    flex: 1,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  tabInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  activeTabShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 70,
-  },
-
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
 
 export default CoinScreen;

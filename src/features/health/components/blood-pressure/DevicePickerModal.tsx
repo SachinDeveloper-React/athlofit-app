@@ -1,8 +1,9 @@
 import React from 'react';
-import { FlatList, Modal, StyleSheet } from 'react-native';
+import { FlatList, Modal } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 import { AppText, AppView, Button, Loader } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface DevicePickerModalProps {
   visible: boolean;
@@ -12,6 +13,32 @@ interface DevicePickerModalProps {
   onClose: () => void;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end' as const,
+  },
+  sheet: {
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
+    padding: spacing[6],
+    maxHeight: '70%' as const,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: spacing[0.5],
+    alignSelf: 'center' as const,
+    marginBottom: spacing[5],
+  },
+  title: { marginBottom: spacing[4] },
+  scanRow: { marginBottom: spacing[3] },
+  empty: { paddingVertical: spacing[8] },
+  item: { paddingVertical: spacing[3.5 as any] ?? 14, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  cancelBtn: { marginTop: spacing[3] },
+}));
+
 export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
   visible,
   scanning,
@@ -20,6 +47,7 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <Modal
       visible={visible}
@@ -72,29 +100,3 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '70%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  title: { marginBottom: 16 },
-  scanRow: { marginBottom: 12 },
-  empty: { paddingVertical: 32 },
-  item: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
-  cancelBtn: { marginTop: 12 },
-});

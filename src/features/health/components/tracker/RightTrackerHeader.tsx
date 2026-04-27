@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native';
 import {
   AppText,
   AppView,
@@ -7,16 +7,13 @@ import {
   CoinBadge,
   Icon,
   IconButton,
+  NotificationBell,
 } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
-import { withOpacity } from '../../../../utils/withOpacity';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 const AVATAR_URI =
   'https://plus.unsplash.com/premium_photo-1673458333581-c2bfab6f0f69?q=80&w=2070';
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 type Props = {
   onActivityPress?: () => void;
@@ -26,6 +23,14 @@ type Props = {
   avatarUri?: string;
   avatarName?: string;
 };
+
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[2.5],
+  },
+}));
 
 const RightTrackerHeader = memo(
   ({
@@ -37,20 +42,12 @@ const RightTrackerHeader = memo(
     avatarName = AVATAR_URI,
   }: Props) => {
     const { colors, radius } = useTheme();
+    const styles = useStyles();
 
-    const handleActivity = useCallback(() => {
-      onActivityPress?.();
-    }, [onActivityPress]);
-
-    const handleNotification = useCallback(() => {
-      onNotificationPress?.();
-    }, [onNotificationPress]);
-    const handleProfile = useCallback(() => {
-      onProfilePress?.();
-    }, [onProfilePress]);
-    const handleCoins = useCallback(() => {
-      onCoinPress?.();
-    }, [onCoinPress]);
+    const handleActivity = useCallback(() => { onActivityPress?.(); }, [onActivityPress]);
+    const handleNotification = useCallback(() => { onNotificationPress?.(); }, [onNotificationPress]);
+    const handleProfile = useCallback(() => { onProfilePress?.(); }, [onProfilePress]);
+    const handleCoins = useCallback(() => { onCoinPress?.(); }, [onCoinPress]);
 
     return (
       <AppView style={styles.row}>
@@ -68,11 +65,10 @@ const RightTrackerHeader = memo(
           borderColor={colors.border}
           borderRadius={radius.full}
         />
-        <IconButton
-          name="BellDot"
+        <NotificationBell
           onPress={handleNotification}
-          borderColor={colors.border}
-          borderRadius={radius.full}
+          size={20}
+          iconColor={colors.foreground}
         />
         <Pressable
           onPress={handleProfile}
@@ -95,13 +91,3 @@ const RightTrackerHeader = memo(
 RightTrackerHeader.displayName = 'RightTrackerHeader';
 
 export default RightTrackerHeader;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-});

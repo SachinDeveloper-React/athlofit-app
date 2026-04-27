@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header, Loader, Screen, Tabs } from '../../../components';
@@ -102,7 +102,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={new Date().getDay()}
+        todayIndex={(new Date().getDay() + 6) % 7}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,
@@ -141,6 +141,8 @@ const TrackerScreen = memo(() => {
   const userName = useAuthStore(state => state.user?.name);
   const weightKg = useAuthStore(state => state.user?.weight);
   const dailyStepGoal = useAuthStore(state => state.user?.dailyStepGoal);
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const userId = useAuthStore(state => state.user?._id);
 
   const { platform, isReady, isLoading, data, error, refresh, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) || 70 });
@@ -168,8 +170,26 @@ const TrackerScreen = memo(() => {
 
   const { syncHealth } = useSyncHealth();
 
+  // Track the last synced user ID to detect account switches
+  const lastSyncedUserRef = useRef<string | null>(null);
+
   useEffect(() => {
     // Automatically push health data to server when loaded
+    // BUT only if user is authenticated and it's the same user
+
+    if (!isAuthenticated || !userId) {
+      // User not authenticated - don't sync
+      return;
+    }
+
+    // Detect account switch - if user ID changed, don't sync old data
+    if (lastSyncedUserRef.current && lastSyncedUserRef.current !== userId) {
+      console.log('[TrackerScreen] Account switched - skipping sync of old health data');
+      lastSyncedUserRef.current = userId;
+      // Refresh health data for new user
+      refresh(true);
+      return;
+    }
 
     if (isReady && data && lastUpdated) {
       const isGoalMet = data.steps >= (dailyStepGoal || 8000);
@@ -177,8 +197,9 @@ const TrackerScreen = memo(() => {
         ...data,
         goalMet: isGoalMet,
       });
+      lastSyncedUserRef.current = userId;
     }
-  }, [data, isReady, lastUpdated, dailyStepGoal, syncHealth]);
+  }, [data, isReady, lastUpdated, dailyStepGoal, syncHealth, isAuthenticated, userId, refresh]);
 
   // ── Gate reason ────────────────────────────────────────────────────────────
 

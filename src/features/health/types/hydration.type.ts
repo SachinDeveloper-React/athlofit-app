@@ -27,6 +27,7 @@ export interface HydrationActions {
   setError: (error: string | null) => void;
   fetchHistory: () => Promise<void>;
   checkAndResetIfNewDay: () => void;
+  reset: () => void;
 }
 
 export type HydrationStore = HydrationState & HydrationActions;

@@ -7,6 +7,7 @@ const Notification = require('../models/Notification.model');
 const { success, error } = require('../utils/response');
 const { todayISO } = require('../utils/date');
 const { uploadBuffer } = require('../utils/cloudinary');
+const { createNotification } = require('../utils/createNotification');
 
 // ─── GET /user/profile ────────────────────────────────────────────────────────
 const getProfile = async (req, res, next) => {
@@ -331,12 +332,128 @@ const updateFcmToken = async (req, res, next) => {
   }
 };
 
+// ─── POST /user/request-deletion ──────────────────────────────────────────────
+// User requests account deletion. Sets status to 'pending' and schedules deletion
+// for 30 days from now (grace period for cancellation).
+const requestAccountDeletion = async (req, res, next) => {
+  try {
+    const { reason } = req.body;
+    const user = await User.findById(req.user._id);
+
+    // Check if there's already an active deletion request
+    if (user.deletionRequest && (user.deletionRequest.status === 'pending' || user.deletionRequest.status === 'in_progress')) {
+      return error(res, 'Account deletion request already exists', 400);
+    }
+
+    // Set deletion request with 30-day grace period
+    const scheduledDate = new Date();
+    scheduledDate.setDate(scheduledDate.getDate() + 30);
+
+    user.deletionRequest = {
+      status: 'pending',
+      requestedAt: new Date(),
+      scheduledDeletionDate: scheduledDate,
+      reason: reason || null,
+      cancelledAt: null,
+      completedAt: null,
+    };
+
+    await user.save();
+
+    // Send notification about deletion request
+    // await createNotification(user._id, {
+    //   type: 'SYSTEM',
+    //   title: '⚠️ Account Deletion Requested',
+    //   message: `Your account is scheduled for deletion on ${scheduledDate.toLocaleDateString()}. You can cancel this request anytime before that date.`,
+    //   data: { screen: 'SettingsScreen' },
+    // });
+
+    return success(res, 'Account deletion requested', {
+      status: user.deletionRequest.status,
+      scheduledDeletionDate: user.deletionRequest.scheduledDeletionDate,
+      requestedAt: user.deletionRequest.requestedAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── POST /user/cancel-deletion ───────────────────────────────────────────────
+// User cancels their account deletion request
+const cancelAccountDeletion = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user.deletionRequest || (user.deletionRequest.status !== 'pending' && user.deletionRequest.status !== 'in_progress')) {
+      return error(res, 'No active deletion request found', 400);
+    }
+
+    user.deletionRequest = {
+      status: 'cancelled',
+      requestedAt: user.deletionRequest.requestedAt,
+      scheduledDeletionDate: null,
+      reason: user.deletionRequest.reason,
+      cancelledAt: new Date(),
+      completedAt: null,
+    };
+
+    await user.save();
+
+    // Send notification about cancellation
+    await createNotification(user._id, {
+      type: 'SYSTEM',
+      title: '✅ Deletion Request Cancelled',
+      message: 'Your account deletion request has been cancelled. Your account is safe.',
+      data: { screen: 'SettingsScreen' },
+    });
+
+    return success(res, 'Account deletion cancelled', {
+      status: user.deletionRequest.status,
+      cancelledAt: user.deletionRequest.cancelledAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── GET /user/deletion-status ────────────────────────────────────────────────
+// Get current account deletion status
+const getDeletionStatus = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('deletionRequest');
+    
+    // If deletionRequest doesn't exist, return default 'none' status
+    if (!user.deletionRequest) {
+      return success(res, 'Deletion status fetched', {
+        status: 'none',
+        requestedAt: null,
+        scheduledDeletionDate: null,
+        reason: null,
+        cancelledAt: null,
+        completedAt: null,
+      });
+    }
+    
+    return success(res, 'Deletion status fetched', {
+      status: user.deletionRequest.status || 'none',
+      requestedAt: user.deletionRequest.requestedAt || null,
+      scheduledDeletionDate: user.deletionRequest.scheduledDeletionDate || null,
+      reason: user.deletionRequest.reason || null,
+      cancelledAt: user.deletionRequest.cancelledAt || null,
+      completedAt: user.deletionRequest.completedAt || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getProfile, updateProfile, completeProfile, updateStepGoal,
   getNotifications, markNotificationRead, markAllNotificationsRead,
   deleteNotification, saveIncomingNotification,
   getAddresses, addAddress, updateAddress, deleteAddress, uploadAvatar,
   updateFcmToken,
+  requestAccountDeletion, cancelAccountDeletion, getDeletionStatus,
 };
 
 

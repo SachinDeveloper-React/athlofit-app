@@ -20,6 +20,7 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { useOrders, useCancelOrder } from '../hooks/useShop';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import type { Order } from '../types/shop.types';
+import { Header } from '../../../components';
 
 const STATUS_CONFIG: Record<Order['status'], { label: string; icon: string; color: string; bg: string }> = {
   PENDING:   { label: 'Pending',   icon: 'Clock',        color: '#D97706', bg: '#FEF3C7' },
@@ -183,14 +184,15 @@ const OrderHistoryScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+      {/* <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="ArrowLeft" size={22} color={colors.foreground} />
         </Pressable>
         <AppText variant="headline" weight="semiBold">My Orders</AppText>
         <View style={{ width: 40 }} />
-      </View>
+      </View> */}
 
+      <Header backLabel='' showBack bordered title='My Order'/>
       {isPending ? (
         <View style={styles.loader}>
           <ActivityIndicator size="large" color={colors.primary} />

@@ -1,31 +1,78 @@
 import React from 'react';
-import { Animated, StyleSheet, } from 'react-native';
+import { Animated } from 'react-native';
 import { AppText, AppView } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface StatsCardProps {
   consumed: number;
   dailyGoal: number;
   remaining: number;
   percentage: number;
-
-  children: React.ReactNode; // glass row
+  children: React.ReactNode;
 }
+
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  card: {
+    borderRadius: radius['3xl'],
+    borderWidth: 1,
+    padding: spacing[5],
+    marginBottom: spacing[5],
+  },
+  statsRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: spacing[4],
+  },
+  statBox: { flex: 1, alignItems: 'center' as const },
+  divider: {
+    width: 1,
+    height: 40,
+  },
+  statValue: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+  },
+  statLabel: {
+    fontSize: fontSize.xs,
+    marginTop: spacing[0.5],
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+  },
+  progressOuter: {
+    height: 8,
+    borderRadius: spacing[1],
+    marginBottom: spacing[6],
+    overflow: 'hidden' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  progressInner: {
+    height: 8,
+    borderRadius: spacing[1],
+    minWidth: 4,
+  },
+  progressPct: {
+    position: 'absolute' as const,
+    right: 6,
+    fontSize: 9,
+  },
+}));
 
 export const StatsCard: React.FC<StatsCardProps> = ({
   consumed,
   dailyGoal,
   remaining,
   percentage,
-
   children,
 }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   return (
     <AppView style={[styles.card, { borderColor: colors.border }]}>
-      {/* Stats row */}
       <AppView style={styles.statsRow}>
         <StatItem
           value={`${(consumed / 1000).toFixed(1)}L`}
@@ -46,7 +93,6 @@ export const StatsCard: React.FC<StatsCardProps> = ({
         />
       </AppView>
 
-      {/* Progress bar */}
       <AppView style={[styles.progressOuter, { backgroundColor: withOpacity(colors.primary, 0.1) }]}>
         <Animated.View
           style={[
@@ -60,7 +106,6 @@ export const StatsCard: React.FC<StatsCardProps> = ({
         <AppText style={[styles.progressPct, { color: withOpacity(colors.primary, 0.6) }]}>{Math.round(percentage)}%</AppText>
       </AppView>
 
-      {/* Children = glass + amount */}
       {children}
     </AppView>
   );
@@ -76,6 +121,7 @@ const StatItem = ({
   color: string;
 }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <AppView style={styles.statBox}>
       <AppText style={[styles.statValue, { color }]}>{value}</AppText>
@@ -83,51 +129,3 @@ const StatItem = ({
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 20,
-    marginBottom: 20,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  statBox: { flex: 1, alignItems: 'center' },
-  divider: {
-    width: 1,
-    height: 40,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  statLabel: {
-    fontSize: 10,
-    marginTop: 2,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  progressOuter: {
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 24,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressInner: {
-    height: 8,
-    borderRadius: 4,
-    minWidth: 4,
-  },
-  progressPct: {
-    position: 'absolute',
-    right: 6,
-    fontSize: 9,
-  },
-});

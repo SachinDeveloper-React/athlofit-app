@@ -6,6 +6,7 @@ import { Icon } from '../../../../components/Icon';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import type { Challenge } from '../../types/challenge.types';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 type Props = {
   challenge: Challenge;
@@ -13,8 +14,36 @@ type Props = {
   onPress: (c: Challenge) => void;
 };
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  card: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderRadius: radius.xl,
+    padding: spacing[3.5 as any] ?? 14,
+    gap: spacing[3],
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  emoji: { fontSize: 24 },
+  content: { flex: 1 },
+  titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[2] },
+  typeBadge: { paddingHorizontal: spacing[1.75 as any] ?? 7, paddingVertical: spacing[0.5], borderRadius: radius.sm },
+  barTrack: { height: 5, borderRadius: spacing[0.75 as any] ?? 3, overflow: 'hidden' as const },
+  barFill: { height: 5, borderRadius: spacing[0.75 as any] ?? 3 },
+  bottomRow: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginTop: spacing[1.25 as any] ?? 5 },
+  rewardRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[0.75 as any] ?? 3 },
+  coinEmoji: { fontSize: 11 },
+  check: { width: 32, height: 32, borderRadius: radius.full, alignItems: 'center' as const, justifyContent: 'center' as const },
+}));
+
 const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   const pct = Math.min(1, challenge.targetValue > 0 ? challenge.currentValue / challenge.targetValue : 0);
   const pctDisplay = Math.round(pct * 100);
   const { isCompleted, isRewarded } = challenge;
@@ -38,18 +67,15 @@ const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
         ]}
         android_ripple={{ color: withOpacity(challenge.color, 0.08) }}
       >
-        {/* Left icon */}
         <View style={[styles.iconWrap, { backgroundColor: withOpacity(challenge.color, 0.12) }]}>
           <AppText style={styles.emoji}>{challenge.emoji}</AppText>
         </View>
 
-        {/* Content */}
         <View style={styles.content}>
           <View style={styles.titleRow}>
             <AppText variant="subhead" weight="semiBold" numberOfLines={1} style={{ flex: 1 }}>
               {challenge.title}
             </AppText>
-            {/* Type badge */}
             <View style={[styles.typeBadge, { backgroundColor: typeBadgeBg }]}>
               <AppText variant="caption2" weight="semiBold" style={{ color: typeBadgeColor }}>
                 {challenge.type === 'daily' ? 'Daily' : 'Weekly'}
@@ -61,7 +87,6 @@ const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
             {challenge.description}
           </AppText>
 
-          {/* Progress bar */}
           <View style={[styles.barTrack, { backgroundColor: colors.secondary, marginTop: 8 }]}>
             <View
               style={[
@@ -74,7 +99,6 @@ const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
             />
           </View>
 
-          {/* Progress text + reward */}
           <View style={styles.bottomRow}>
             <AppText variant="caption2" style={{ color: colors.mutedForeground }}>
               {isCompleted ? '✓ Completed' : `${pctDisplay}% · ${challenge.currentValue.toLocaleString()} / ${challenge.targetValue.toLocaleString()}`}
@@ -92,7 +116,6 @@ const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
           </View>
         </View>
 
-        {/* Completed checkmark */}
         {isCompleted && (
           <View style={[styles.check, { backgroundColor: withOpacity('#10B981', 0.12) }]}>
             <Icon name="CheckCircle2" size={18} color="#10B981" />
@@ -105,30 +128,3 @@ const ChallengeCard = memo(({ challenge, index, onPress }: Props) => {
 
 ChallengeCard.displayName = 'ChallengeCard';
 export default ChallengeCard;
-
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-  },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 24 },
-  content: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  barTrack: { height: 5, borderRadius: 3, overflow: 'hidden' },
-  barFill: { height: 5, borderRadius: 3 },
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
-  rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  coinEmoji: { fontSize: 11 },
-  check: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-});

@@ -1,11 +1,12 @@
 import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { AppText, AppView } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { CATEGORY_META, BmiCategory } from './bmiHelpers';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 type BmiRecord = {
   _id: string;
@@ -18,8 +19,24 @@ type BmiRecord = {
 
 type Props = { history: BmiRecord[] };
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  title: { marginBottom: spacing[2.5] },
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing[3.5 as any] ?? 14,
+    marginBottom: spacing[2],
+    gap: spacing[2.5],
+  },
+  dot: { width: 10, height: 10, borderRadius: radius.full },
+  badge: { paddingHorizontal: spacing[2.5], paddingVertical: spacing[1], borderRadius: radius['2xl'] },
+}));
+
 const BmiHistoryList = memo(({ history }: Props) => {
   const { colors } = useTheme();
+  const styles = useStyles();
   if (history.length === 0) return null;
 
   return (
@@ -28,7 +45,7 @@ const BmiHistoryList = memo(({ history }: Props) => {
       {history.slice(0, 5).map(record => {
         const m = CATEGORY_META[record.category as BmiCategory];
         return (
-          <View
+          <Animated.View
             key={record._id}
             style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
@@ -39,11 +56,11 @@ const BmiHistoryList = memo(({ history }: Props) => {
                 {record.weight} kg · {(record.height * 100).toFixed(0)} cm
               </AppText>
             </AppView>
-            <View style={[styles.badge, { backgroundColor: withOpacity(m.color, 0.12) }]}>
+            <Animated.View style={[styles.badge, { backgroundColor: withOpacity(m.color, 0.12) }]}>
               <AppText variant="caption2" weight="semiBold" color={m.color}>{m.label}</AppText>
-            </View>
+            </Animated.View>
             <AppText variant="caption2" style={{ marginLeft: 8, opacity: 0.4 }}>{record.date}</AppText>
-          </View>
+          </Animated.View>
         );
       })}
     </Animated.View>
@@ -52,18 +69,3 @@ const BmiHistoryList = memo(({ history }: Props) => {
 
 BmiHistoryList.displayName = 'BmiHistoryList';
 export default BmiHistoryList;
-
-const styles = StyleSheet.create({
-  title: { marginBottom: 10 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    marginBottom: 8,
-    gap: 10,
-  },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-});

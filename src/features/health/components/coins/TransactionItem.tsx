@@ -1,19 +1,40 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import { useTheme } from '../../../../hooks/useTheme';
 import AppText from '../../../../components/AppText';
 import { Icon } from '../../../../components/Icon';
 import { CoinTransaction } from '../../types/gamification.type';
 import { withOpacity } from '../../../../utils/withOpacity';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface Props {
   item: CoinTransaction;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  transactionCard: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: spacing[3],
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  transactionInfo: {
+    flex: 1,
+    marginLeft: spacing[3],
+  },
+}));
+
 const TransactionItem = ({ item }: Props) => {
   const { colors, spacing, radius } = useTheme();
-  
+  const styles = useStyles();
+
   const isEarned = item.type === 'EARNED';
   const isSpent = item.type === 'SPENT';
   const isExpired = item.type === 'EXPIRED';
@@ -23,9 +44,7 @@ const TransactionItem = ({ item }: Props) => {
   const bgColor = withOpacity(iconColor, 0.1);
 
   return (
-    // Outer wrapper handles layout reflow animation (item reorder/removal)
     <Animated.View layout={Layout.springify()}>
-      {/* Inner wrapper handles enter animation — separate from layout to avoid transform conflict */}
       <Animated.View
         entering={FadeInDown.delay(100)}
         style={[
@@ -53,24 +72,5 @@ const TransactionItem = ({ item }: Props) => {
     </Animated.View>
   );
 };
-
-const styles = StyleSheet.create({
-  transactionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  transactionInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-});
 
 export default TransactionItem;

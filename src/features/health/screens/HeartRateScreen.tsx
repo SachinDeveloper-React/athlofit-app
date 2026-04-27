@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, StatusBar, View, Animated as RNAnimated } from 'react-native';
+import { StyleSheet, View, Animated as RNAnimated } from 'react-native';
 import { Camera } from 'react-native-vision-camera';
 import { useHeartRate } from '../hooks/useHeartRate';
 import { Button, Header, Screen, AppText, AppView } from '../../../components';
@@ -10,12 +10,109 @@ import { PulseIndicator } from '../components/heart-rate/PulseIndicator';
 import { HeartRateResultCard } from '../components/heart-rate/HeartRateResultCard';
 import { SavedBanner } from '../components/heart-rate/SavedBanner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { makeStyles } from '../../../hooks/makeStyles';
 
 // Torch warmup duration in ms — gives the LED time to reach full brightness
 const TORCH_WARMUP_MS = 1500;
 
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[6],
+    paddingBottom: spacing[10],
+    alignItems: 'center' as const,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: fontWeight.semiBold,
+    color: colors.foreground,
+    marginBottom: spacing[4],
+    alignSelf: 'flex-start' as const,
+  },
+  fullScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  blackBg: {
+    backgroundColor: '#000',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingTop: 60,
+    paddingBottom: spacing[10],
+    paddingHorizontal: spacing[5],
+  },
+  topBanner: {
+    alignItems: 'center' as const,
+  },
+  topTitle: {
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.semiBold,
+    color: '#fff',
+    textAlign: 'center' as const,
+  },
+  topSub: {
+    fontSize: fontSize.md,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: spacing[1.5],
+    textAlign: 'center' as const,
+  },
+  warmupTrack: {
+    marginTop: 14,
+    width: 200,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden' as const,
+  },
+  warmupFill: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#F97316',
+  },
+  centerArea: {
+    alignItems: 'center' as const,
+  },
+  bottomArea: {
+    width: '100%' as const,
+  },
+  errorCard: {
+    width: '100%' as const,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing[6],
+    alignItems: 'center' as const,
+    borderWidth: 0.5,
+    borderColor: '#FAECE7',
+    marginBottom: spacing[5],
+  },
+  errorIcon: {
+    fontSize: 36,
+    marginBottom: spacing[2.5],
+  },
+  errorTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semiBold,
+    color: '#D85A30',
+    marginBottom: spacing[2],
+  },
+  errorMsg: {
+    fontSize: fontSize.md,
+    color: colors.mutedForeground,
+    textAlign: 'center' as const,
+    lineHeight: 22,
+  },
+}));
+
 export default function HeartRateScreen() {
   const { bottom } = useSafeAreaInsets();
+  const styles = useStyles();
   const {
     measureState,
     progress,
@@ -98,8 +195,6 @@ export default function HeartRateScreen() {
   if (measureState === 'measuring') {
     return (
       <AppView style={[styles.fullScreen, { marginBottom: bottom }]}>
-        <StatusBar hidden />
-
         {device && format ? (
           <Camera
             style={StyleSheet.absoluteFill}
@@ -263,98 +358,3 @@ export default function HeartRateScreen() {
 
   return null;
 }
-
-const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 40,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 16,
-    alignSelf: 'flex-start',
-  },
-  fullScreen: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  blackBg: {
-    backgroundColor: '#000',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-  },
-  topBanner: {
-    alignItems: 'center',
-  },
-  topTitle: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  topSub: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  warmupTrack: {
-    marginTop: 14,
-    width: 200,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    overflow: 'hidden',
-  },
-  warmupFill: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#F97316',  // warm orange — matches torch glow
-  },
-  centerArea: {
-    alignItems: 'center',
-  },
-  bottomArea: {
-    width: '100%',
-  },
-  errorCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: '#FAECE7',
-    marginBottom: 20,
-  },
-  errorIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
-  errorTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#D85A30',
-    marginBottom: 8,
-  },
-  errorMsg: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-});

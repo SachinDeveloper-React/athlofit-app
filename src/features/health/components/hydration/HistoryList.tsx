@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
 import { AppText, AppView, Loader } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { HistoryEntry } from '../../types/hydration.type';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface HistoryListProps {
   history: HistoryEntry[];
@@ -29,11 +29,86 @@ const getSourceIcon = (source: HistoryEntry['source']) => {
   return '';
 };
 
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  container: {
+    marginBottom: spacing[2.5],
+  },
+  header: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: spacing[3],
+  },
+  headerRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[1.5],
+  },
+  sectionTitle: {
+    fontSize: fontSize.sm,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+  },
+  count: {
+    fontSize: fontSize.sm,
+  },
+  empty: {
+    alignItems: 'center' as const,
+    paddingVertical: spacing[10],
+  },
+  emptyIcon: {
+    fontSize: 36,
+    marginBottom: spacing[2.5],
+  },
+  emptyText: {
+    fontSize: fontSize.md,
+  },
+  item: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.lg,
+    marginBottom: spacing[2],
+    borderWidth: 1,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.full,
+    marginRight: spacing[3],
+  },
+  info: {
+    flex: 1,
+  },
+  amount: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.bold,
+  },
+  sourceIcon: {
+    fontSize: fontSize.sm,
+  },
+  time: {
+    fontSize: fontSize.sm,
+    marginTop: spacing[0.5],
+  },
+  badge: {
+    paddingHorizontal: spacing[2.5],
+    paddingVertical: spacing[1],
+    borderRadius: radius['2xl'],
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: fontWeight.semiBold,
+  },
+}));
+
 export const HistoryList: React.FC<HistoryListProps> = ({
   history,
   isLoading,
 }) => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   return (
     <AppView style={styles.container}>
@@ -82,77 +157,3 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 10,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  count: {
-    fontSize: 12,
-  },
-  empty: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 14,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  info: {
-    flex: 1,
-  },
-  amount: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sourceIcon: {
-    fontSize: 13,
-  },
-  time: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-});

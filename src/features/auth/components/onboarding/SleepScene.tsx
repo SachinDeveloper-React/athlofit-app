@@ -11,6 +11,8 @@ import Svg, {
 } from 'react-native-svg';
 import { C } from '../../constant';
 import { useLoopAnim, useEnterAnim } from '../../hooks';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import type { SleepStage } from '../../types';
 
 const { width, height: screenHeight } = Dimensions.get('window');
@@ -29,6 +31,8 @@ const STAR_POSITIONS: [number, number][] = [
 ];
 
 export const SleepScene: React.FC = () => {
+  const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
+  
   // Moon glow pulse
   const moonGlow = useLoopAnim({
     initialValue: 0.7,
@@ -109,7 +113,7 @@ export const SleepScene: React.FC = () => {
           style={[styles.star, { left, top, opacity: stars[i % stars.length] }]}
         >
           <Svg width={12} height={12}>
-            <Circle cx={6} cy={6} r={2.5} fill={C.white} />
+            <Circle cx={6} cy={6} r={2.5} fill={colors.primaryForeground} />
           </Svg>
         </Animated.View>
       ))}
@@ -124,21 +128,36 @@ export const SleepScene: React.FC = () => {
             </LinearGradient>
           </Defs>
           <Circle cx={55} cy={55} r={38} fill="url(#mg)" />
-          <Circle cx={72} cy={38} r={28} fill={C.bg1} />
-          <Circle cx={32} cy={62} r={5} fill="rgba(0,0,0,0.15)" />
-          <Circle cx={42} cy={78} r={3} fill="rgba(0,0,0,0.12)" />
+          <Circle cx={72} cy={38} r={28} fill={colors.background} />
+          <Circle cx={32} cy={62} r={5} fill={withOpacity(colors.foreground, 0.15)} />
+          <Circle cx={42} cy={78} r={3} fill={withOpacity(colors.foreground, 0.12)} />
         </Svg>
       </Animated.View>
 
       {/* Z Z Z */}
       <Animated.View
-        style={{ transform: [{ translateY: zFloat }], marginTop: -10 }}
+        style={{ transform: [{ translateY: zFloat }], marginTop: -spacing[2.5] }}
       >
-        <AppText style={styles.zText}>z z z</AppText>
+        <AppText style={{
+          color: colors.gold,
+          fontSize: 38,
+          fontWeight: fontWeight.bold,
+          letterSpacing: 4,
+          opacity: 0.9,
+        }}>z z z</AppText>
       </Animated.View>
 
       {/* Sleep wave */}
-      <AppView style={styles.waveCard}>
+      <AppView style={{
+        width: width * 0.8,
+        height: 60,
+        backgroundColor: withOpacity(C.blue, 0.08),
+        borderRadius: radius.lg,
+        overflow: 'hidden',
+        marginTop: spacing[4],
+        borderWidth: 1,
+        borderColor: withOpacity(C.blue, 0.2),
+      }}>
         <Animated.View
           style={[styles.waveInner, { transform: [{ translateX: waveTX }] }]}
         >
@@ -152,23 +171,47 @@ export const SleepScene: React.FC = () => {
             />
           </Svg>
         </Animated.View>
-        <AppText style={styles.deepLabel}>DEEP SLEEP</AppText>
+        <AppText style={{
+          position: 'absolute' as const,
+          bottom: spacing[1.5],
+          right: spacing[3],
+          color: C.blue,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.bold,
+        }}>DEEP SLEEP</AppText>
       </AppView>
 
       {/* Sleep score */}
-      <AppView style={styles.scoreSection}>
-        <AppView style={styles.scoreHeader}>
-          <AppText style={styles.scoreTitle}>SLEEP SCORE</AppText>
-          <AppText style={styles.scoreDuration}>7h 42m</AppText>
+      <AppView style={{ marginTop: spacing[5], width: width * 0.8 }}>
+        <AppView style={{
+          flexDirection: 'row' as const,
+          justifyContent: 'space-between' as const,
+          marginBottom: spacing[2],
+        }}>
+          <AppText style={{
+            color: colors.mutedForeground,
+            fontSize: fontSize.sm,
+            fontWeight: fontWeight.semiBold,
+            letterSpacing: 1.5,
+          }}>SLEEP SCORE</AppText>
+          <AppText style={{ color: colors.gold, fontSize: fontSize.md, fontWeight: fontWeight.bold }}>7h 42m</AppText>
         </AppView>
-        <AppView style={styles.barTrack}>
-          <Animated.View style={[styles.barFill, { width: sbWidth }]} />
+        <AppView style={{
+          height: spacing[2.5],
+          backgroundColor: colors.overlayLight,
+          borderRadius: radius.sm,
+        }}>
+          <Animated.View style={[{ height: spacing[2.5], borderRadius: radius.sm, backgroundColor: colors.gold }, { width: sbWidth }]} />
         </AppView>
-        <AppView style={styles.stagesRow}>
+        <AppView style={{
+          flexDirection: 'row' as const,
+          justifyContent: 'space-between' as const,
+          marginTop: spacing[1.5],
+        }}>
           {STAGES.map(s => (
-            <AppView key={s.label} style={styles.stageItem}>
-              <AppView style={[styles.stageDot, { backgroundColor: s.color }]} />
-              <AppText style={styles.stageLabel}>{s.label}</AppText>
+            <AppView key={s.label} style={{ alignItems: 'center' as const }}>
+              <AppView style={[{ width: spacing[2], height: spacing[2], borderRadius: radius.xs, marginBottom: spacing[1] }, { backgroundColor: s.color }]} />
+              <AppText style={{ color: colors.mutedForeground, fontSize: fontSize.xs }}>{s.label}</AppText>
             </AppView>
           ))}
         </AppView>
@@ -181,62 +224,5 @@ const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   star: { position: 'absolute' },
   moonWrap: { marginTop: -(screenHeight * 0.05) },
-
-  zText: {
-    color: C.gold,
-    fontSize: 38,
-    fontWeight: '900',
-    letterSpacing: 4,
-    opacity: 0.9,
-  },
-
-  waveCard: {
-    width: width * 0.8,
-    height: 60,
-    backgroundColor: 'rgba(74,144,245,0.08)',
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(74,144,245,0.2)',
-  },
   waveInner: { position: 'absolute', top: 0, left: 0 },
-  deepLabel: {
-    position: 'absolute',
-    bottom: 6,
-    right: 12,
-    color: C.blue,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
-  scoreSection: { marginTop: 20, width: width * 0.8 },
-  scoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  scoreTitle: {
-    color: C.muted,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-  },
-  scoreDuration: { color: C.gold, fontSize: 14, fontWeight: '800' },
-
-  barTrack: {
-    height: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 5,
-  },
-  barFill: { height: 10, borderRadius: 5, backgroundColor: C.gold },
-
-  stagesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  stageItem: { alignItems: 'center' },
-  stageDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 4 },
-  stageLabel: { color: C.muted, fontSize: 11 },
 });

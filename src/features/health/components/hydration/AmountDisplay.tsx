@@ -1,8 +1,9 @@
 import React from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, View } from 'react-native';
 import { AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface AmountDisplayProps {
   consumed: number;
@@ -10,13 +11,62 @@ interface AmountDisplayProps {
   percentage: number;
 }
 
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  container: {
+    alignItems: 'center' as const,
+    flex: 1,
+  },
+  label: {
+    fontSize: fontSize.xs,
+    letterSpacing: 2,
+    textTransform: 'uppercase' as const,
+    marginBottom: spacing[1],
+  },
+  value: {
+    fontSize: 48,
+    fontWeight: '900' as const,
+    letterSpacing: -2,
+  },
+  goalText: {
+    fontSize: fontSize.sm,
+    marginBottom: spacing[4],
+  },
+  ringOuter: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 5,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: 'transparent',
+  },
+  ringFill: {
+    position: 'absolute' as const,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 5,
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  ringInner: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  ringPct: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+  },
+}));
+
 export const AmountDisplay: React.FC<AmountDisplayProps> = ({
   consumed,
   dailyGoal,
   percentage,
 }) => {
   const { colors } = useTheme();
-  
+  const styles = useStyles();
+
   const amountColor =
     percentage >= 100 ? colors.success : percentage >= 50 ? colors.primary : withOpacity(colors.primary, 0.7);
 
@@ -28,7 +78,6 @@ export const AmountDisplay: React.FC<AmountDisplayProps> = ({
 
       <AppText style={[styles.goalText, { color: colors.secondaryForeground }]}>/ {dailyGoal} ml</AppText>
 
-      {/* Circular ring indicator */}
       <View style={[styles.ringOuter, { borderColor: withOpacity(colors.primary, 0.15) }]}>
         <View
           style={[
@@ -43,51 +92,3 @@ export const AmountDisplay: React.FC<AmountDisplayProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  label: {
-    fontSize: 10,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  value: {
-    fontSize: 48,
-    fontWeight: '900',
-    letterSpacing: -2,
-  },
-  goalText: {
-    fontSize: 13,
-    marginBottom: 16,
-  },
-  ringOuter: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  ringFill: {
-    position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 5,
-    borderTopColor: 'transparent',
-    borderRightColor: 'transparent',
-  },
-  ringInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringPct: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-});

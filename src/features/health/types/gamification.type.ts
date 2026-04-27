@@ -48,6 +48,7 @@ export interface GamificationStore extends GamificationState {
   syncDailyProgress: (coinsEarnedThisDay: number, metGoal: boolean) => void;
   checkAndResetDaily: () => void;
   syncWithService: (data: Partial<GamificationState>) => void;
+  reset: () => void;
 }
 
 export type TransactionType = 'EARNED' | 'SPENT' | 'EXPIRED';

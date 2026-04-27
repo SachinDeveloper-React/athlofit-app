@@ -1,6 +1,6 @@
 // src/components/BottomSheet.tsx
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Modal,
@@ -9,7 +9,8 @@ import {
   StyleSheet,
   ViewStyle,
   StyleProp,
-  Dimensions,
+  Keyboard,
+  useWindowDimensions,
   PanResponder,
   Platform,
 } from 'react-native';
@@ -17,8 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from './AppText';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Radius, Shadow } from '../constants/spacing';
-
-const { height: H } = Dimensions.get('window');
 
 interface BottomSheetProps {
   visible: boolean;
@@ -45,8 +44,17 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { height: H } = useWindowDimensions();
   const translateY = useRef(new Animated.Value(H)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+
+  // Track keyboard so we remove bottom safe-area padding while it's open
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const sheetHeight =
     typeof snapHeight === 'string'
@@ -140,7 +148,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
           styles.sheet,
           {
             height: sheetHeight,
-            paddingBottom: insets.bottom + Spacing[4],
+            paddingBottom: keyboardVisible ? 0 : insets.bottom + Spacing[4],
             backgroundColor: colors.card,
             transform: [{ translateY }],
             borderColor: colors.border,
@@ -228,7 +236,7 @@ const styles = StyleSheet.create({
   closeCircle: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },

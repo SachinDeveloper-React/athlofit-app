@@ -1,6 +1,6 @@
 import { FlatList } from 'react-native';
 import React, { useCallback } from 'react';
-import { AppText, AppView, Card, Icon, Screen } from '../../../components';
+import { AppText, AppView, Card, Icon, Screen, NotificationBell } from '../../../components';
 import {
   AccountAvatar,
   AccountIconPill,
@@ -53,13 +53,12 @@ const AccountScreen = (props: Props) => {
 
                 <AppView style={s.topRight}>
                   <AccountIconPill onPress={onNotifications}>
-                    <Icon
-                      name="Bell"
+                    <NotificationBell
+                      onPress={onNotifications}
                       size={18}
-                      color={withOpacity(colors.foreground, 0.7)}
+                      iconColor={withOpacity(colors.foreground, 0.7)}
+                      showBadge={true}
                     />
-
-                    <AppView style={s.dot} />
                   </AccountIconPill>
                   <AccountIconPill onPress={onSettings}>
                     <Icon

@@ -1,6 +1,5 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet,
   Animated,
   Easing,
   ActivityIndicator,
@@ -8,7 +7,7 @@ import {
 import Svg, { Path, Circle } from 'react-native-svg';
 import { AppText, AppView } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
-
+import { makeStyles } from '../../../hooks/makeStyles';
 
 // ── Animated SVG runner figure ──────────────────────────────────────────
 const AnimatedRunner = ({ color }: { color: string }) => {
@@ -52,21 +51,13 @@ const AnimatedRunner = ({ color }: { color: string }) => {
   return (
     <Animated.View style={{ transform: [{ translateY: bounce }] }}>
       <Svg width={100} height={120} viewBox="0 0 100 120">
-        {/* Head */}
         <Circle cx="50" cy="18" r="12" fill={color} />
-        {/* Body */}
         <Path d="M50 30 L50 70" stroke={color} strokeWidth="5" strokeLinecap="round" />
-        {/* Left arm */}
         <Path d="M50 40 L30 58" stroke={color} strokeWidth="4" strokeLinecap="round" />
-        {/* Right arm */}
         <Path d="M50 40 L70 52" stroke={color} strokeWidth="4" strokeLinecap="round" />
-        {/* Left leg */}
         <Path d="M50 70 L32 95" stroke={color} strokeWidth="4" strokeLinecap="round" />
-        {/* Right leg */}
         <Path d="M50 70 L68 90" stroke={color} strokeWidth="4" strokeLinecap="round" />
-        {/* Left foot */}
         <Path d="M32 95 L20 95" stroke={color} strokeWidth="3" strokeLinecap="round" />
-        {/* Right foot */}
         <Path d="M68 90 L80 93" stroke={color} strokeWidth="3" strokeLinecap="round" />
       </Svg>
     </Animated.View>
@@ -107,16 +98,66 @@ const TypingText = ({ onDone, colors }: { onDone: () => void; colors: any }) => 
   );
 };
 
+const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+  container: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  circle: {
+    position: 'absolute' as const,
+    borderRadius: radius.full,
+  },
+  circleTop: {
+    width: 300,
+    height: 300,
+    top: -80,
+    right: -80,
+  },
+  circleBottom: {
+    width: 200,
+    height: 200,
+    bottom: -60,
+    left: -60,
+  },
+  textRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  brand: {
+    fontSize: 48,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 2,
+  },
+  cursor: {
+    fontSize: 48,
+    fontWeight: '300' as const,
+    marginLeft: spacing[0.5],
+  },
+  tagline: {
+    fontSize: fontSize.md,
+    letterSpacing: 3,
+    marginTop: spacing[2],
+    textTransform: 'uppercase' as const,
+  },
+  loaderWrap: {
+    marginTop: spacing[12],
+  },
+}));
+
+// Hoist styles for TypingText (needs to access before component)
+let styles: ReturnType<typeof useStyles>;
+
 // ── Main SplashScreen ────────────────────────────────────────────────────
 const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
   const { colors } = useTheme();
+  styles = useStyles();
   const [showLoader, setShowLoader] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
   const runnerX = useRef(new Animated.Value(-120)).current;
 
   useEffect(() => {
-    // Slide runner in
     Animated.timing(runnerX, {
       toValue: 0,
       duration: 800,
@@ -124,7 +165,6 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
       useNativeDriver: true,
     }).start();
 
-    // Fade in container
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
@@ -132,7 +172,6 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
       useNativeDriver: true,
     }).start();
 
-    // Slide up text
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 600,
@@ -151,16 +190,13 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
 
   return (
     <AppView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Background accent circles */}
       <AppView style={[styles.circle, styles.circleTop, { backgroundColor: colors.primary + '15' }]} />
       <AppView style={[styles.circle, styles.circleBottom, { backgroundColor: colors.primary + '15' }]} />
 
-      {/* Runner */}
       <Animated.View style={{ transform: [{ translateX: runnerX }] }}>
         <AnimatedRunner color={colors.primary} />
       </Animated.View>
 
-      {/* Brand name + tagline */}
       <Animated.View
         style={{
           opacity: fadeAnim,
@@ -172,7 +208,6 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
         <AppText style={[styles.tagline, { color: colors.mutedForeground }]}>Train Smarter. Live Better.</AppText>
       </Animated.View>
 
-      {/* Loader */}
       {showLoader && (
         <Animated.View style={[styles.loaderWrap, { opacity: fadeAnim }]}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -183,50 +218,3 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
 });
 
 export default SplashScreen;
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circle: {
-    position: 'absolute',
-    borderRadius: 9999,
-  },
-  circleTop: {
-    width: 300,
-    height: 300,
-    top: -80,
-    right: -80,
-  },
-  circleBottom: {
-    width: 200,
-    height: 200,
-    bottom: -60,
-    left: -60,
-  },
-  textRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brand: {
-    fontSize: 48,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-  cursor: {
-    fontSize: 48,
-    fontWeight: '300',
-    marginLeft: 2,
-  },
-  tagline: {
-    fontSize: 14,
-    letterSpacing: 3,
-    marginTop: 8,
-    textTransform: 'uppercase',
-  },
-  loaderWrap: {
-    marginTop: 48,
-  },
-});

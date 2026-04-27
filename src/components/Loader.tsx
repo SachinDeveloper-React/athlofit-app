@@ -13,13 +13,14 @@ type Props = {
 };
 
 const Loader = memo(({ message, size = 'large', fullscreen = false }: Props) => {
-  const { colors } = useTheme();
+  const { colors, spacing } = useTheme();
 
   return (
     <AppView
-      style={[styles.container, fullscreen && styles.fullscreen,{
-        backgroundColor: colors.background
-      }]}
+      style={[
+        { padding: spacing[6], gap: spacing[3], backgroundColor: colors.background },
+        fullscreen && styles.fullscreen,
+      ]}
       center
     >
       <ActivityIndicator size={size} color={colors.primary} />
@@ -37,14 +38,6 @@ Loader.displayName = 'Loader';
 export default Loader;
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    gap: 12,
-  },
-  fullscreen: {
-    flex: 1,
-  },
-  text: {
-    textAlign: 'center',
-  },
+  fullscreen: { flex: 1 },
+  text: { textAlign: 'center' },
 });

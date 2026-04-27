@@ -1,20 +1,35 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
 import { AppText, AppView, Button } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
-import { withOpacity } from '../../../../utils/withOpacity';
 import { DrinkSize } from '../../types/hydration.type';
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 interface QuickAddButtonsProps {
   onAdd: (amount: DrinkSize) => void;
   onReset: () => void;
 }
 
+const useStyles = makeStyles(({ colors, spacing }) => ({
+  container: {
+    marginBottom: spacing[5],
+  },
+  sectionTitle: {
+    marginBottom: spacing[3],
+  },
+  btnRow: {
+    marginBottom: spacing[3],
+  },
+  addBtn: {
+    flex: 1,
+    alignSelf: 'stretch' as const,
+  },
+}));
+
 export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
   onAdd,
   onReset,
 }) => {
-  const { colors } = useTheme();
+  const styles = useStyles();
 
   const DRINK_OPTIONS = [
     { ml: 100 as DrinkSize, emoji: '🥛' },
@@ -51,19 +66,3 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    marginBottom: 12,
-  },
-  btnRow: {
-    marginBottom: 12,
-  },
-  addBtn: {
-    flex: 1,
-    alignSelf: 'stretch',
-  },
-});

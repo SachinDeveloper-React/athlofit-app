@@ -97,6 +97,30 @@ const userSchema = new mongoose.Schema(
     notificationsEnabled: { type: Boolean, default: true },
     // Device platform — set when FCM token is registered
     platform: { type: String, enum: ['ios', 'android', null], default: null },
+
+    // Account deletion request
+    deletionRequest: {
+      type: {
+        status: { 
+          type: String, 
+          enum: ['none', 'pending', 'in_progress', 'completed', 'cancelled'], 
+          default: 'none' 
+        },
+        requestedAt: { type: Date, default: null },
+        scheduledDeletionDate: { type: Date, default: null }, // 30 days from request
+        reason: { type: String, default: null },
+        cancelledAt: { type: Date, default: null },
+        completedAt: { type: Date, default: null },
+      },
+      default: () => ({
+        status: 'none',
+        requestedAt: null,
+        scheduledDeletionDate: null,
+        reason: null,
+        cancelledAt: null,
+        completedAt: null,
+      }),
+    },
   },
   {
     timestamps: true,

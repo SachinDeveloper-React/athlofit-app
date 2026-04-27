@@ -1,4 +1,3 @@
-// src/features/account/screens/NotificationsScreen.tsx
 import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,

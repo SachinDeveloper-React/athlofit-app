@@ -27,9 +27,9 @@ export const NotificationRow = memo(
     const accent = useMemo(() => {
       if (item.type === 'SECURITY')  return colors.success ?? colors.primary;
       if (item.type === 'HEART')     return colors.destructive;
-      if (item.type === 'CHALLENGE') return '#8B5CF6';
-      if (item.type === 'COIN')      return '#F5C518';
-      if (item.type === 'PRODUCT')   return '#10B981';
+      if (item.type === 'CHALLENGE') return colors.notificationChallenge;
+      if (item.type === 'COIN')      return colors.notificationCoin;
+      if (item.type === 'PRODUCT')   return colors.notificationProduct;
       return colors.primary;
     }, [item.type, colors]);
 

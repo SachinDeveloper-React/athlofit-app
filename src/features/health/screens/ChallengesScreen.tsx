@@ -4,7 +4,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -16,9 +15,48 @@ import ChallengeCard from '../components/challenges/ChallengeCard';
 import type { Challenge } from '../types/challenge.types';
 import { HealthRoutes, RootRoutes } from '../../../navigation/routes';
 import { navigate } from '../../../navigation/navigationRef';
+import { makeStyles } from '../../../hooks/makeStyles';
+
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  banner: {
+    flexDirection: 'row' as const,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    padding: spacing[3.5 as any] ?? 14,
+    marginVertical: spacing[4],
+  },
+  bannerItem: { flex: 1, alignItems: 'center' as const, gap: spacing[0.75 as any] ?? 3 },
+  bannerDivider: { width: 1, marginVertical: spacing[1.5] },
+  filterRow: { gap: spacing[2], paddingBottom: spacing[1], marginBottom: spacing[2] },
+  typePill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[1.25 as any] ?? 5,
+    paddingHorizontal: spacing[3.5 as any] ?? 14,
+    paddingVertical: spacing[2],
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+  },
+  catPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1.5],
+    borderRadius: radius.xl,
+    borderWidth: 1,
+  },
+  pillEmoji: { fontSize: 13 },
+  section: { marginBottom: spacing[6] },
+  sectionTitle: { marginBottom: spacing[3] },
+  list: { gap: spacing[2.5] },
+  loader: { paddingVertical: spacing[15 as any] ?? 60, alignItems: 'center' as const },
+  empty: { paddingVertical: spacing[15 as any] ?? 60, alignItems: 'center' as const, paddingHorizontal: spacing[8] },
+}));
 
 const ChallengesScreen: React.FC = () => {
   const { colors } = useTheme();
+  const styles = useStyles();
 
   const [typeFilter, setTypeFilter] = useState('all');
   const [catFilter,  setCatFilter]  = useState('all');
@@ -186,47 +224,8 @@ const ChallengesScreen: React.FC = () => {
           </View>
         ))
       )}
-
-      
     </Screen>
   );
 };
 
 export default ChallengesScreen;
-
-const styles = StyleSheet.create({
-  banner: {
-    flexDirection: 'row',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    marginVertical: 16,
-  },
-  bannerItem: { flex: 1, alignItems: 'center', gap: 3 },
-  bannerDivider: { width: 1, marginVertical: 6 },
-  filterRow: { gap: 8, paddingBottom: 4, marginBottom: 8 },
-  typePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  catPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  pillEmoji: { fontSize: 13 },
-  section: { marginBottom: 24 },
-  sectionTitle: { marginBottom: 12 },
-  list: { gap: 10 },
-  loader: { paddingVertical: 60, alignItems: 'center' },
-  empty: { paddingVertical: 60, alignItems: 'center', paddingHorizontal: 32 },
-});

@@ -28,11 +28,10 @@ function formatCoins(n: number): string {
 }
 
 export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => {
-  const { colors } = useTheme();
+  const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
   const storeBalance = useGamificationStore(s => s.coinsBalance);
   const balance = balanceProp ?? storeBalance;
 
-  // Pulse animation when balance changes
   const scale = useSharedValue(1);
   const prevBalance = useSharedValue(balance);
 
@@ -51,21 +50,40 @@ export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => 
   }));
 
   const isSmall = size === 'sm';
+  const height       = isSmall ? 26 : 32;
+  const px           = isSmall ? spacing[2] : spacing[2.5];
+  const iconSize     = isSmall ? 13 : 15;
+  const textSize     = isSmall ? fontSize.xs : fontSize.sm;
+  const borderRadius = radius.full;
 
   return (
     <Animated.View
       style={[
-        styles.badge,
-        isSmall && styles.badgeSm,
         {
-          backgroundColor: withOpacity('#F5C518', 0.15),
-          borderColor: withOpacity('#F5C518', 0.35),
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing[1],
+          paddingHorizontal: px,
+          height,
+          borderRadius,
+          borderWidth: 1,
+          backgroundColor: withOpacity(colors.gold, 0.15),
+          borderColor: withOpacity(colors.gold, 0.35),
         },
         animStyle,
       ]}
     >
-      <Icon name="HandCoins" size={isSmall ? 13 : 15} color={colors.gold} />
-      <AppText style={[styles.count, isSmall && styles.countSm]}>
+      <Icon name="HandCoins" size={iconSize} color={colors.gold} />
+      <AppText
+        style={{
+          fontSize: textSize,
+          fontWeight: fontWeight.bold,
+          color: colors.gold,
+          letterSpacing: 0.3,
+          lineHeight: textSize + 7,
+          includeFontPadding: false,
+        }}
+      >
         {formatCoins(balance)}
       </AppText>
     </Animated.View>
@@ -73,31 +91,3 @@ export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => 
 });
 
 CoinBadge.displayName = 'CoinBadge';
-
-const styles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    height: 32,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  badgeSm: {
-    height: 26,
-    paddingHorizontal: 8,
-  },
-  count: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#F5C518',
-    letterSpacing: 0.3,
-    lineHeight: 20,
-    includeFontPadding: false,
-  },
-  countSm: {
-    fontSize: 11,
-    lineHeight: 16,
-  },
-});

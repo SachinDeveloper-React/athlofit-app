@@ -27,6 +27,7 @@ import { AppText, AppView, Icon, IconButton } from '../../../../components';
 import { Skeleton } from '../../../../components/SkeletonLoader';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
+import { makeStyles } from '../../../../hooks/makeStyles';
 import { WeeklyStepEntry } from '../../types/healthTypes';
 import { navigate } from '../../../../navigation/navigationRef';
 
@@ -440,7 +441,7 @@ StepProgressCard.displayName = 'StepProgressCard';
 const styles = StyleSheet.create({
   card: {
     paddingVertical: 20,
-      paddingHorizontal: 0, 
+    paddingHorizontal: 0,
   },
 
   // Speedometer

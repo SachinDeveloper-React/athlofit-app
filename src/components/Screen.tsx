@@ -132,8 +132,11 @@ const Screen = memo(
               <View style={[pad, contentContainerStyle]}>{children}</View>
             </ScrollView>
           ) : (
-            <AppView style={[{ flex: 1 }, pad, contentContainerStyle]}>
-              {children}
+            <AppView style={[{ flex: 1 }, contentContainerStyle]}>
+              {header ?? null}
+              <AppView style={[{ flex: 1 }, pad]}>
+                {children}
+              </AppView>
             </AppView>
           )}
         </KeyboardAvoidingView>

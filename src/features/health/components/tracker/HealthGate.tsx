@@ -1,24 +1,9 @@
 // src/features/health/components/tracker/HealthGate.tsx
-//
-// Bottom-sheet warning shown when the health platform is unavailable.
-//
-//  Android — Health Connect not installed → prompt to download from Play Store
-//  Android — No built-in pedometer sensor  → warn + offer to continue
-//  iOS     — HealthKit permission denied    → deep-link to Settings
-//  Both    — Generic error / not ready      → retry CTA
-//
-// Renders as a native-feeling bottom sheet:
-//   • Animated slide-up on mount  (Reanimated spring)
-//   • Scrim backdrop fades in
-//   • Dismissible via backdrop tap or secondary button
-//   • Non-dismissible for hard blockers (health-connect-missing, healthkit-denied)
-
 import React, { memo, useCallback, useEffect } from 'react';
 import {
   Linking,
   Modal,
   Pressable,
-  StyleSheet,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -31,30 +16,24 @@ import { AppText, AppView, Button } from '../../../../components';
 import { type HealthPlatform } from '../../hooks/useHealth';
 import { Icon, LucideName } from '../../../../components/Icon';
 import { useTheme } from '../../../../hooks/useTheme';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { makeStyles } from '../../../../hooks/makeStyles';
 
 export type HealthGateReason =
-  | 'health-connect-missing' // Android: Health Connect not installed
-  | 'healthkit-denied' // iOS: HealthKit permission denied
-  | 'error' // Generic API error
-  | 'not-ready'; // Platform unavailable / first load failed
+  | 'health-connect-missing'
+  | 'healthkit-denied'
+  | 'error'
+  | 'not-ready';
 
 type Props = {
-  /** Pass a reason to show the sheet; null/undefined hides it */
   reason: HealthGateReason | null;
   errorMessage?: string;
   onRetry?: () => void;
   onDismiss?: () => void;
 };
 
-// ─── URLs ─────────────────────────────────────────────────────────────────────
-
 const HEALTH_CONNECT_URL =
   'https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata';
 const IOS_SETTINGS_URL = 'app-settings:';
-
-// ─── Config map ───────────────────────────────────────────────────────────────
 
 type GateConfig = {
   icon: LucideName;
@@ -66,7 +45,6 @@ type GateConfig = {
   primaryAction: 'url' | 'retry' | 'dismiss';
   primaryUrl?: string;
   secondaryLabel?: string;
-  /** true = backdrop tap does NOT dismiss (hard blocker) */
   blocking?: boolean;
 };
 
@@ -85,7 +63,6 @@ const GATE_CONFIG: Record<HealthGateReason, GateConfig> = {
     secondaryLabel: 'Skip for now',
     blocking: false,
   },
-
   'healthkit-denied': {
     icon: 'ShieldOff',
     iconColor: '#185FA5',
@@ -100,7 +77,6 @@ const GATE_CONFIG: Record<HealthGateReason, GateConfig> = {
     secondaryLabel: 'Not now',
     blocking: false,
   },
-
   error: {
     icon: 'AlertCircle',
     iconColor: '#A32D2D',
@@ -112,7 +88,6 @@ const GATE_CONFIG: Record<HealthGateReason, GateConfig> = {
     secondaryLabel: 'Dismiss',
     blocking: false,
   },
-
   'not-ready': {
     icon: 'RefreshCw',
     iconColor: '#5F5E5A',
@@ -126,23 +101,82 @@ const GATE_CONFIG: Record<HealthGateReason, GateConfig> = {
   },
 };
 
-// ─── Sheet height ─────────────────────────────────────────────────────────────
-
 const SHEET_HEIGHT = 360;
 
-// ─── HealthGate ───────────────────────────────────────────────────────────────
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
+  backdrop: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetAnchor: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end' as const,
+  },
+  sheet: {
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
+    paddingHorizontal: spacing[6],
+    paddingBottom: 36,
+    paddingTop: spacing[3],
+    alignItems: 'center' as const,
+    gap: spacing[3],
+    minHeight: SHEET_HEIGHT,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: spacing[0.5],
+    marginBottom: spacing[2],
+    opacity: 0.35,
+  },
+  iconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: spacing[1],
+  },
+  title: {
+    textAlign: 'center' as const,
+  },
+  body: {
+    textAlign: 'center' as const,
+    lineHeight: 22,
+    fontSize: 14,
+  },
+  devError: {
+    fontSize: 11,
+    textAlign: 'center' as const,
+    opacity: 0.7,
+  },
+  primaryBtn: {
+    width: '100%' as const,
+    paddingVertical: spacing[3.5 as any] ?? 14,
+    borderRadius: radius.lg,
+    alignItems: 'center' as const,
+    marginTop: spacing[1],
+  },
+}));
 
 export const HealthGate = memo(
   ({ reason, errorMessage, onRetry, onDismiss }: Props) => {
     const { colors } = useTheme();
+    const styles = useStyles();
 
     const translateY = useSharedValue(SHEET_HEIGHT);
     const backdropOpacity = useSharedValue(0);
 
     const isVisible = !!reason;
     const cfg = reason ? GATE_CONFIG[reason] : null;
-
-    // ── Animation ──────────────────────────────────────────────────────────────
 
     useEffect(() => {
       if (isVisible) {
@@ -160,8 +194,6 @@ export const HealthGate = memo(
       }
     }, [isVisible, backdropOpacity, translateY]);
 
-    // ── Handlers ──────────────────────────────────────────────────────────────
-
     const handleDismiss = useCallback(() => {
       if (cfg?.blocking) return;
       onDismiss?.();
@@ -178,8 +210,6 @@ export const HealthGate = memo(
       }
     }, [cfg, onRetry, handleDismiss]);
 
-    // ── Animated styles ───────────────────────────────────────────────────────
-
     const sheetAnimStyle = useAnimatedStyle(() => ({
       transform: [{ translateY: translateY.value }],
     }));
@@ -194,16 +224,14 @@ export const HealthGate = memo(
       <Modal
         transparent
         visible={isVisible}
-        animationType="none" // We handle animation ourselves
+        animationType="none"
         statusBarTranslucent
         onRequestClose={handleDismiss}
       >
-        {/* Scrim */}
         <Animated.View style={[styles.backdrop, backdropAnimStyle]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} />
+          <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleDismiss} />
         </Animated.View>
 
-        {/* Sheet */}
         <AppView style={styles.sheetAnchor} pointerEvents="box-none">
           <Animated.View
             style={[
@@ -212,19 +240,16 @@ export const HealthGate = memo(
               sheetAnimStyle,
             ]}
           >
-            {/* Handle bar */}
             <AppView
               style={[styles.handle, { backgroundColor: colors.border }]}
             />
 
-            {/* Icon */}
             <AppView
               style={[styles.iconBadge, { backgroundColor: cfg.iconBg }]}
             >
               <Icon name={cfg.icon} size={26} color={cfg.iconColor} />
             </AppView>
 
-            {/* Text */}
             <AppText variant="headline" style={styles.title}>
               {cfg.title}
             </AppText>
@@ -236,14 +261,12 @@ export const HealthGate = memo(
               {cfg.body}
             </AppText>
 
-            {/* Dev error */}
             {__DEV__ && !!errorMessage && (
               <AppText style={[styles.devError, { color: cfg.iconColor }]}>
                 {errorMessage}
               </AppText>
             )}
 
-            {/* Primary CTA */}
             <Button
               label={cfg.primaryLabel}
               onPress={handlePrimary}
@@ -253,7 +276,6 @@ export const HealthGate = memo(
               style={styles.primaryBtn}
             />
 
-            {/* Secondary */}
             {!!cfg.secondaryLabel && (
               <Button
                 label={cfg.secondaryLabel}
@@ -271,18 +293,6 @@ export const HealthGate = memo(
 
 HealthGate.displayName = 'HealthGate';
 
-// ─── resolveHealthGateReason ──────────────────────────────────────────────────
-//
-// Maps the exact return values of useHealth to a HealthGateReason.
-// Only uses fields that useHealth actually exposes:
-//   platform: 'healthkit' | 'healthconnect' | 'unavailable'
-//   isReady:  boolean
-//   error:    string | null
-//
-// Usage:
-//   const reason = resolveHealthGateReason({ platform, isReady, error });
-//   <HealthGate reason={reason} onRetry={refresh} onDismiss={() => setGate(null)} />
-
 export function resolveHealthGateReason({
   platform,
   isReady,
@@ -292,7 +302,6 @@ export function resolveHealthGateReason({
   isReady: boolean;
   error: string | null;
 }): HealthGateReason | null {
-  // Android: useHealth sets this exact message when HC is not installed
   if (
     platform === 'unavailable' &&
     error?.toLowerCase().includes('health connect')
@@ -300,7 +309,6 @@ export function resolveHealthGateReason({
     return 'health-connect-missing';
   }
 
-  // iOS: HealthKit init failed due to permissions
   if (platform === 'unavailable' || (!isReady && platform === 'healthkit')) {
     const lower = error?.toLowerCase() ?? '';
     if (lower.includes('denied') || lower.includes('permission')) {
@@ -308,79 +316,9 @@ export function resolveHealthGateReason({
     }
   }
 
-  // Any other error (network, parse, write failures)
   if (error) return 'error';
 
-  // Platform stayed 'unavailable' with no specific error
   if (platform === 'unavailable') return 'not-ready';
 
-  // isReady=false but no error — still initialising, handled by loading spinner
   return null;
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  sheetAnchor: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingBottom: 36,
-    paddingTop: 12,
-    alignItems: 'center',
-    gap: 12,
-    minHeight: SHEET_HEIGHT,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 8,
-    opacity: 0.35,
-  },
-  iconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  body: {
-    textAlign: 'center',
-    lineHeight: 22,
-    fontSize: 14,
-  },
-  devError: {
-    fontSize: 11,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  primaryBtn: {
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  secondaryLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});

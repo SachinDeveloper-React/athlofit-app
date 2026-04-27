@@ -58,6 +58,18 @@ export const SettingsRow = memo(
         </AppView>
 
         <AppView style={s.right}>
+          {row.badge && (
+            <AppView
+              style={[
+                s.badge,
+                row.badge.variant === 'warning' && s.badgeWarning,
+                row.badge.variant === 'destructive' && s.badgeDestructive,
+                row.badge.variant === 'success' && s.badgeSuccess,
+              ]}
+            >
+              <AppText style={s.badgeText}>{row.badge.text}</AppText>
+            </AppView>
+          )}
           {row.type === 'toggle' ? (
             <Switch
               value={row.value}

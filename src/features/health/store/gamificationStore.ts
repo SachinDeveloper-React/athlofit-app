@@ -83,6 +83,16 @@ export const useGamificationStore = create<GamificationStore>()(
       },
       
       syncWithService: (data) => set(data),
+
+      // ── Reset all gamification data (called on logout) ──────────────────────
+      reset: () => set({
+        coinsBalance: 0,
+        streakDays: 0,
+        bestStreakDays: 0,
+        lastActiveDate: null,
+        coinsEarnedToday: 0,
+        lastCoinDate: null,
+      }),
     })),
     {
       name: 'gamification-store',

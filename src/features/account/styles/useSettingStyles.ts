@@ -65,18 +65,19 @@ export const useSettingStyles = (colors: Theme['colors']) => {
       gap: 8,
     },
     title: {
-      fontSize: 13,
-      letterSpacing: 1.4,
+      fontSize: 10,
+      letterSpacing: 1.1,
       fontWeight: '800',
       color: withOpacity(colors.foreground, 0.8),
     },
 
     right: {
-      // flex: 1,
       flexShrink: 1,
       alignItems: 'flex-end',
       justifyContent: 'center',
       marginLeft: 10,
+      flexDirection: 'row',
+      gap: 8,
     },
 
     navRight: {
@@ -90,6 +91,32 @@ export const useSettingStyles = (colors: Theme['colors']) => {
       fontWeight: '800',
       letterSpacing: 1.0,
       color: withOpacity(colors.foreground, 0.35),
+    },
+
+    badge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: withOpacity(colors.foreground, 0.1),
+    },
+
+    badgeWarning: {
+      backgroundColor: withOpacity('#F59E0B', 0.15),
+    },
+
+    badgeDestructive: {
+      backgroundColor: withOpacity(colors.destructive, 0.15),
+    },
+
+    badgeSuccess: {
+      backgroundColor: withOpacity('#10B981', 0.15),
+    },
+
+    badgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: colors.foreground,
     },
   });
 };
