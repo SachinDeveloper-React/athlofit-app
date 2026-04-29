@@ -102,7 +102,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={(new Date().getDay() + 6) % 7}
+        todayIndex={(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] as const)[(new Date().getDay() + 6) % 7]}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,
@@ -276,6 +276,8 @@ const TrackerScreen = memo(() => {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  console.log("week", weekData);
+  
   return (
     <>
       <Screen

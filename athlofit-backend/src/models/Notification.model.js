@@ -1,20 +1,29 @@
 // src/models/Notification.model.js
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
       index: true,
     },
     type: {
       type: String,
-      enum: ['GOAL', 'HYDRATION', 'PRODUCT', 'SECURITY', 'HEART', 'CHALLENGE', 'COIN', 'SYSTEM'],
+      enum: [
+        "GOAL",
+        "HYDRATION",
+        "PRODUCT",
+        "SECURITY",
+        "HEART",
+        "CHALLENGE",
+        "COIN",
+        "SYSTEM",
+      ],
       required: true,
     },
-    title:   { type: String, required: true },
+    title: { type: String, required: true },
     message: { type: String, required: true },
     // Deep-link data forwarded to the app (screen + params)
     data: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -24,7 +33,7 @@ const notificationSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       transform(doc, ret) {
-        ret.id        = ret._id;
+        ret.id = ret._id;
         ret.createdAt = new Date(ret.createdAt).getTime(); // ms timestamp for frontend
         delete ret._id;
         delete ret.__v;
@@ -37,4 +46,4 @@ const notificationSchema = new mongoose.Schema(
 // Keep only the latest 200 notifications per user (TTL-style cap via pre-save hook)
 notificationSchema.index({ user: 1, createdAt: -1 });
 
-module.exports = mongoose.model('Notification', notificationSchema);
+module.exports = mongoose.model("Notification", notificationSchema);

@@ -126,7 +126,7 @@ const NotificationsScreen = () => {
   // ── List ───────────────────────────────────────────────────────────────────
   return (
     <Screen
-      scroll
+      scroll={false}
       safeArea={false}
       header={
         <Header
@@ -152,11 +152,11 @@ const NotificationsScreen = () => {
             tintColor={colors.primary}
           />
         }
-        removeClippedSubviews
         initialNumToRender={15}
+        maxToRenderPerBatch={10}
         windowSize={10}
+        updateCellsBatchingPeriod={50}
         SectionSeparatorComponent={() => <AppView style={{ height: 6 }} />}
-        scrollEnabled={false}
       />
     </Screen>
   );

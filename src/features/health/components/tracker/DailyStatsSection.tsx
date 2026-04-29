@@ -26,7 +26,7 @@ type Props = {
   goal?: number;
   weekData: WeeklyStepEntry[];
   isWeekPending?: boolean;
-  todayIndex?: number;
+  todayIndex?: "Mon" |"Tue" |"Wed" |"Thu" |"Fri" |"Sat"|"Sun" ;
   metricRows: MetricRow[];
   stats: {
     heartRate: number;
@@ -54,7 +54,7 @@ const useStyles = makeStyles(({ colors, spacing }) => ({
   },
   metricRow: {
     flexDirection: 'row' as const,
-    gap: spacing[4.5 as any] ?? 18,
+    gap: spacing[4] ?? 18,
   },
 }));
 

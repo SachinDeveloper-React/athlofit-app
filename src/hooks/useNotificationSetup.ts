@@ -16,7 +16,6 @@ import {
   displayPushNotification,
   handleNotificationNavigation,
 } from '../services/pushNotificationService';
-import { api } from '../utils/api';
 import { NOTIF_KEY } from '../features/account/hooks/useNotifications';
 import { navigationRef } from '../navigation/navigationRef';
 
@@ -44,21 +43,6 @@ function navigateWhenReady(data?: Record<string, string>): void {
   }, 100);
 }
 
-// ─── Persist notification to backend DB ──────────────────────────────────────
-
-async function persistNotification(remoteMessage: any): Promise<void> {
-  try {
-    const { notification, data } = remoteMessage;
-    if (!notification?.title) return;
-    await api.post('user/notifications', {
-      type:    data?.type    || 'GOAL',
-      title:   notification.title,
-      message: notification.body ?? '',
-      data:    data ?? {},
-    });
-  } catch { /* non-critical */ }
-}
-
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useNotificationSetup(): void {
@@ -80,14 +64,16 @@ export function useNotificationSetup(): void {
     return () => unsubRefresh?.();
   }, [isAuthenticated]);
 
-  // ── 4. Foreground FCM → display via Notifee + persist to DB ─────────────
+  // ── 4. Foreground FCM → display via Notifee ──────────────────────────────
   // (Notifee press is handled in step 5)
+  // NOTE: Backend already persists notifications before sending FCM push,
+  // so we don't need to persist again here (was causing duplicates).
   useEffect(() => {
     const messaging = getMessaging();
     const unsub = onMessage(messaging, async remoteMessage => {
       await displayPushNotification(remoteMessage);
       if (isAuthenticated) {
-        await persistNotification(remoteMessage);
+        // Just invalidate to refresh the notification list
         qc.invalidateQueries({ queryKey: NOTIF_KEY });
       }
     });
@@ -106,12 +92,13 @@ export function useNotificationSetup(): void {
   }, []);
 
   // ── 6. FCM background press (app in background, user taps notification) ──
-  // This was MISSING — onNotificationOpenedApp fires when app is backgrounded
+  // NOTE: Backend already persists notifications before sending FCM push,
+  // so we don't need to persist again here (was causing duplicates).
   useEffect(() => {
     const messaging = getMessaging();
     const unsub = onNotificationOpenedApp(messaging, async remoteMessage => {
       if (isAuthenticated) {
-        await persistNotification(remoteMessage);
+        // Just invalidate to refresh the notification list
         qc.invalidateQueries({ queryKey: NOTIF_KEY });
       }
       navigateWhenReady(remoteMessage.data as Record<string, string>);
@@ -121,6 +108,8 @@ export function useNotificationSetup(): void {
 
   // ── 7. Quit-state: app opened by tapping notification ────────────────────
   // getInitialNotification fires once when app cold-starts from a notification
+  // NOTE: Backend already persists notifications before sending FCM push,
+  // so we don't need to persist again here (was causing duplicates).
   useEffect(() => {
     const handleQuitState = async () => {
       const messaging = getMessaging();
@@ -128,7 +117,7 @@ export function useNotificationSetup(): void {
 
       if (initialFcm) {
         if (isAuthenticated) {
-          await persistNotification(initialFcm);
+          // Just invalidate to refresh the notification list
           qc.invalidateQueries({ queryKey: NOTIF_KEY });
         }
         // Use polling — navigator is not ready at this point

@@ -97,6 +97,27 @@ export const todayRange = () => {
   };
 };
 
+/**
+ * Get time range from login timestamp to now (for filtering historical data)
+ * If no login timestamp, falls back to today's range
+ */
+export const sinceLoginRange = (loginTimestamp: number | null) => {
+  if (!loginTimestamp) {
+    return todayRange();
+  }
+  
+  // Use the later of: login timestamp OR start of today
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const effectiveStart = Math.max(loginTimestamp, startOfDay.getTime());
+  
+  return {
+    operator: 'between' as const,
+    startTime: new Date(effectiveStart).toISOString(),
+    endTime: new Date().toISOString(),
+  };
+};
+
 export const lastNDays = (n: number) => ({
   operator: 'between' as const,
   startTime: new Date(Date.now() - n * 86400000).toISOString(),
@@ -175,8 +196,12 @@ export const writeDerivedActivity = async (
 
 export const fetchAllHealthConnectData = async (
   weightKg = DEFAULT_WEIGHT_KG,
+  loginTimestamp: number | null = null,
 ): Promise<HealthData> => {
   try {
+    // Use sinceLoginRange for steps to prevent syncing historical data to new accounts
+    const stepsTimeRange = sinceLoginRange(loginTimestamp);
+    
     const [
       stepsRecords,
       hrRecords,
@@ -187,7 +212,8 @@ export const fetchAllHealthConnectData = async (
       hydrationRecord,
     ] = await Promise.all([
       // Steps — read from Android built-in step sensor via Health Connect
-      readRecords('Steps', { timeRangeFilter: todayRange() }).catch(e => {
+      // IMPORTANT: Use sinceLoginRange to only get steps since user logged in
+      readRecords('Steps', { timeRangeFilter: stepsTimeRange }).catch(e => {
         console.warn('Steps read failed:', e);
         return { records: [] };
       }),
@@ -228,11 +254,13 @@ export const fetchAllHealthConnectData = async (
       }),
     ]);
 
-    // ── Steps: sum all Step records for today ──────────────────────────────
+    // ── Steps: sum all Step records (filtered by login timestamp) ──────────
     const steps = stepsRecords.records.reduce(
       (sum, r) => sum + (r.count ?? 0),
       0,
     );
+    
+    console.log(`[HealthConnect] Fetched ${steps} steps since ${stepsTimeRange.startTime}`);
 
     // ── Always derive calories / distance / activeMinutes from steps ────────
     // This ensures values are always consistent with current step count,

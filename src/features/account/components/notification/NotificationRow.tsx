@@ -88,6 +88,16 @@ export const NotificationRow = memo(
       </Pressable>
     );
   },
+  // Custom comparison function to prevent unnecessary re-renders
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.item.read === nextProps.item.read &&
+      prevProps.item.title === nextProps.item.title &&
+      prevProps.item.message === nextProps.item.message &&
+      prevProps.item.createdAt === nextProps.item.createdAt
+    );
+  }
 );
 
 NotificationRow.displayName = 'NotificationRow';

@@ -152,10 +152,15 @@ export function useHealth(options: UseHealthOptions = {}) {
   const loadData = async (p: HealthPlatform, silent: boolean = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const result =
-        p === 'healthkit'
-          ? await fetchAllHealthKitData()
-          : await fetchAllHealthConnectData(weightKg);
+      let result: HealthData;
+      if (p === 'healthkit') {
+        result = await fetchAllHealthKitData();
+      } else {
+        // Get login timestamp from healthDataStore to filter historical data
+        const { useHealthDataStore } = await import('../store/healthDataStore');
+        const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+        result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
+      }
       setData(result);
       setLastUpdated(new Date());
     } catch (e: any) {

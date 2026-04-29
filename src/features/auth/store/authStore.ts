@@ -30,6 +30,12 @@ export const useAuthStore = create<AuthState>()(
           state.accessToken = tokens.accessToken;
           state.isAuthenticated = true;
         });
+        
+        // Set login timestamp to filter historical Health Connect data
+        import('../../health/store/healthDataStore').then(({ useHealthDataStore }) => {
+          useHealthDataStore.getState().setLoginTimestamp(Date.now());
+        });
+        
         // Register FCM token now that we have a session
         import('../../../services/fcmService').then(({ registerFcmToken }) =>
           registerFcmToken(),
@@ -56,6 +62,13 @@ export const useAuthStore = create<AuthState>()(
             state.user = res.data;
             state.isAuthenticated = true;
           });
+          
+          // Set login timestamp if not already set (first launch after login)
+          const { useHealthDataStore } = await import('../../health/store/healthDataStore');
+          const currentTimestamp = useHealthDataStore.getState().loginTimestamp;
+          if (!currentTimestamp) {
+            useHealthDataStore.getState().setLoginTimestamp(Date.now());
+          }
         } catch {
           await get().logout();
         }
