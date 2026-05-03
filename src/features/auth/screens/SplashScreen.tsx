@@ -79,9 +79,10 @@ const TypingText = ({ onDone, colors }: { onDone: () => void; colors: any }) => 
         i++;
       } else {
         clearInterval(interval);
-        setTimeout(onDone, 400);
+        // Reduced from 400ms to 100ms — no need to linger
+        setTimeout(onDone, 100);
       }
-    }, 120);
+    }, 60); // was 120ms per char — halved to 60ms
     return () => clearInterval(interval);
   }, []);
 
@@ -160,22 +161,22 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
   useEffect(() => {
     Animated.timing(runnerX, {
       toValue: 0,
-      duration: 800,
+      duration: 500,           // was 800ms
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
 
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 600,
-      delay: 300,
+      duration: 400,           // was 600ms
+      delay: 150,              // was 300ms
       useNativeDriver: true,
     }).start();
 
     Animated.timing(slideAnim, {
       toValue: 0,
-      duration: 600,
-      delay: 400,
+      duration: 400,           // was 600ms
+      delay: 200,              // was 400ms
       easing: Easing.out(Easing.back(1.2)),
       useNativeDriver: true,
     }).start();
@@ -183,9 +184,9 @@ const SplashScreen = memo(({ onFinish }: { onFinish?: () => void }) => {
 
   const handleTypingDone = () => {
     setShowLoader(true);
-    setTimeout(() => {
-      onFinish?.();
-    }, 2000);
+    // Call onFinish immediately — don't add artificial delay.
+    // RootNavigator hides the splash as soon as bootstrap() resolves.
+    onFinish?.();
   };
 
   return (

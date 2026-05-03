@@ -35,7 +35,8 @@ export const defaultHealthData: HealthData = {
 // ─── Weekly Steps ─────────────────────────────────────────────────────────────
 
 export type WeeklyStepEntry = {
-  date: string;
+  date: string;      // short label "Mon", "Tue" etc.
+  fullDate?: string; // "YYYY-MM-DD" — used for navigation to StepDetailScreen
   steps: number;
 };
 

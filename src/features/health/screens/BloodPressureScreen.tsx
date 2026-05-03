@@ -1,3 +1,4 @@
+// src/features/health/screens/BloodPressureScreen.tsx
 import React, { useState, useCallback } from 'react';
 import { AppView, Header, Screen } from '../../../components';
 import { InputMode, ParsedBPMeasurement } from '../types/bloodpressure.types';
@@ -18,19 +19,14 @@ export const BloodPressureScreen: React.FC = () => {
 
   const handleMeasurement = useCallback(
     (data: ParsedBPMeasurement, deviceName: string) => {
-      addReading(
-        data.systolic,
-        data.diastolic,
-        data.pulse,
-        'device',
-        deviceName,
-      );
+      addReading(data.systolic, data.diastolic, data.pulse, 'device', deviceName);
     },
     [addReading],
   );
 
   const {
     bleState,
+    permissionStatus,
     scanning,
     connecting,
     connectedDevice,
@@ -41,6 +37,7 @@ export const BloodPressureScreen: React.FC = () => {
     connectDevice,
     disconnect,
     closeModal,
+    requestPermissions,
   } = useBluetooth({ onMeasurement: handleMeasurement });
 
   return (
@@ -49,12 +46,12 @@ export const BloodPressureScreen: React.FC = () => {
       safeArea={false}
       header={<Header title="Blood Pressure" bordered showBack backLabel="" />}
     >
-
-
       {latestReading && <LatestReadingCard reading={latestReading} />}
+
       <AppView mt={3}>
         <ModeToggle value={mode} onChange={setMode} />
       </AppView>
+
       {mode === 'manual' && (
         <ManualEntryCard
           onSubmit={(sys, dia, pls) => addReading(sys, dia, pls, 'manual')}
@@ -64,17 +61,18 @@ export const BloodPressureScreen: React.FC = () => {
       {mode === 'device' && (
         <DeviceCard
           bleState={bleState}
+          permissionStatus={permissionStatus}
           scanning={scanning}
           connecting={connecting}
           connectedDevice={connectedDevice}
           waitingForMeasurement={waitingForMeasurement}
           onScan={startScan}
           onDisconnect={disconnect}
+          onRequestPermission={requestPermissions}
         />
       )}
 
       <BPCategoryChart />
-
       <ReadingHistory readings={readings} />
 
       <DevicePickerModal

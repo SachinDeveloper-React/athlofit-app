@@ -1,5 +1,5 @@
 // src/features/shop/screens/AddressesScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -188,22 +188,13 @@ const AddressesScreen = () => {
 
   const selectMode = route.params?.selectMode ?? false;
 
-  const { mutate: fetchAll, data: addrData, isPending } = useAddresses();
-  const { mutate: deleteAddr, isPending: isDeleting, variables: deletingId } = useDeleteAddress();
+  const { data: addresses = [], isLoading: isPending, refetch } = useAddresses();
+  const { mutate: deleteAddr, isPending: isDeleting } = useDeleteAddress();
   const { mutate: updateAddr, isPending: isUpdating } = useUpdateAddress();
-
-  const addresses: SavedAddress[] = useMemo(
-    () => addrData?.data ?? [],
-    [addrData],
-  );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  // Initialize selection to default
+  // Initialize selection to default address
   useEffect(() => {
     if (addresses.length > 0 && !selectedId) {
       const def = addresses.find(a => a.isDefault) ?? addresses[0];
@@ -220,13 +211,12 @@ const AddressesScreen = () => {
           style: 'destructive',
           onPress: () =>
             deleteAddr(id, {
-              onSuccess: () => fetchAll(),
               onError: (err: any) => Alert.alert('Error', err?.message || 'Could not delete'),
             }),
         },
       ]);
     },
-    [deleteAddr, fetchAll],
+    [deleteAddr],
   );
 
   const handleSetDefault = useCallback(
@@ -234,18 +224,16 @@ const AddressesScreen = () => {
       updateAddr(
         { addressId: id, updates: { isDefault: true } },
         {
-          onSuccess: () => fetchAll(),
           onError: (err: any) => Alert.alert('Error', err?.message || 'Could not update'),
         },
       );
     },
-    [updateAddr, fetchAll],
+    [updateAddr],
   );
 
   const handleSelect = useCallback(
     (addr: SavedAddress) => {
       setSelectedId(addr._id);
-      // Navigate back and pass the selected address via navigation params
       navigation.navigate(ShopRoutes.CART, { selectedAddress: addr } as any);
     },
     [navigation],

@@ -1,8 +1,11 @@
 // src/features/shop/hooks/useShop.ts
 import { useState, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { shopService } from '../service/shopService';
 import type { Category, Product, Pagination, GetProductsParams, Order } from '../types/shop.types';
+
+// ─── Query keys ───────────────────────────────────────────────────────────────
+export const ADDRESSES_KEY = ['addresses'] as const;
 
 // ─── useCategories ────────────────────────────────────────────────────────────
 export function useCategories() {
@@ -60,10 +63,16 @@ export function useSearchProducts() {
 export function useBuyWithCoins() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ items, shippingAddress }: { items: { productId: string; quantity: number }[]; shippingAddress?: any }) =>
-      shopService.buyWithCoins(items, shippingAddress),
+    mutationFn: ({
+      items,
+      shippingAddress,
+      couponCode,
+    }: {
+      items: { productId: string; quantity: number }[];
+      shippingAddress?: any;
+      couponCode?: string;
+    }) => shopService.buyWithCoins(items, shippingAddress, couponCode),
     onSuccess: () => {
-      // Invalidate orders cache so OrderHistoryScreen refreshes after a purchase
       qc.invalidateQueries({ queryKey: ['orders'] });
     },
   });
@@ -88,23 +97,29 @@ export function useCancelOrder() {
   });
 }
 
-// ─── useAddresses ─────────────────────────────────────────────────────────
+// ─── useAddresses — useQuery so the list auto-refreshes ──────────────────────
 export function useAddresses() {
-  return useMutation({
-    mutationFn: () => shopService.getAddresses(),
+  return useQuery({
+    queryKey: ADDRESSES_KEY,
+    queryFn:  () => shopService.getAddresses(),
+    staleTime: 2 * 60_000,
+    select: res => res.data ?? [],
   });
 }
 
-// ─── useAddAddress ────────────────────────────────────────────────────────
+// ─── useAddAddress ────────────────────────────────────────────────────────────
 export function useAddAddress() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (address: Parameters<typeof shopService.addAddress>[0]) =>
       shopService.addAddress(address),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ADDRESSES_KEY }),
   });
 }
 
-// ─── useUpdateAddress ─────────────────────────────────────────────────────
+// ─── useUpdateAddress ─────────────────────────────────────────────────────────
 export function useUpdateAddress() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       addressId,
@@ -113,13 +128,34 @@ export function useUpdateAddress() {
       addressId: string;
       updates: Parameters<typeof shopService.updateAddress>[1];
     }) => shopService.updateAddress(addressId, updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ADDRESSES_KEY }),
   });
 }
 
-// ─── useDeleteAddress ─────────────────────────────────────────────────────
+// ─── useDeleteAddress ─────────────────────────────────────────────────────────
 export function useDeleteAddress() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (addressId: string) => shopService.deleteAddress(addressId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ADDRESSES_KEY }),
+  });
+}
+
+// ─── useValidateCoupon ────────────────────────────────────────────────────────
+export function useValidateCoupon() {
+  return useMutation({
+    mutationFn: ({ code, cartTotalCoins }: { code: string; cartTotalCoins: number }) =>
+      shopService.validateCoupon(code, cartTotalCoins),
+  });
+}
+
+// ─── useAvailableCoupons ──────────────────────────────────────────────────────
+export function useAvailableCoupons() {
+  return useQuery({
+    queryKey: ['available-coupons'],
+    queryFn:  () => shopService.getAvailableCoupons(),
+    staleTime: 5 * 60_000,
+    select: res => res.data ?? [],
   });
 }
 

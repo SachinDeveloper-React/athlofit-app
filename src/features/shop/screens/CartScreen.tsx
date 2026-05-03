@@ -1,12 +1,16 @@
 // src/features/shop/screens/CartScreen.tsx — Advanced Redesign
-import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  Keyboard,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -20,33 +24,455 @@ import AppText from '../../../components/AppText';
 import { Icon } from '../../../components/Icon';
 import { withOpacity } from '../../../utils/withOpacity';
 import { useCart } from '../context/CartContext';
-import { useBuyWithCoins, useAddresses } from '../hooks/useShop';
+import { useBuyWithCoins, useAddresses, useValidateCoupon, useAvailableCoupons } from '../hooks/useShop';
 import { ShopRoutes } from '../../../navigation/routes';
 import type { ShopStackParamList } from '../../../types/navigation.types';
 import { useGamificationStore } from '../../health/store/gamificationStore';
-import type { SavedAddress } from '../types/shop.types';
+import type { AvailableCoupon, SavedAddress, ValidateCouponResult } from '../types/shop.types';
 import { Header, Screen } from '../../../components';
 
 type CartRouteProp = RouteProp<ShopStackParamList, typeof ShopRoutes.CART>;
 const COIN_RATE = 10;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDiscount(c: AvailableCoupon): string {
+  if (c.discountType === 'percentage') {
+    const cap = c.maxDiscountCoins ? ` (up to ${c.maxDiscountCoins.toLocaleString()} coins)` : '';
+    return `${c.discountValue}% off${cap}`;
+  }
+  return `${c.discountValue.toLocaleString()} coins off`;
+}
+
+function isEligible(c: AvailableCoupon, cartTotal: number): boolean {
+  return cartTotal >= c.minCartCoins;
+}
+
+// ─── CouponListSheet ──────────────────────────────────────────────────────────
+
+interface CouponListSheetProps {
+  visible: boolean;
+  onClose: () => void;
+  cartTotalCoins: number;
+  appliedCode: string | null;
+  onApply: (coupon: ValidateCouponResult) => void;
+  colors: any;
+  isDark: boolean;
+}
+
+const CouponListSheet = ({
+  visible,
+  onClose,
+  cartTotalCoins,
+  appliedCode,
+  onApply,
+  colors,
+  isDark,
+}: CouponListSheetProps) => {
+  const { data: coupons = [], isLoading } = useAvailableCoupons();
+  const { mutate: validate, isPending: isValidating, variables: validatingVars } = useValidateCoupon();
+
+  const handleTap = (code: string) => {
+    validate(
+      { code, cartTotalCoins },
+      {
+        onSuccess: res => {
+          if (res.success && res.data) {
+            onApply(res.data);
+            onClose();
+          } else {
+            Alert.alert('Cannot Apply', res.message || 'This coupon cannot be applied to your cart.');
+          }
+        },
+        onError: (err: any) => {
+          Alert.alert('Cannot Apply', err?.message || 'This coupon cannot be applied to your cart.');
+        },
+      },
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      {/* Backdrop */}
+      <Pressable
+        style={[styles.sheetBackdrop, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+        onPress={onClose}
+      />
+
+      {/* Sheet */}
+      <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        {/* Handle */}
+        <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+
+        {/* Header */}
+        <View style={styles.sheetHeader}>
+          <View style={[styles.sheetIconWrap, { backgroundColor: withOpacity('#F59E0B', 0.12) }]}>
+            <Icon name="Ticket" size={18} color="#F59E0B" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <AppText variant="headline" weight="semiBold" style={{ color: colors.foreground }}>
+              Available Offers
+            </AppText>
+            <AppText variant="caption1" style={{ color: colors.mutedForeground, marginTop: 1 }}>
+              {coupons.length} coupon{coupons.length !== 1 ? 's' : ''} available
+            </AppText>
+          </View>
+          <Pressable
+            onPress={onClose}
+            style={[styles.sheetCloseBtn, { backgroundColor: withOpacity(colors.foreground, 0.08) }]}
+          >
+            <Icon name="X" size={16} color={colors.foreground} />
+          </Pressable>
+        </View>
+
+        <View style={[styles.sheetDivider, { backgroundColor: colors.border }]} />
+
+        {/* Coupon list */}
+        {isLoading ? (
+          <View style={styles.sheetLoading}>
+            <ActivityIndicator size="small" color="#F59E0B" />
+            <AppText variant="caption1" style={{ color: colors.mutedForeground, marginTop: 8 }}>
+              Loading offers…
+            </AppText>
+          </View>
+        ) : coupons.length === 0 ? (
+          <View style={styles.sheetLoading}>
+            <AppText variant="subhead" style={{ color: colors.mutedForeground }}>
+              No offers available right now
+            </AppText>
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sheetList}
+          >
+            {coupons.map((coupon, i) => {
+              const eligible   = isEligible(coupon, cartTotalCoins);
+              const isApplied  = appliedCode === coupon.code;
+              const isLoading  = isValidating && (validatingVars as any)?.code === coupon.code;
+              const accentColor = isApplied ? '#10B981' : eligible ? '#F59E0B' : colors.mutedForeground;
+
+              return (
+                <Animated.View
+                  key={coupon._id}
+                  entering={FadeInDown.delay(i * 60).duration(300)}
+                  style={[
+                    styles.couponListItem,
+                    {
+                      backgroundColor: isApplied
+                        ? withOpacity('#10B981', isDark ? 0.1 : 0.06)
+                        : eligible
+                        ? isDark ? withOpacity('#F59E0B', 0.07) : withOpacity('#F59E0B', 0.04)
+                        : withOpacity(colors.foreground, 0.03),
+                      borderColor: isApplied
+                        ? withOpacity('#10B981', 0.35)
+                        : eligible
+                        ? withOpacity('#F59E0B', 0.3)
+                        : withOpacity(colors.border, 0.5),
+                      opacity: eligible ? 1 : 0.55,
+                    },
+                  ]}
+                >
+                  {/* Left dashed border accent */}
+                  <View style={[styles.couponAccentBar, { backgroundColor: accentColor }]} />
+
+                  <View style={styles.couponListBody}>
+                    {/* Top row: code + badge */}
+                    <View style={styles.couponListTop}>
+                      <View style={[styles.couponCodeBadge, { backgroundColor: withOpacity(accentColor, 0.15) }]}>
+                        <AppText variant="caption1" weight="bold" style={{ color: accentColor, letterSpacing: 1 }}>
+                          {coupon.code}
+                        </AppText>
+                      </View>
+                      {isApplied && (
+                        <View style={[styles.appliedBadge, { backgroundColor: withOpacity('#10B981', 0.15) }]}>
+                          <Icon name="CheckCircle2" size={11} color="#10B981" />
+                          <AppText variant="caption2" weight="bold" style={{ color: '#10B981', marginLeft: 3 }}>
+                            Applied
+                          </AppText>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Discount headline */}
+                    <AppText
+                      variant="subhead"
+                      weight="bold"
+                      style={{ color: colors.foreground, marginTop: 6 }}
+                    >
+                      {formatDiscount(coupon)}
+                    </AppText>
+
+                    {/* Description */}
+                    <AppText
+                      variant="caption1"
+                      style={{ color: colors.mutedForeground, marginTop: 3, lineHeight: 16 }}
+                    >
+                      {coupon.description}
+                    </AppText>
+
+                    {/* Min cart requirement */}
+                    {coupon.minCartCoins > 0 && (
+                      <View style={styles.couponMeta}>
+                        <Icon
+                          name={eligible ? 'CheckCircle2' : 'AlertCircle'}
+                          size={11}
+                          color={eligible ? '#10B981' : '#F59E0B'}
+                        />
+                        <AppText
+                          variant="caption2"
+                          style={{
+                            color: eligible ? '#10B981' : '#F59E0B',
+                            marginLeft: 4,
+                          }}
+                        >
+                          {eligible
+                            ? `Min. ${coupon.minCartCoins.toLocaleString()} coins ✓`
+                            : `Min. ${coupon.minCartCoins.toLocaleString()} coins required`}
+                        </AppText>
+                      </View>
+                    )}
+
+                    {/* Expiry */}
+                    {coupon.validUntil && (
+                      <View style={styles.couponMeta}>
+                        <Icon name="Clock" size={11} color={colors.mutedForeground} />
+                        <AppText variant="caption2" style={{ color: colors.mutedForeground, marginLeft: 4 }}>
+                          Expires {new Date(coupon.validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </AppText>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Apply / Applied button */}
+                  <Pressable
+                    onPress={() => eligible && !isApplied ? handleTap(coupon.code) : undefined}
+                    disabled={!eligible || isApplied || isLoading}
+                    style={[
+                      styles.couponApplyPill,
+                      {
+                        backgroundColor: isApplied
+                          ? withOpacity('#10B981', 0.15)
+                          : eligible
+                          ? '#F59E0B'
+                          : withOpacity(colors.foreground, 0.08),
+                      },
+                    ]}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <AppText
+                        variant="caption1"
+                        weight="bold"
+                        style={{
+                          color: isApplied ? '#10B981' : eligible ? '#fff' : colors.mutedForeground,
+                        }}
+                      >
+                        {isApplied ? 'Applied' : eligible ? 'Apply' : 'Ineligible'}
+                      </AppText>
+                    )}
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+// ─── CouponSection ────────────────────────────────────────────────────────────
+
+interface CouponSectionProps {
+  cartTotalCoins: number;
+  appliedCoupon: ValidateCouponResult | null;
+  onApply: (coupon: ValidateCouponResult) => void;
+  onRemove: () => void;
+  colors: any;
+  isDark: boolean;
+}
+
+const CouponSection = ({
+  cartTotalCoins,
+  appliedCoupon,
+  onApply,
+  onRemove,
+  colors,
+  isDark,
+}: CouponSectionProps) => {
+  const [code, setCode]           = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const { mutate: validate, isPending } = useValidateCoupon();
+
+  const handleApply = () => {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) return;
+    Keyboard.dismiss();
+    validate(
+      { code: trimmed, cartTotalCoins },
+      {
+        onSuccess: res => {
+          if (res.success && res.data) {
+            onApply(res.data);
+            setCode('');
+          } else {
+            Alert.alert('Invalid Coupon', res.message || 'This coupon code is not valid.');
+          }
+        },
+        onError: (err: any) => {
+          Alert.alert('Invalid Coupon', err?.message || 'This coupon code is not valid.');
+        },
+      },
+    );
+  };
+
+  // ── Applied state ──────────────────────────────────────────────────────────
+  if (appliedCoupon) {
+    return (
+      <>
+        <Animated.View
+          entering={FadeInDown.duration(300)}
+          style={[
+            styles.couponApplied,
+            { backgroundColor: withOpacity('#10B981', 0.08), borderColor: withOpacity('#10B981', 0.3) },
+          ]}
+        >
+          <View style={[styles.couponAppliedIcon, { backgroundColor: withOpacity('#10B981', 0.15) }]}>
+            <Icon name="BadgePercent" size={18} color="#10B981" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <View style={styles.couponAppliedRow}>
+              <AppText variant="subhead" weight="bold" style={{ color: '#10B981' }}>
+                {appliedCoupon.code}
+              </AppText>
+              <View style={[styles.savingPill, { backgroundColor: withOpacity('#10B981', 0.15) }]}>
+                <AppText variant="caption2" weight="bold" style={{ color: '#10B981' }}>
+                  -{appliedCoupon.discountCoins.toLocaleString()} coins
+                </AppText>
+              </View>
+            </View>
+            <AppText variant="caption1" style={{ color: colors.mutedForeground, marginTop: 2 }}>
+              {appliedCoupon.description}
+            </AppText>
+          </View>
+          <Pressable
+            onPress={onRemove}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={[styles.couponRemoveBtn, { backgroundColor: withOpacity('#EF4444', 0.1) }]}
+          >
+            <Icon name="X" size={14} color="#EF4444" />
+          </Pressable>
+        </Animated.View>
+
+        {/* View all offers link even when applied */}
+        <Pressable onPress={() => setSheetOpen(true)} style={styles.viewOffersLink}>
+          <Icon name="Ticket" size={12} color="#F59E0B" />
+          <AppText variant="caption1" weight="semiBold" style={{ color: '#F59E0B', marginLeft: 4 }}>
+            View all offers
+          </AppText>
+        </Pressable>
+
+        <CouponListSheet
+          visible={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          cartTotalCoins={cartTotalCoins}
+          appliedCode={appliedCoupon.code}
+          onApply={c => { onApply(c); }}
+          colors={colors}
+          isDark={isDark}
+        />
+      </>
+    );
+  }
+
+  // ── Input state ────────────────────────────────────────────────────────────
+  return (
+    <>
+      <View style={[styles.couponCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {/* Header row */}
+        <View style={styles.couponHeader}>
+          <View style={[styles.couponIconWrap, { backgroundColor: withOpacity('#F59E0B', 0.12) }]}>
+            <Icon name="Ticket" size={16} color="#F59E0B" />
+          </View>
+          <AppText variant="subhead" weight="semiBold" style={{ marginLeft: 10, flex: 1, color: colors.foreground }}>
+            Apply Coupon
+          </AppText>
+          <Pressable onPress={() => setSheetOpen(true)} style={styles.viewOffersBtn}>
+            <AppText variant="caption1" weight="semiBold" style={{ color: '#F59E0B' }}>
+              View all
+            </AppText>
+            <Icon name="ChevronRight" size={13} color="#F59E0B" />
+          </Pressable>
+        </View>
+
+        {/* Input row */}
+        <View style={[styles.couponInputRow, { borderColor: colors.border, backgroundColor: colors.inputBackground ?? colors.secondary }]}>
+          <TextInput
+            value={code}
+            onChangeText={t => setCode(t.toUpperCase())}
+            placeholder="Enter coupon code"
+            placeholderTextColor={colors.mutedForeground}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleApply}
+            style={[styles.couponTextInput, { color: colors.foreground }]}
+          />
+          <Pressable
+            onPress={handleApply}
+            disabled={isPending || !code.trim()}
+            style={[
+              styles.couponApplyBtn,
+              { backgroundColor: code.trim() ? '#F59E0B' : withOpacity('#F59E0B', 0.3) },
+            ]}
+          >
+            {isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <AppText variant="caption1" weight="bold" style={{ color: '#fff' }}>Apply</AppText>
+            )}
+          </Pressable>
+        </View>
+      </View>
+
+      <CouponListSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        cartTotalCoins={cartTotalCoins}
+        appliedCode={null}
+        onApply={onApply}
+        colors={colors}
+        isDark={isDark}
+      />
+    </>
+  );
+};
+
+// ─── CartScreen ───────────────────────────────────────────────────────────────
+
 const CartScreen = () => {
-  const { colors, radius } = useTheme();
+  const { colors, radius, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<ShopStackParamList>>();
   const route = useRoute<CartRouteProp>();
 
   const { items, updateQuantity, removeFromCart, totalCoinPrice, clearCart } = useCart();
   const { mutate: buyWithCoinsAPI, isPending } = useBuyWithCoins();
-  const { mutate: fetchAddresses, data: addrData } = useAddresses();
+  const { data: addressList = [] } = useAddresses();
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
 
-  useEffect(() => { fetchAddresses(); }, []);
-
-  const addressList = useMemo<SavedAddress[]>(() => addrData?.data ?? [], [addrData]);
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<ValidateCouponResult | null>(null);
 
+  // Auto-select default address when list loads
   useEffect(() => {
     if (addressList.length > 0 && !selectedAddress) {
       setSelectedAddress(addressList.find(a => a.isDefault) ?? addressList[0]);
@@ -58,11 +484,22 @@ const CartScreen = () => {
     if (incoming) setSelectedAddress(incoming);
   }, [route.params]);
 
-  const totalItems = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
-  const totalMRPCoins = useMemo(() => items.reduce((s, i) => s + i.product.price * COIN_RATE * i.quantity, 0), [items]);
-  const savedCoins = Math.max(0, totalMRPCoins - totalCoinPrice);
-  const hasEnoughCoins = coinsBalance >= totalCoinPrice;
-  const coinShortfall = Math.max(0, totalCoinPrice - coinsBalance);
+  // Clear coupon if cart changes (items added/removed)
+  const prevItemCount = useRef(items.length);
+  useEffect(() => {
+    if (items.length !== prevItemCount.current) {
+      setAppliedCoupon(null);
+      prevItemCount.current = items.length;
+    }
+  }, [items.length]);
+
+  const totalItems     = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
+  const totalMRPCoins  = useMemo(() => items.reduce((s, i) => s + i.product.price * COIN_RATE * i.quantity, 0), [items]);
+  const productSavings = Math.max(0, totalMRPCoins - totalCoinPrice);
+  const couponDiscount = appliedCoupon?.discountCoins ?? 0;
+  const finalTotal     = Math.max(0, totalCoinPrice - couponDiscount);
+  const hasEnoughCoins = coinsBalance >= finalTotal;
+  const coinShortfall  = Math.max(0, finalTotal - coinsBalance);
 
   const handleCheckout = () => {
     if (!selectedAddress) {
@@ -73,13 +510,20 @@ const CartScreen = () => {
       return;
     }
     if (!hasEnoughCoins) {
-      Alert.alert('Not Enough Coins', `You need ${totalCoinPrice.toLocaleString()} coins but have ${coinsBalance.toLocaleString()}.\n\nEarn more by completing your daily step goal!`);
+      Alert.alert('Not Enough Coins', `You need ${finalTotal.toLocaleString()} coins but have ${coinsBalance.toLocaleString()}.\n\nEarn more by completing your daily step goal!`);
       return;
     }
     buyWithCoinsAPI(
       {
         items: items.map(i => ({ productId: i.product._id, quantity: i.quantity })),
-        shippingAddress: { street: selectedAddress.street, city: selectedAddress.city, state: selectedAddress.state, zipCode: selectedAddress.zipCode, country: selectedAddress.country },
+        shippingAddress: {
+          street: selectedAddress.street,
+          city: selectedAddress.city,
+          state: selectedAddress.state,
+          zipCode: selectedAddress.zipCode,
+          country: selectedAddress.country,
+        },
+        couponCode: appliedCoupon?.code,
       },
       {
         onSuccess: res => {
@@ -87,11 +531,17 @@ const CartScreen = () => {
             const remaining = res.data?.remainingCoins;
             if (remaining !== undefined) setCoinsBalance(remaining);
             clearCart();
+            setAppliedCoupon(null);
             const orderId = res.data?.order?._id ? `#${res.data.order._id.slice(-6).toUpperCase()}` : '';
-            Alert.alert('🎉 Order Placed!', `Order ${orderId} placed!\n\n💰 Used: ${totalCoinPrice.toLocaleString()} coins\n💰 Remaining: ${(remaining ?? coinsBalance - totalCoinPrice).toLocaleString()} coins`, [
-              { text: 'View Orders', onPress: () => navigation.navigate(ShopRoutes.ORDER_HISTORY) },
-              { text: 'Continue', onPress: () => navigation.goBack() },
-            ]);
+            const savedTotal = productSavings + couponDiscount;
+            Alert.alert(
+              '🎉 Order Placed!',
+              `Order ${orderId} placed!\n\n💰 Paid: ${finalTotal.toLocaleString()} coins${savedTotal > 0 ? `\n🏷️ Saved: ${savedTotal.toLocaleString()} coins` : ''}\n💰 Remaining: ${(remaining ?? coinsBalance - finalTotal).toLocaleString()} coins`,
+              [
+                { text: 'View Orders', onPress: () => navigation.navigate(ShopRoutes.ORDER_HISTORY) },
+                { text: 'Continue', onPress: () => navigation.goBack() },
+              ],
+            );
           } else Alert.alert('Checkout Failed', res.message);
         },
         onError: (err: any) => Alert.alert('Checkout Failed', err?.message || 'Payment failed'),
@@ -161,11 +611,11 @@ const CartScreen = () => {
                 <AppText variant="caption1" secondary>Your Coin Balance</AppText>
                 <AppText variant="title3" weight="bold" color="#92400E">{coinsBalance.toLocaleString()} coins</AppText>
               </View>
-              {savedCoins > 0 && (
+              {(productSavings > 0 || couponDiscount > 0) && (
                 <View style={[styles.savingsBadge, { backgroundColor: withOpacity('#10B981', 0.12) }]}>
                   <Icon name="BadgePercent" size={13} color="#10B981" />
                   <AppText variant="caption2" weight="bold" color="#10B981" style={{ marginLeft: 4 }}>
-                    Saved {savedCoins.toLocaleString()}
+                    Saved {(productSavings + couponDiscount).toLocaleString()}
                   </AppText>
                 </View>
               )}
@@ -268,10 +718,23 @@ const CartScreen = () => {
               </View>
             </Pressable>
 
+            {/* ── Coupon section ── */}
+            <View style={{ marginTop: 12 }}>
+              <CouponSection
+                cartTotalCoins={totalCoinPrice}
+                appliedCoupon={appliedCoupon}
+                onApply={setAppliedCoupon}
+                onRemove={() => setAppliedCoupon(null)}
+                colors={colors}
+                isDark={isDark}
+              />
+            </View>
+
             {/* Bill summary */}
             <View style={[styles.billCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 12 }]}>
               <AppText variant="headline" weight="semiBold" style={{ marginBottom: 14 }}>Order Summary</AppText>
 
+              {/* MRP row */}
               <View style={styles.billRow}>
                 <AppText variant="body" secondary>Subtotal (MRP)</AppText>
                 <View style={styles.coinRow}>
@@ -280,23 +743,46 @@ const CartScreen = () => {
                 </View>
               </View>
 
-              {savedCoins > 0 && (
+              {/* Product discount row */}
+              {productSavings > 0 && (
                 <View style={[styles.billRow, { marginTop: 10 }]}>
-                  <AppText variant="body" secondary>Discount</AppText>
+                  <AppText variant="body" secondary>Product Discount</AppText>
                   <View style={styles.coinRow}>
                     <Icon name="Coins" size={13} color="#10B981" />
-                    <AppText variant="body" weight="semiBold" color="#10B981" style={{ marginLeft: 4 }}>-{savedCoins.toLocaleString()}</AppText>
+                    <AppText variant="body" weight="semiBold" color="#10B981" style={{ marginLeft: 4 }}>-{productSavings.toLocaleString()}</AppText>
                   </View>
                 </View>
               )}
 
+              {/* Coupon discount row */}
+              {couponDiscount > 0 && (
+                <Animated.View entering={FadeInDown.duration(250)} style={[styles.billRow, { marginTop: 10 }]}>
+                  <View style={styles.couponBillLabel}>
+                    <Icon name="Ticket" size={13} color="#F59E0B" />
+                    <AppText variant="body" secondary style={{ marginLeft: 5 }}>
+                      Coupon ({appliedCoupon?.code})
+                    </AppText>
+                  </View>
+                  <View style={styles.coinRow}>
+                    <Icon name="Coins" size={13} color="#F59E0B" />
+                    <AppText variant="body" weight="semiBold" color="#F59E0B" style={{ marginLeft: 4 }}>-{couponDiscount.toLocaleString()}</AppText>
+                  </View>
+                </Animated.View>
+              )}
+
               <View style={[styles.billDivider, { backgroundColor: colors.border, marginVertical: 14 }]} />
 
+              {/* Total */}
               <View style={styles.billRow}>
                 <AppText variant="title3" weight="bold">Total</AppText>
                 <View style={styles.coinRow}>
                   <Icon name="Coins" size={20} color="#B45309" />
-                  <AppText variant="title2" weight="bold" color="#92400E" style={{ marginLeft: 6 }}>{totalCoinPrice.toLocaleString()}</AppText>
+                  <AppText variant="title2" weight="bold" color="#92400E" style={{ marginLeft: 6 }}>{finalTotal.toLocaleString()}</AppText>
+                  {couponDiscount > 0 && (
+                    <AppText variant="caption2" secondary style={{ marginLeft: 6, textDecorationLine: 'line-through' }}>
+                      {totalCoinPrice.toLocaleString()}
+                    </AppText>
+                  )}
                 </View>
               </View>
 
@@ -326,7 +812,16 @@ const CartScreen = () => {
           <Icon name="Coins" size={14} color="#B45309" />
           <AppText variant="caption1" weight="semiBold" color="#92400E" style={{ marginLeft: 6 }}>Balance: {coinsBalance.toLocaleString()}</AppText>
           <View style={{ flex: 1 }} />
-          <AppText variant="caption2" color="#B45309">Need: {totalCoinPrice.toLocaleString()}</AppText>
+          {couponDiscount > 0 ? (
+            <View style={styles.coinRow}>
+              <AppText variant="caption2" secondary style={{ textDecorationLine: 'line-through', marginRight: 4 }}>
+                {totalCoinPrice.toLocaleString()}
+              </AppText>
+              <AppText variant="caption2" weight="bold" color="#F59E0B">{finalTotal.toLocaleString()}</AppText>
+            </View>
+          ) : (
+            <AppText variant="caption2" color="#B45309">Need: {finalTotal.toLocaleString()}</AppText>
+          )}
         </View>
 
         <Pressable
@@ -340,7 +835,7 @@ const CartScreen = () => {
             <>
               <Icon name="Coins" size={20} color="#FEF3C7" />
               <AppText variant="body" weight="bold" color="#FEF3C7" style={{ marginLeft: 8 }}>
-                {hasEnoughCoins ? `Pay ${totalCoinPrice.toLocaleString()} Coins` : 'Not Enough Coins'}
+                {hasEnoughCoins ? `Pay ${finalTotal.toLocaleString()} Coins` : 'Not Enough Coins'}
               </AppText>
             </>
           )}
@@ -393,4 +888,102 @@ const styles = StyleSheet.create({
   footer: { position: 'absolute', bottom: 0, width: '100%', borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12 },
   footerBalance: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   checkoutBtn: { height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 16 },
+
+  // ── Coupon ──
+  couponCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
+  couponHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  couponIconWrap: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  couponInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  couponTextInput: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  couponApplyBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+  },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+  couponAppliedIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  couponAppliedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  savingPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  couponRemoveBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  couponBillLabel: { flexDirection: 'row', alignItems: 'center' },
+  viewOffersBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  viewOffersLink: { flexDirection: 'row', alignItems: 'center', marginTop: 8, alignSelf: 'flex-start' },
+
+  // ── Coupon list sheet ──
+  sheetBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 32,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sheetIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sheetCloseBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  sheetDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 16 },
+  sheetLoading: { alignItems: 'center', paddingVertical: 40 },
+  sheetList: { padding: 16, gap: 12 },
+
+  // ── Coupon list item ──
+  couponListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: 12,
+    gap: 10,
+  },
+  couponAccentBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
+  couponListBody: { flex: 1 },
+  couponListTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  couponCodeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  appliedBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  couponMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  couponApplyPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
 });

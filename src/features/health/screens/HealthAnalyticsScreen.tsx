@@ -22,6 +22,9 @@ import {
   GoalsSection,
   SummaryRow,
   InsightCard,
+  ActivityCalendar,
+  MostActiveDayCard,
+  PeriodStatsCard,
 } from '../components/analytics';
 import { makeStyles } from '../../../hooks/makeStyles';
 
@@ -169,8 +172,26 @@ const HealthAnalyticsScreen = () => {
           {/* ── Daily Goals — compact ── */}
           {data.rings && <GoalsSection rings={data.rings} />}
 
+          {/* ── Most Active Day ── */}
+          <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
+            Weekly Performance
+          </AppText>
+          <MostActiveDayCard />
+
+          {/* ── Period Overview ── */}
+          <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
+            Period Overview
+          </AppText>
+          <PeriodStatsCard />
+
           <SummaryRow data={data} timeframe={activeTab} />
           <InsightCard data={data} />
+
+          {/* ── Activity Calendar ── */}
+          <AppText variant="headline" weight="semiBold" style={styles.sectionLabel}>
+            Monthly Activity
+          </AppText>
+          <ActivityCalendar />
         </>
       ) : (
         <View style={styles.empty}>

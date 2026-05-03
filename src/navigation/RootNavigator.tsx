@@ -29,13 +29,20 @@ const RootNavigator: React.FC = () => {
   useAppConfig();
 
   useEffect(() => {
+    // Minimum splash duration (ms) — prevents a jarring flash on fast devices
+    const MIN_SPLASH_MS = 800;
+    const startTime = Date.now();
+
     async function bootstrap(): Promise<void> {
       try {
         await setTokensFromStorage();
       } catch {
         // No stored session — user stays on AuthStack
       } finally {
-        setIsBootstrapping(false);
+        // Ensure splash shows for at least MIN_SPLASH_MS
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+        setTimeout(() => setIsBootstrapping(false), remaining);
       }
     }
     bootstrap();

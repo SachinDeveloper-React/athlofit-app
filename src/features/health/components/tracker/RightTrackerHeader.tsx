@@ -65,11 +65,17 @@ const RightTrackerHeader = memo(
           borderColor={colors.border}
           borderRadius={radius.full}
         />
-        <NotificationBell
+        <IconButton
+          name="Bell"
+          onPress={handleNotification}
+          borderColor={colors.border}
+          borderRadius={radius.full}
+        />
+        {/* <NotificationBell
           onPress={handleNotification}
           size={20}
           iconColor={colors.foreground}
-        />
+        /> */}
         <Pressable
           onPress={handleProfile}
           style={({ pressed }) => ({

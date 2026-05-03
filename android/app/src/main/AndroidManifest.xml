@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
 <!-- NOTIFICATION -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Widget auto-update after reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- BLUETOOTH -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -19,22 +21,23 @@
 <!-- Background -->
 <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"/>
 
-<!-- Steps -->
+<!-- Steps (read from device sensor, write for manual entry) -->
 <uses-permission android:name="android.permission.health.READ_STEPS"/>
 <uses-permission android:name="android.permission.health.WRITE_STEPS"/>
-<!-- HYDRATION -->
+
+<!-- Hydration -->
 <uses-permission android:name="android.permission.health.READ_HYDRATION"/>
 <uses-permission android:name="android.permission.health.WRITE_HYDRATION"/>
 
-<!-- Active calories -->
+<!-- Active calories (write derived values back) -->
 <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
 <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED"/>
 
-<!-- Distance -->
+<!-- Distance (write derived values back) -->
 <uses-permission android:name="android.permission.health.READ_DISTANCE"/>
 <uses-permission android:name="android.permission.health.WRITE_DISTANCE"/>
 
-<!-- Exercise session / active time -->
+<!-- Exercise session / active time (write derived values back) -->
 <uses-permission android:name="android.permission.health.READ_EXERCISE"/>
 <uses-permission android:name="android.permission.health.WRITE_EXERCISE"/>
 
@@ -45,19 +48,18 @@
 <!-- Blood pressure -->
 <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE"/>
 <uses-permission android:name="android.permission.health.WRITE_BLOOD_PRESSURE"/>
-<!-- HEIGHT -->
-<uses-permission android:name="android.permission.health.WRITE_HEIGHT"/>
-    <uses-permission android:name="android.permission.health.READ_HEIGHT"/>
 
-<!-- WEIGHT -->
+<!-- Weight -->
 <uses-permission android:name="android.permission.health.WRITE_WEIGHT"/>
-    <uses-permission android:name="android.permission.health.READ_WEIGHT"/>
+<uses-permission android:name="android.permission.health.READ_WEIGHT"/>
 
-<!-- SLEEP -->
-    <uses-permission android:name="android.permission.health.READ_SLEEP"/>
-    
-<!-- BLOOD GLUCOSE -->
-    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
+<!-- Sleep -->
+<uses-permission android:name="android.permission.health.READ_SLEEP"/>
+<uses-permission android:name="android.permission.health.WRITE_SLEEP"/>
+
+<!-- Blood glucose -->
+<uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
+<uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE"/>
 
     <application
       android:enableOnBackInvokedCallback="false"
@@ -130,5 +132,29 @@
           android:name="android.support.FILE_PROVIDER_PATHS"
           android:resource="@xml/image_picker_provider_paths" />
       </provider>
+
+      <!-- Steps Widget -->
+      <receiver
+        android:name=".StepsWidgetProvider"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+          <action android:name="com.athlofit.WIDGET_REFRESH" />
+          <action android:name="com.athlofit.WIDGET_OPEN_APP" />
+        </intent-filter>
+        <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_info" />
+      </receiver>
+
+      <!-- Reschedule widget updates after device reboot -->
+      <receiver
+        android:name=".BootReceiver"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
+          <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        </intent-filter>
+      </receiver>
     </application>
 </manifest>

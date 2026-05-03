@@ -100,7 +100,8 @@ const AddEditAddressScreen = () => {
   const addressId = route.params?.addressId;
   const isEdit = !!addressId;
 
-  const { mutate: fetchAddresses, data: addrData } = useAddresses();
+  // useAddresses is now a useQuery — data is available immediately from cache
+  const { data: addressList = [] } = useAddresses();
   const { mutate: addAddress, isPending: isAdding } = useAddAddress();
   const { mutate: updateAddress, isPending: isUpdating } = useUpdateAddress();
 
@@ -117,16 +118,10 @@ const AddEditAddressScreen = () => {
   const [country, setCountry] = useState('India');
   const [isDefault, setIsDefault] = useState(false);
 
-  // Pre-fill when editing
+  // Pre-fill form when editing — data comes from the query cache
   useEffect(() => {
-    if (isEdit) {
-      fetchAddresses();
-    }
-  }, [isEdit, fetchAddresses]);
-
-  useEffect(() => {
-    if (!addrData?.data || !addressId) return;
-    const addr = addrData.data.find((a: SavedAddress) => a._id === addressId);
+    if (!isEdit || !addressId || !addressList.length) return;
+    const addr = addressList.find((a: SavedAddress) => a._id === addressId);
     if (!addr) return;
     setLabel(addr.label || 'Home');
     setFullName(addr.fullName || '');
@@ -137,7 +132,7 @@ const AddEditAddressScreen = () => {
     setZipCode(addr.zipCode || '');
     setCountry(addr.country || 'India');
     setIsDefault(addr.isDefault || false);
-  }, [addrData, addressId]);
+  }, [isEdit, addressId, addressList]);
 
   const validate = useCallback(() => {
     if (!fullName.trim()) { Alert.alert('Required', 'Full name is required'); return false; }

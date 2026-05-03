@@ -39,35 +39,45 @@ export const deriveFromSteps = (
 
 // ─── Permissions ──────────────────────────────────────────────────────────────
 //
-//  READ Steps   — reads the steps that Android's built-in step counter writes
-//  WRITE Calories / Distance / ExerciseSession — we write derived values back
+// Only request what the app actually reads or writes.
+// Derived metrics (calories, distance, exercise) are WRITTEN back to HC
+// so they appear in the Health Connect UI — but we never READ them (we
+// derive them from steps on every fetch instead).
+// Height is never read or written by this app.
 //
 const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
-  // Activity
-  { accessType: 'read', recordType: 'Steps' },
-  { accessType: 'read', recordType: 'Distance' },
-  { accessType: 'write', recordType: 'Distance' },
-  { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+  // ── Activity ──────────────────────────────────────────────────────────────
+  { accessType: 'read',  recordType: 'Steps' },
+  { accessType: 'write', recordType: 'Steps' },
+
+  // Derived metrics — write-only (we compute from steps, never read back)
   { accessType: 'write', recordType: 'ActiveCaloriesBurned' },
-  { accessType: 'read', recordType: 'ExerciseSession' },
+  { accessType: 'write', recordType: 'Distance' },
   { accessType: 'write', recordType: 'ExerciseSession' },
-  // Vitals
-  { accessType: 'read', recordType: 'HeartRate' },
+
+  // ── Vitals ────────────────────────────────────────────────────────────────
+  { accessType: 'read',  recordType: 'HeartRate' },
   { accessType: 'write', recordType: 'HeartRate' },
-  { accessType: 'read', recordType: 'BloodPressure' },
+
+  { accessType: 'read',  recordType: 'BloodPressure' },
   { accessType: 'write', recordType: 'BloodPressure' },
-  { accessType: 'read', recordType: 'SleepSession' },
-  { accessType: 'write', recordType: 'SleepSession' },
-  { accessType: 'read', recordType: 'Weight' },
-  { accessType: 'write', recordType: 'Weight' },
-  { accessType: 'read', recordType: 'Height' },
-  { accessType: 'write', recordType: 'Height' },
-  { accessType: 'read', recordType: 'BloodGlucose' },
+
+  { accessType: 'read',  recordType: 'BloodGlucose' },
   { accessType: 'write', recordType: 'BloodGlucose' },
-  { accessType: 'read', recordType: 'Hydration' },
+
+  { accessType: 'read',  recordType: 'Weight' },
+  { accessType: 'write', recordType: 'Weight' },
+
+  // ── Sleep ─────────────────────────────────────────────────────────────────
+  { accessType: 'read',  recordType: 'SleepSession' },
+  { accessType: 'write', recordType: 'SleepSession' },
+
+  // ── Hydration ─────────────────────────────────────────────────────────────
+  { accessType: 'read',  recordType: 'Hydration' },
   { accessType: 'write', recordType: 'Hydration' },
-  // Background
-  { accessType: 'read', recordType: 'BackgroundAccessPermission' },
+
+  // ── Background ────────────────────────────────────────────────────────────
+  { accessType: 'read',  recordType: 'BackgroundAccessPermission' },
 ];
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

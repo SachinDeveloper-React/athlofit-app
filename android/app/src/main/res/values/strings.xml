@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Athlofit</string>
+    <string name="widget_description">Track your daily steps and progress</string>
 </resources>

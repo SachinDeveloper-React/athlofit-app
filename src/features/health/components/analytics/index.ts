@@ -5,5 +5,8 @@ export { default as ChartSection } from './ChartSection';
 export { default as GoalsSection } from './GoalsSection';
 export { default as SummaryRow } from './SummaryRow';
 export { default as InsightCard } from './InsightCard';
+export { default as ActivityCalendar } from './ActivityCalendar';
+export { default as MostActiveDayCard } from './MostActiveDayCard';
+export { default as PeriodStatsCard } from './PeriodStatsCard';
 export { METRIC_CONFIG, RING_SIZE, RING_STROKE, RING_R, RING_CIRC } from './analyticsConstants';
 export type { MetricKey } from './analyticsConstants';

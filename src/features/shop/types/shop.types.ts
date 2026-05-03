@@ -134,6 +134,32 @@ export type BuyWithCoinsResponse = ApiResponse<BuyWithCoinsResult>;
 export type AddressesResponse = ApiResponse<SavedAddress[]>;
 export type CancelOrderResponse = ApiResponse<CancelOrderResult>;
 
+// ─── Coupon ───────────────────────────────────────────────────────────────────
+
+export interface ValidateCouponResult {
+  code: string;
+  description: string;
+  discountType: 'percentage' | 'flat_coins';
+  discountValue: number;
+  discountCoins: number;
+  finalTotal: number;
+}
+
+export interface AvailableCoupon {
+  _id: string;
+  code: string;
+  description: string;
+  discountType: 'percentage' | 'flat_coins';
+  discountValue: number;
+  maxDiscountCoins: number | null;
+  minCartCoins: number;
+  validUntil: string | null;
+  perUserLimit: number;
+}
+
+export type ValidateCouponResponse = ApiResponse<ValidateCouponResult>;
+export type AvailableCouponsResponse = ApiResponse<AvailableCoupon[]>;
+
 export interface GetProductsParams {
   category?: string;
   page?: number;

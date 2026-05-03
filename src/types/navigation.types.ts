@@ -36,6 +36,7 @@ export type ProfileSetupStackParamList = {
 export type HealthStackParamList = {
   [HealthRoutes.TRACKER]: undefined;
   [HealthRoutes.STEPS]: undefined;
+  [HealthRoutes.STEP_DETAIL]: { date: string };
   [HealthRoutes.CALORIES]: undefined;
   [HealthRoutes.HEART_RATE]: undefined;
   [HealthRoutes.BLOOD_PRESSURE]: undefined;

@@ -74,20 +74,18 @@ const AppShell: React.FC = () => {
 
   // ── Hydration midnight reset setup ───────────────────────────────────────
   useEffect(() => {
-    const bootstrap = async () => {
-      checkAndResetIfNewDay();
+    // Run all startup tasks in parallel — don't block render
+    checkAndResetIfNewDay();
 
-      const settings = await notifee.requestPermission();
+    notifee.requestPermission().then(settings => {
       if (settings.authorizationStatus >= AuthorizationStatus.AUTHORIZED) {
-        await Promise.all([
+        // Fire-and-forget — these don't need to block anything
+        Promise.all([
           setupMidnightChannel(),
           setupNotifChannels(),
-        ]);
-        await scheduleMidnightReset();
+        ]).then(() => scheduleMidnightReset()).catch(() => {});
       }
-    };
-
-    bootstrap();
+    }).catch(() => {});
 
     const unsubscribe = initAppStateReset();
     const unsubscribeForeground = notifee.onForegroundEvent(

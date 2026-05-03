@@ -67,10 +67,12 @@ export const shopService = {
   buyWithCoins: async (
     items: { productId: string; quantity: number }[],
     shippingAddress?: any,
+    couponCode?: string,
   ) => {
     const response = await api.post<BuyWithCoinsResponse>('shop/cart/buy-with-coins', {
       items,
       shippingAddress,
+      couponCode: couponCode || undefined,
     });
     return { success: response.success, message: response.message, data: response.data };
   },
@@ -117,6 +119,21 @@ export const shopService = {
   deleteAddress: async (addressId: string) => {
     const response = await api.delete<AddressesResponse>(
       `user/addresses/${addressId}`,
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  validateCoupon: async (code: string, cartTotalCoins: number) => {
+    const response = await api.post<import('../types/shop.types').ValidateCouponResponse>(
+      'shop/coupons/validate',
+      { code, cartTotalCoins },
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  getAvailableCoupons: async () => {
+    const response = await api.get<import('../types/shop.types').AvailableCouponsResponse>(
+      'shop/coupons',
     );
     return { success: response.success, message: response.message, data: response.data };
   },

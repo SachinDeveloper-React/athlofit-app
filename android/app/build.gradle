@@ -124,4 +124,9 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // WorkManager for background widget updates
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    // Health Connect SDK for native background step reading
+    implementation("androidx.health.connect:connect-client:1.1.0-rc01")
 }

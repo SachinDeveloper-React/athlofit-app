@@ -12,6 +12,9 @@ import {
   resolveHealthGateReason,
   type HealthGateReason,
 } from '../components/tracker/HealthGate';
+import PermissionDeniedScreen, {
+  type PermissionScenario,
+} from '../components/tracker/PermissionDeniedScreen';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useHealth } from '../hooks/useHealth';
 import { WeeklyStepEntry, type HealthData } from '../types/healthTypes';
@@ -23,6 +26,7 @@ import { useGamificationStore } from '../store/gamificationStore';
 import { buildMetricRows } from '../service/health.service';
 import type { StreaksResponseData } from '../types/gamification.type';
 import { useSyncHealth } from '../hooks/useSyncHealth';
+import { useWidgetSync } from '../../../hooks/useWidgetSync';
 import { navigate } from '../../../navigation/navigationRef';
 import {
   AccountRoutes,
@@ -133,6 +137,43 @@ TabPanels.displayName = 'TabPanels';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+/**
+ * Maps the health platform state to a PermissionScenario for the inline
+ * PermissionDeniedScreen, or null if no permission issue exists.
+ */
+function resolvePermissionScenario(
+  platform: string,
+  isReady: boolean,
+  error: string | null,
+): PermissionScenario | null {
+  if (platform === 'unavailable') {
+    const lower = error?.toLowerCase() ?? '';
+    // Health Connect not installed
+    if (lower.includes('health connect') || lower.includes('not installed')) {
+      return 'android-missing';
+    }
+    // Permission denied on Android
+    if (lower.includes('denied') || lower.includes('permission')) {
+      return 'android-denied';
+    }
+    // iOS HealthKit denied
+    if (lower.includes('healthkit') || lower.includes('health access')) {
+      return 'ios-denied';
+    }
+    // Generic unavailable — treat as android-denied (most common)
+    return 'android-denied';
+  }
+
+  if (!isReady && platform === 'healthkit') {
+    const lower = error?.toLowerCase() ?? '';
+    if (lower.includes('denied') || lower.includes('permission')) {
+      return 'ios-denied';
+    }
+  }
+
+  return null;
+}
+
 const TrackerScreen = memo(() => {
   const [activeTab, setActiveTab] = useState<TabId>(TabId.DailyStats);
   const [gateReason, setGateReason] = useState<HealthGateReason | null>(null);
@@ -173,6 +214,13 @@ const TrackerScreen = memo(() => {
   // Track the last synced user ID to detect account switches
   const lastSyncedUserRef = useRef<string | null>(null);
 
+  // Sync widget with current steps and goal
+  useWidgetSync({
+    steps: data.steps,
+    goal: dailyStepGoal || 10000,
+    enabled: isAuthenticated && isReady,
+  });
+
   useEffect(() => {
     // Automatically push health data to server when loaded
     // BUT only if user is authenticated and it's the same user
@@ -206,6 +254,12 @@ const TrackerScreen = memo(() => {
   useEffect(() => {
     setGateReason(resolveHealthGateReason({ platform, isReady, error }));
   }, [platform, isReady, error]);
+
+  // ── Permission scenario (inline screen) ───────────────────────────────────
+  const permissionScenario = useMemo(
+    () => resolvePermissionScenario(platform, isReady, error),
+    [platform, isReady, error],
+  );
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
@@ -271,6 +325,23 @@ const TrackerScreen = memo(() => {
   if (isLoading && !isReady) {
     return (
       <Loader message="Connecting to health data…" size="large" fullscreen />
+    );
+  }
+
+  // ── Permission denied — show full inline screen ───────────────────────────
+
+  if (permissionScenario) {
+    return (
+      <Screen safeArea={false} scroll={false} header={header}>
+        <PermissionDeniedScreen
+          scenario={permissionScenario}
+          errorMessage={error ?? undefined}
+          onPermissionGranted={() => {
+            setGateReason(null);
+            handleRefresh();
+          }}
+        />
+      </Screen>
     );
   }
 

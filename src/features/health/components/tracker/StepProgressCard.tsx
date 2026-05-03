@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
+  TouchableOpacity,
   type ViewStyle,
 } from 'react-native';
 import Svg, {
@@ -30,6 +31,8 @@ import { withOpacity } from '../../../../utils/withOpacity';
 import { makeStyles } from '../../../../hooks/makeStyles';
 import { WeeklyStepEntry } from '../../types/healthTypes';
 import { navigate } from '../../../../navigation/navigationRef';
+import { getStepColor } from '../../utils/stepColorUtils';
+import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -253,43 +256,68 @@ type DayBarProps = {
 const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
   const { colors } = useTheme();
 
-  const met = data.steps >= goal;
-  const targetH = Math.round((data.steps / maxSteps) * BAR_H);
-  const goalLineY = Math.round((goal / maxSteps) * BAR_H);
+  // ── Color derived from progress ratio ─────────────────────────────────────
+  const { barColor, dotColor, ratio } = useMemo(
+    () => getStepColor(data.steps, goal, colors.muted, isToday),
+    [data.steps, goal, colors.muted, isToday],
+  );
 
+  const met      = ratio >= 1;
+  const targetH  = maxSteps > 0 ? Math.round((data.steps / maxSteps) * BAR_H) : 0;
+  const goalLineY = maxSteps > 0 ? Math.round((goal / maxSteps) * BAR_H) : 0;
+
+  // ── Animated bar height ───────────────────────────────────────────────────
   const fillH = useSharedValue(0);
-
   useEffect(() => {
     fillH.value = withTiming(targetH, {
       duration: 600,
       easing: Easing.out(Easing.cubic),
     });
-  }, [targetH, fillH]);
+  }, [targetH]);
 
-  // ✅ Height-only animated style — no color here
-  const animHeightStyle = useAnimatedStyle(() => ({
-    height: fillH.value,
-  }));
+  const animHeightStyle = useAnimatedStyle(() => ({ height: fillH.value }));
 
-  // ✅ Color lives in a plain style object, merged separately so RN can
-  //    read it without going through the Reanimated style resolver.
-  const barColor = met ? '#1D9E75' : isToday ? '#378ADD' : colors.muted;
+  // ── Step label: show "Xk" or "—" ─────────────────────────────────────────
+  const stepLabel = data.steps > 0
+    ? data.steps >= 1000
+      ? `${(data.steps / 1000).toFixed(1)}k`
+      : String(data.steps)
+    : '—';
+
+  // ── Navigate to StepDetailScreen ─────────────────────────────────────────
+  const handlePress = useCallback(() => {
+    if (!data.fullDate) return;
+    navigate(RootRoutes.HEALTH_NAVIGATOR, {
+      screen: HealthRoutes.STEP_DETAIL,
+      params: { date: data.fullDate },
+    });
+  }, [data.fullDate]);
 
   return (
-    <AppView style={styles.dayCol}>
-      {/* Goal indicator dot */}
+    <TouchableOpacity
+      onPress={handlePress}
+      activeOpacity={data.fullDate ? 0.7 : 1}
+      style={styles.dayCol}
+    >
+      {/* ── Goal dot / checkmark ── */}
       <AppView
         style={[
           styles.checkmark,
-          { backgroundColor: met ? '#1D9E75' : colors.border },
+          {
+            backgroundColor: met
+              ? dotColor
+              : data.steps > 0
+              ? withOpacity(dotColor, 0.25)
+              : colors.border,
+          },
         ]}
       >
         {met && <AppText style={styles.checkIcon}>✓</AppText>}
       </AppView>
 
-      {/* Bar */}
+      {/* ── Bar track ── */}
       <AppView style={[styles.barTrack, { backgroundColor: colors.border }]}>
-        {/* ✅ Animated.View only handles height; barColor style is separate */}
+        {/* Animated fill — color + height */}
         <Animated.View
           style={[
             styles.barFill,
@@ -299,19 +327,42 @@ const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
         />
 
         {/* Goal reference line */}
-        <AppView style={[styles.goalLine, { bottom: goalLineY }]} />
+        {goalLineY > 0 && goalLineY < BAR_H && (
+          <AppView
+            style={[
+              styles.goalLine,
+              {
+                bottom: goalLineY,
+                backgroundColor: withOpacity('#BA7517', met ? 0 : 0.55),
+              },
+            ]}
+          />
+        )}
       </AppView>
 
-      <AppText variant="caption2" style={styles.daySteps}>
-        {(data.steps / 1000).toFixed(1)}k
-      </AppText>
+      {/* ── Step count ── */}
       <AppText
         variant="caption2"
-        style={[styles.dayName, isToday && styles.dayNameToday]}
+        style={[
+          styles.daySteps,
+          { color: data.steps > 0 ? barColor : colors.mutedForeground },
+        ]}
+      >
+        {stepLabel}
+      </AppText>
+
+      {/* ── Day name ── */}
+      <AppText
+        variant="caption2"
+        style={[
+          styles.dayName,
+          isToday && styles.dayNameToday,
+          isToday && { color: colors.primary },
+        ]}
       >
         {data.date}
       </AppText>
-    </AppView>
+    </TouchableOpacity>
   );
 });
 
@@ -350,6 +401,16 @@ const ClaimCoinsButton = memo(({ steps, goal, claimedToday }: ClaimProps) => {
 });
 
 ClaimCoinsButton.displayName = 'ClaimCoinsButton';
+
+// ─── Legend items ─────────────────────────────────────────────────────────────
+
+const LEGEND_ITEMS = [
+  { color: '#C5DFF7', label: '<25%'  },
+  { color: '#5AABF0', label: '25–50%' },
+  { color: '#2E9FD8', label: '50–75%' },
+  { color: '#1DB88A', label: '75–99%' },
+  { color: '#16A34A', label: '100% ✓' },
+] as const;
 
 // ─── StepProgressCard ─────────────────────────────────────────────────────────
 
@@ -413,9 +474,28 @@ export const StepProgressCard = memo(
           </AppView>
         ) : weekData && weekData.length > 0 ? (
           <AppView style={{ marginTop: 24 }}>
-            <AppText variant="caption1" style={[styles.weekLabel]}>
-              This week
-            </AppText>
+            {/* ── Section header with goal ── */}
+            <AppView style={styles.weekHeader}>
+              <AppText variant="caption1" style={styles.weekLabel}>
+                This week
+              </AppText>
+              <AppText variant="caption2" style={styles.weekGoalLabel}>
+                Goal: {goal.toLocaleString()} steps
+              </AppText>
+            </AppView>
+
+            {/* ── Color legend ── */}
+            <AppView style={styles.legendRow}>
+              {LEGEND_ITEMS.map(item => (
+                <AppView key={item.label} style={styles.legendItem}>
+                  <AppView style={[styles.legendDot, { backgroundColor: item.color }]} />
+                  <AppText variant="caption2" style={styles.legendText}>
+                    {item.label}
+                  </AppText>
+                </AppView>
+              ))}
+            </AppView>
+
             <AppView style={styles.weekGrid}>
               {weekData.map((day, i) => (
                 <DayBar
@@ -469,13 +549,46 @@ speedoContainer: {
 
   // Week grid
   weekLabel: {
+    marginBottom: 4,
+    paddingHorizontal: 20,
+  },
+  weekGoalLabel: {
+    opacity: 0.55,
+    paddingHorizontal: 20,
+  },
+  weekHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 12,
-     paddingHorizontal: 20, 
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 9,
+    opacity: 0.7,
   },
   weekGrid: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
 
   // Day bar
@@ -519,7 +632,6 @@ speedoContainer: {
   },
   daySteps: {
     fontSize: 10,
-    opacity: 0.6,
     textAlign: 'center',
   },
   dayName: {
