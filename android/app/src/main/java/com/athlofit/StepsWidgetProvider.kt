@@ -20,7 +20,6 @@ class StepsWidgetProvider : AppWidgetProvider() {
         private const val PREF_GOAL = "goal"
         private const val PREF_LAST_UPDATED = "lastUpdated"
         const val ACTION_REFRESH = "com.athlofit.WIDGET_REFRESH"
-        private const val ACTION_OPEN_APP = "com.athlofit.WIDGET_OPEN_APP"
 
         /**
          * Called from React Native (StepsWidgetModule) and from WidgetUpdateWorker.
@@ -103,20 +102,9 @@ class StepsWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
 
-        when (intent.action) {
-            ACTION_REFRESH -> {
-                Log.d(TAG, "Refresh tapped — running immediate update")
-                // Run a background job immediately to fetch fresh Health Connect data
-                WidgetScheduler.runNow(context)
-            }
-            ACTION_OPEN_APP -> {
-                val launchIntent = context.packageManager
-                    .getLaunchIntentForPackage(context.packageName)
-                launchIntent?.let {
-                    it.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    context.startActivity(it)
-                }
-            }
+        if (intent.action == ACTION_REFRESH) {
+            Log.d(TAG, "Refresh tapped — running immediate update")
+            WidgetScheduler.runNow(context)
         }
     }
 
@@ -153,7 +141,7 @@ class StepsWidgetProvider : AppWidgetProvider() {
         val timeText = if (lastUpdated > 0) "Updated ${formatTime(lastUpdated)}" else "Tap to refresh"
         views.setTextViewText(R.id.widget_last_updated, timeText)
 
-        // Refresh button → triggers WidgetUpdateWorker immediately
+        // Refresh button → triggers immediate background update via AlarmManager
         val refreshIntent = Intent(context, StepsWidgetProvider::class.java).apply {
             action = ACTION_REFRESH
         }
@@ -163,15 +151,25 @@ class StepsWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_refresh, refreshPi)
 
-        // Tap on steps → open app
-        val openIntent = Intent(context, StepsWidgetProvider::class.java).apply {
-            action = ACTION_OPEN_APP
+        // Tap anywhere on the widget → open app.
+        // Must use PendingIntent.getActivity(), NOT startActivity() from a BroadcastReceiver.
+        // On Android 10+ background processes cannot start activities directly — it fails silently.
+        val launchIntent = context.packageManager
+            .getLaunchIntentForPackage(context.packageName)
+            ?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            }
+
+        if (launchIntent != null) {
+            val openPi = PendingIntent.getActivity(
+                context,
+                1,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            // Root layout — whole widget body is tappable
+            views.setOnClickPendingIntent(R.id.widget_root, openPi)
         }
-        val openPi = PendingIntent.getBroadcast(
-            context, 1, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        views.setOnClickPendingIntent(R.id.widget_steps, openPi)
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }

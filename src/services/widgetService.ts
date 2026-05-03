@@ -8,6 +8,7 @@ interface StepsWidgetNativeModule {
   setLoginTimestamp: (timestamp: number) => Promise<boolean>;
   clearLoginTimestamp: () => Promise<boolean>;
   isWidgetAdded: () => Promise<boolean>;
+  setAppInitialising: (initialising: boolean) => Promise<boolean>;
 }
 
 const { StepsWidget } = NativeModules;
@@ -102,6 +103,24 @@ class WidgetService {
       return await this.module.isWidgetAdded();
     } catch (e) {
       return false;
+    }
+  }
+
+  /**
+   * Tell the native WidgetUpdateWorker whether the app is currently
+   * initialising Health Connect. While true, the background worker skips
+   * its HC read to prevent a concurrent-access crash on app startup.
+   *
+   * Call setAppInitialising(true) before initialize()/requestPermission(),
+   * and setAppInitialising(false) once setup is complete.
+   */
+  async setAppInitialising(initialising: boolean): Promise<void> {
+    if (!this.module) return;
+    try {
+      await this.module.setAppInitialising(initialising);
+    } catch (e) {
+      // Non-fatal — worst case the worker might race, but it has its own catch
+      console.warn('[WidgetService] setAppInitialising failed:', e);
     }
   }
 }

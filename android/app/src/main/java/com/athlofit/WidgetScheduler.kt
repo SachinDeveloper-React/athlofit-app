@@ -1,6 +1,10 @@
 package com.athlofit
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -13,10 +17,11 @@ object WidgetScheduler {
 
     private const val TAG = "WidgetScheduler"
     private const val WORK_NAME = "StepsWidgetAutoUpdate"
+    private const val ALARM_REQUEST_CODE = 9001
 
     /**
      * Schedule periodic widget updates every 15 minutes (Android minimum).
-     * Uses KEEP policy — won't reschedule if already running.
+     * Uses UPDATE policy — resets the timer on each call so drift doesn't accumulate.
      * Call this on:
      *   - Widget added to home screen (onEnabled)
      *   - App launch / login
@@ -31,7 +36,8 @@ object WidgetScheduler {
             .build()
 
         val request = PeriodicWorkRequestBuilder<WidgetUpdateWorker>(
-            15, TimeUnit.MINUTES   // Android minimum interval
+            15, TimeUnit.MINUTES,   // Android minimum interval
+            5, TimeUnit.MINUTES     // flex: run in the last 5 min of each window
         )
             .setConstraints(constraints)
             .addTag(WORK_NAME)
@@ -39,7 +45,7 @@ object WidgetScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,  // don't reset timer if already scheduled
+            ExistingPeriodicWorkPolicy.UPDATE,  // reset timer on reschedule so drift doesn't accumulate
             request
         )
 
@@ -53,19 +59,57 @@ object WidgetScheduler {
     fun cancel(context: Context) {
         Log.d(TAG, "Cancelling widget update work")
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        cancelAlarm(context)
     }
 
     /**
-     * Force an immediate one-shot update right now (in addition to periodic).
-     * Call this when the app comes to foreground or user taps refresh.
+     * Force an immediate one-shot update using AlarmManager so it fires in
+     * seconds rather than going through WorkManager's queue (which can be
+     * deferred by minutes on battery-optimised devices).
+     *
+     * Falls back to a WorkManager one-shot if exact alarms are not permitted.
      */
     fun runNow(context: Context) {
         Log.d(TAG, "Running immediate widget update")
 
-        val request = androidx.work.OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
-            .addTag("${WORK_NAME}_immediate")
-            .build()
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, WidgetAlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        WorkManager.getInstance(context).enqueue(request)
+        val triggerAt = System.currentTimeMillis() + 500L // fire in ~500 ms
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                // Exact alarms not permitted — fall back to inexact (still faster than WorkManager)
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                Log.d(TAG, "Exact alarms not permitted — using inexact alarm")
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                Log.d(TAG, "Exact alarm scheduled for immediate update")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AlarmManager failed, falling back to WorkManager: ${e.message}")
+            val request = androidx.work.OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
+                .addTag("${WORK_NAME}_immediate")
+                .build()
+            WorkManager.getInstance(context).enqueue(request)
+        }
+    }
+
+    private fun cancelAlarm(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, WidgetAlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        pendingIntent?.let { alarmManager.cancel(it) }
     }
 }

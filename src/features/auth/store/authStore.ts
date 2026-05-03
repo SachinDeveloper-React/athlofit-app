@@ -88,9 +88,14 @@ export const useAuthStore = create<AuthState>()(
               });
             }
           });
-        }).catch(async () => {
-          // Token is invalid/expired — log out silently
-          await get().logout();
+        }).catch(async (err) => {
+          // Only logout on a definitive auth rejection (401/403).
+          // Network errors, 5xx, or timeouts should NOT log the user out —
+          // the session is still valid, the server is just temporarily unreachable.
+          const statusCode = (err as any)?.statusCode;
+          if (statusCode === 401 || statusCode === 403) {
+            await get().logout();
+          }
         });
       },
 

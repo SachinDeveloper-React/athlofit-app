@@ -7,15 +7,13 @@ import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
 
-import { Platform } from 'react-native';
+const BASE_URL = "https://athlofit-backend.vercel.app/"
 
-// const BASE_URL = "https://athlofit-backend.vercel.app/"
-
-export const BASE_URL =
-  Platform.OS === 'android'
-    // ? 'http://192.168.0.129:5001/'
-    ? 'http://192.168.1.9:5001/'
-    : 'http://localhost:5001/';
+// export const BASE_URL =
+//   Platform.OS === 'android'
+//     // ? 'http://192.168.0.129:5001/'
+//     ? 'http://192.168.1.9:5001/'
+//     : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,7 +43,6 @@ async function request<T>(
   // Attach access token
   if (auth) {
     const token = await tokenService.getAccessToken();
-    console.log('Api Access Token', token);
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -57,12 +54,11 @@ async function request<T>(
   // ── 401: attempt token refresh ─────────────────────────────────────────────
   if (response.status === 401 && !retry) {
     const refreshed = await tryRefresh();
-    console.log("refreshed", refreshed)
     if (refreshed) {
       return request<T>(endpoint, { ...options, retry: true });
     } else {
-      await tokenService.clear();
-      // resetToAuth();
+      // Refresh failed — full logout so the user lands on the sign-in screen
+      await useAuthStore.getState().logout();
       throw createError('Session expired. Please log in again.', 401);
     }
   }
@@ -99,7 +95,6 @@ async function tryRefresh(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data = await res.json();
-    console.log("refresh token data", data)
     await tokenService.save({
       accessToken: data?.data?.accessToken,
       refreshToken: data?.data?.refreshToken,
@@ -108,8 +103,7 @@ async function tryRefresh(): Promise<boolean> {
     useAuthStore.getState().setAccessToken(data?.data?.accessToken);
 
     return true;
-  } catch (error) {
-    console.log("refresh token error", error)
+  } catch {
     return false;
   }
 }

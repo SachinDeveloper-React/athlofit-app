@@ -93,4 +93,23 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
             promise.reject("CHECK_ERROR", e.message, e)
         }
     }
+
+    /**
+     * Signal that the app is currently initialising Health Connect.
+     * While this flag is true the background WidgetUpdateWorker will skip its
+     * Health Connect read to avoid a concurrent-access crash.
+     */
+    @ReactMethod
+    fun setAppInitialising(initialising: Boolean, promise: Promise) {
+        try {
+            reactApplicationContext
+                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("appInitialising", initialising)
+                .apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("INIT_FLAG_ERROR", e.message, e)
+        }
+    }
 }

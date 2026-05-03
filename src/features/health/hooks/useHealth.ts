@@ -82,9 +82,17 @@ export function useHealth(options: UseHealthOptions = {}) {
 
       if (!wasBackground && isBackground) {
         stopAutoRefresh();
-      } else if (wasBackground && !isBackground && isReadyRef.current) {
-        loadData(platformRef.current); // immediate refresh on foreground
-        startAutoRefresh();
+      } else if (wasBackground && !isBackground) {
+        if (isReadyRef.current) {
+          // Already initialised — just refresh data
+          loadData(platformRef.current);
+          startAutoRefresh();
+        } else {
+          // Not ready yet (e.g. user just granted permissions in Health Connect
+          // and returned to the app) — re-run the full setup so isReady can
+          // become true and the PermissionDeniedScreen goes away.
+          setup();
+        }
       }
       appStateRef.current = next;
     });
@@ -131,7 +139,21 @@ export function useHealth(options: UseHealthOptions = {}) {
           );
           return;
         }
-        const ok = await initializeHealthConnect();
+
+        // Signal to the native WidgetUpdateWorker that we are about to
+        // initialise Health Connect. This prevents the background worker from
+        // calling HealthConnectClient concurrently, which crashes the app.
+        const { widgetService } = await import('../../../services/widgetService');
+        await widgetService.setAppInitialising(true);
+
+        let ok = false;
+        try {
+          ok = await initializeHealthConnect();
+        } finally {
+          // Always clear the flag — even if init throws
+          await widgetService.setAppInitialising(false);
+        }
+
         platformRef.current = ok ? 'healthconnect' : 'unavailable';
         setPlatform(platformRef.current);
         isReadyRef.current = ok;
