@@ -1,4 +1,5 @@
-import { api } from '../../../utils/api';
+import { api, BASE_URL } from '../../../utils/api';
+import { tokenService } from './tokenService';
 import type {
   LoginRequest,
   RegisterRequest,
@@ -59,7 +60,21 @@ export const authService = {
   resetPassword: (body: ResetPasswordRequest) =>
     api.post<ApiResponse>('auth/reset-password', body, { auth: false }),
 
-  logout: () => api.post<ApiResponse>('auth/logout'),
+  logout: () => {
+    // Use raw fetch — NOT api.post — so a 401 response never triggers
+    // the refresh → logout cycle. Server revocation is best-effort anyway;
+    // the real logout is clearing tokens locally.
+    const { BASE_URL } = require('../../../utils/api');
+    return tokenService.getAccessToken().then(token =>
+      fetch(`${BASE_URL}auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }).catch(() => {}) // fully silent — network errors are fine
+    );
+  },
 
   me: async () => {
     const response = await api.get<ApiResponse<User>>('user/profile');

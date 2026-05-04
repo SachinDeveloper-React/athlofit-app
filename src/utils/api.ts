@@ -3,16 +3,18 @@
 // Thin fetch wrapper — attaches Bearer token, handles 401 refresh,
 // and normalises errors. No axios dependency.
 
+import { Platform } from 'react-native';
 import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
+import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
 const BASE_URL = "https://athlofit-backend.vercel.app/"
 
 // export const BASE_URL =
 //   Platform.OS === 'android'
 //     // ? 'http://192.168.0.129:5001/'
-//     ? 'http://192.168.1.9:5001/'
+//     ? 'http://192.168.1.5:5001/'
 //     : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,6 +30,10 @@ interface ApiError {
 }
 
 // ─── Core fetch ───────────────────────────────────────────────────────────────
+
+// Mutex: ensures only one token refresh runs at a time.
+// All concurrent 401s wait for the same refresh and reuse its result.
+let refreshPromise: Promise<boolean> | null = null;
 
 async function request<T>(
   endpoint: string,
@@ -53,12 +59,31 @@ async function request<T>(
 
   // ── 401: attempt token refresh ─────────────────────────────────────────────
   if (response.status === 401 && !retry) {
-    const refreshed = await tryRefresh();
+    // If logout is in progress, don't trigger another logout — just throw
+    if (isLoggingOut()) {
+      throw createError('Session expired. Please log in again.', 401);
+    }
+
+    // Mutex: if a refresh is already in flight, wait for it instead of
+    // firing a second one. This prevents concurrent 401s from each calling
+    // tryRefresh(), which causes multiple token rotations and revokes all tokens.
+    if (!refreshPromise) {
+      refreshPromise = tryRefresh().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const refreshed = await refreshPromise;
+
     if (refreshed) {
       return request<T>(endpoint, { ...options, retry: true });
     } else {
       // Refresh failed — full logout so the user lands on the sign-in screen
-      await useAuthStore.getState().logout();
+      setIsLoggingOut(true);
+      try {
+        await useAuthStore.getState().logout();
+      } finally {
+        setIsLoggingOut(false);
+      }
       throw createError('Session expired. Please log in again.', 401);
     }
   }
@@ -98,7 +123,6 @@ async function tryRefresh(): Promise<boolean> {
     await tokenService.save({
       accessToken: data?.data?.accessToken,
       refreshToken: data?.data?.refreshToken,
-      expiresIn: 36000,
     });
     useAuthStore.getState().setAccessToken(data?.data?.accessToken);
 

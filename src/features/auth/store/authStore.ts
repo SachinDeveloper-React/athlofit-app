@@ -6,6 +6,7 @@ import { authService } from '../service/authService';
 import type { AuthState, AuthTokens, User } from '../../../types/auth.types';
 import { mmkvStorage } from '../../../store';
 import { clearFcmToken } from '../../../services/fcmService';
+import { setIsLoggingOut } from '../../../utils/logoutGuard';
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
@@ -101,13 +102,30 @@ export const useAuthStore = create<AuthState>()(
 
       // ── Logout ──────────────────────────────────────────────────────────────
       logout: async () => {
+        // Set the guard immediately — any 401 that arrives while we're
+        // logging out will throw directly instead of triggering another logout.
+        setIsLoggingOut(true);
+
         try {
-          await clearFcmToken();
-          await authService.logout();
-        } catch {
-          /* silent */
+          // Clear local state first so navigation redirects to sign-in immediately
+          set(state => {
+            state.user = null;
+            state.accessToken = null;
+            state.isAuthenticated = false;
+          });
+
+          // Clear tokens from Keychain before any network calls so that
+          // clearFcmToken's hasSession check returns null and skips its API call
+          await tokenService.clear();
+
+          // Best-effort server-side cleanup — both use raw fetch (not api.post)
+          // so they can never trigger the refresh → logout cycle
+          try { await clearFcmToken(); } catch { /* silent */ }
+          try { await authService.logout(); } catch { /* silent */ }
+
+        } finally {
+          setIsLoggingOut(false);
         }
-        await tokenService.clear();
 
         // Stop widget background updates and clear login timestamp
         import('../../../services/widgetService').then(({ widgetService }) => {
@@ -123,12 +141,6 @@ export const useAuthStore = create<AuthState>()(
         useGamificationStore.getState().reset();
         useHydrationStore.getState().reset();
         useHealthDataStore.getState().reset();
-
-        set(state => {
-          state.user = null;
-          state.accessToken = null;
-          state.isAuthenticated = false;
-        });
       },
 
       // ── Partial user update (e.g. after edit profile) ───────────────────────

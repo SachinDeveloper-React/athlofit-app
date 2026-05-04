@@ -11,7 +11,7 @@ export const useStreaks = () => {
       if (!res.success) throw new Error(res.message);
       return res.data as StreaksResponseData;
     },
-    staleTime: 30_000, // 30s
+    staleTime: 5 * 60_000, // 5 min
   });
 
   return {

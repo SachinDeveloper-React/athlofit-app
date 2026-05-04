@@ -87,13 +87,51 @@ export const isHealthConnectAvailable = async (): Promise<boolean> => {
   return status === SdkAvailabilityStatus.SDK_AVAILABLE;
 };
 
+/** Small delay after initialize() to let the IPC binding fully settle.
+ *  Without this, concurrent readRecords calls immediately after init
+ *  cause RemoteException: Binding died / Null binding errors. */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const initializeHealthConnect = async (): Promise<boolean> => {
   const initialized = await initialize();
   if (!initialized) return false;
+  // Give the Health Connect service time to fully bind before any reads
+  await sleep(300);
   const granted = await requestPermission(PERMISSIONS);
   // Accept if at least 80% of permissions were granted
   return granted.length >= PERMISSIONS.length * 0.8;
 };
+
+// ─── Retry helper ─────────────────────────────────────────────────────────────
+//
+// RemoteException (Binding died / Null binding / Binding to service failed)
+// is a transient IPC error — the Health Connect service process restarted.
+// Retrying after a short back-off resolves it in virtually all cases.
+//
+async function readWithRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 400,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastError = e;
+      const isBindingError =
+        typeof e?.message === 'string' &&
+        (e.message.includes('Binding died') ||
+          e.message.includes('Binding to service failed') ||
+          e.message.includes('Null binding') ||
+          e.message.includes('RemoteException'));
+      if (!isBindingError || attempt === retries - 1) throw e;
+      // Exponential back-off: 400ms, 800ms, 1600ms …
+      await sleep(delayMs * Math.pow(2, attempt));
+    }
+  }
+  throw lastError;
+}
 
 // ─── Time helpers ─────────────────────────────────────────────────────────────
 
@@ -223,42 +261,37 @@ export const fetchAllHealthConnectData = async (
     ] = await Promise.all([
       // Steps — read from Android built-in step sensor via Health Connect
       // IMPORTANT: Use sinceLoginRange to only get steps since user logged in
-      readRecords('Steps', { timeRangeFilter: stepsTimeRange }).catch(e => {
+      readWithRetry(() => readRecords('Steps', { timeRangeFilter: stepsTimeRange })).catch(e => {
         console.warn('Steps read failed:', e);
         return { records: [] };
       }),
 
-      readRecords('HeartRate', { timeRangeFilter: todayRange() }).catch(e => {
+      readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: todayRange() })).catch(e => {
         console.warn('HeartRate read failed:', e);
         return { records: [] };
       }),
 
-      readRecords('BloodPressure', { timeRangeFilter: lastNDays(7) }).catch(
-        e => {
-          console.warn('BloodPressure read failed:', e);
-          return { records: [] };
-        },
-      ),
+      readWithRetry(() => readRecords('BloodPressure', { timeRangeFilter: lastNDays(7) })).catch(e => {
+        console.warn('BloodPressure read failed:', e);
+        return { records: [] };
+      }),
 
-      readRecords('SleepSession', { timeRangeFilter: lastNDays(1) }).catch(
-        e => {
-          console.warn('Sleep read failed:', e);
-          return { records: [] };
-        },
-      ),
+      readWithRetry(() => readRecords('SleepSession', { timeRangeFilter: lastNDays(1) })).catch(e => {
+        console.warn('Sleep read failed:', e);
+        return { records: [] };
+      }),
 
-      readRecords('Weight', { timeRangeFilter: lastNDays(30) }).catch(e => {
+      readWithRetry(() => readRecords('Weight', { timeRangeFilter: lastNDays(30) })).catch(e => {
         console.warn('Weight read failed:', e);
         return { records: [] };
       }),
 
-      readRecords('BloodGlucose', { timeRangeFilter: lastNDays(1) }).catch(
-        e => {
-          console.warn('BloodGlucose read failed:', e);
-          return { records: [] };
-        },
-      ),
-      readRecords('Hydration', { timeRangeFilter: todayRange() }).catch(e => {
+      readWithRetry(() => readRecords('BloodGlucose', { timeRangeFilter: lastNDays(1) })).catch(e => {
+        console.warn('BloodGlucose read failed:', e);
+        return { records: [] };
+      }),
+
+      readWithRetry(() => readRecords('Hydration', { timeRangeFilter: todayRange() })).catch(e => {
         console.warn('Hydration read failed:', e);
         return { records: [] };
       }),

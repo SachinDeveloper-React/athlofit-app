@@ -11,7 +11,7 @@ export function useChallenges() {
     queryKey: challengeKeys.all(),
     queryFn:  () => challengeService.getAll(),
     select:   r => r.data ?? [],
-    staleTime: 30_000,
+    staleTime: 5 * 60_000, // 5 min — matches ChallengeTrackerCard so they share cache
     retry: 1,
   });
 }

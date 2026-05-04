@@ -195,7 +195,7 @@ const TrackerScreen = memo(() => {
   } = useWeeklySteps();
 
   // Gamification & Streaks
-  const { mutate: fetchGamification } = useGamification();
+  const { refetch: fetchGamification } = useGamification();
   const {
     streakData,
     mutate: fetchStreakData,
@@ -204,15 +204,17 @@ const TrackerScreen = memo(() => {
   const streakDays = useGamificationStore(s => s.streakDays);
   const syncDailyProgress = useGamificationStore(s => s.syncDailyProgress);
 
-  useEffect(() => {
-    fetchGamification(); // load real coin balance from server on mount
-    fetchStreakData();
-  }, [fetchGamification, fetchStreakData]);
+  // No manual fetchGamification on mount — useQuery handles it automatically
 
   const { syncHealth } = useSyncHealth();
 
   // Track the last synced user ID to detect account switches
   const lastSyncedUserRef = useRef<string | null>(null);
+  // Throttle: track last sync time and last synced step count
+  const lastSyncTimeRef = useRef<number>(0);
+  const lastSyncedStepsRef = useRef<number>(-1);
+  const MIN_SYNC_INTERVAL_MS = 5 * 60_000; // 5 minutes between syncs
+  const MIN_STEP_DELTA = 10; // only re-sync if steps changed by at least 10
 
   // Sync widget with current steps and goal
   useWidgetSync({
@@ -222,31 +224,37 @@ const TrackerScreen = memo(() => {
   });
 
   useEffect(() => {
-    // Automatically push health data to server when loaded
-    // BUT only if user is authenticated and it's the same user
+    if (!isAuthenticated || !userId) return;
 
-    if (!isAuthenticated || !userId) {
-      // User not authenticated - don't sync
-      return;
-    }
-
-    // Detect account switch - if user ID changed, don't sync old data
+    // Detect account switch
     if (lastSyncedUserRef.current && lastSyncedUserRef.current !== userId) {
-      console.log('[TrackerScreen] Account switched - skipping sync of old health data');
       lastSyncedUserRef.current = userId;
-      // Refresh health data for new user
+      lastSyncedStepsRef.current = -1;
+      lastSyncTimeRef.current = 0;
       refresh(true);
       return;
     }
 
-    if (isReady && data && lastUpdated) {
-      const isGoalMet = data.steps >= (dailyStepGoal || 8000);
-      syncHealth({
-        ...data,
-        goalMet: isGoalMet,
-      });
-      lastSyncedUserRef.current = userId;
+    if (!isReady || !data || !lastUpdated) return;
+
+    const now = Date.now();
+    const timeSinceLastSync = now - lastSyncTimeRef.current;
+    const stepDelta = Math.abs(data.steps - lastSyncedStepsRef.current);
+
+    // Skip sync if: not enough time has passed AND steps haven't changed meaningfully
+    if (
+      lastSyncedStepsRef.current !== -1 && // not first sync
+      timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
+      stepDelta < MIN_STEP_DELTA
+    ) {
+      return;
     }
+
+    const isGoalMet = data.steps >= (dailyStepGoal || 8000);
+    syncHealth({ ...data, goalMet: isGoalMet });
+    lastSyncedUserRef.current = userId;
+    lastSyncTimeRef.current = now;
+    lastSyncedStepsRef.current = data.steps;
   }, [data, isReady, lastUpdated, dailyStepGoal, syncHealth, isAuthenticated, userId, refresh]);
 
   // ── Gate reason ────────────────────────────────────────────────────────────
@@ -347,8 +355,6 @@ const TrackerScreen = memo(() => {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  console.log("week", weekData);
-  
   return (
     <>
       <Screen

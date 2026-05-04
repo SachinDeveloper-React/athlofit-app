@@ -70,7 +70,7 @@ const ChallengeTrackerCard = memo(() => {
     queryKey: ['challenges'],
     queryFn:  () => challengeService.getAll(),
     select:   r  => r.data ?? [],
-    staleTime: 0,
+    staleTime: 5 * 60_000, // 5 min — share cache with ChallengesScreen
     retry: 1,
   });
 

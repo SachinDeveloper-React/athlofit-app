@@ -11,7 +11,6 @@ export function useVerifyOtp() {
   return useMutation({
     mutationFn: (body: VerifyOtpRequest) => authService.verifyOtp(body),
     onSuccess(response) {
-      console.log("response", response)
       const { success, data } = response;
       if (!success) return;
 
@@ -19,7 +18,6 @@ export function useVerifyOtp() {
         setAuth(data.user, {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
-          expiresIn: 36000, // adjust to match your API
         });
         // RootNavigator auth gate picks up isAuthenticated=true automatically
       }

@@ -1,10 +1,27 @@
-import React from 'react';
+import React, { Suspense } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { HealthRoutes } from './routes';
 import type { HealthStackParamList } from '../types/navigation.types';
-import HeartRateScreen from '../features/health/screens/HeartRateScreen';
-import BloodPressureScreen from '../features/health/screens/BloodPressureScreen';
+
+// ─── Lazy imports ─────────────────────────────────────────────────────────────
+//
+// HeartRateScreen imports react-native-vision-camera and react-native-worklets-core.
+// Both libraries initialise a native JSI/worklet runtime at module evaluation time.
+// Eagerly importing them causes a SIGSEGV (signal 11) crash on Android because the
+// native runtime is created before the React Native bridge is fully ready.
+//
+// React.lazy defers the import (and therefore the native init) until the user
+// actually navigates to the screen — by which point the bridge is stable.
+//
+// BloodPressureScreen is also lazy because it imports react-native-ble-plx which
+// creates a BleManager native object at import time.
+//
+const HeartRateScreen    = React.lazy(() => import('../features/health/screens/HeartRateScreen'));
+const BloodPressureScreen = React.lazy(() => import('../features/health/screens/BloodPressureScreen'));
+
+// Screens with no heavy native init — eager imports are fine
 import HydrationScreen from '../features/health/screens/HydrationScreen';
 import EditStepsGoalScreen from '../features/health/screens/EditStepsGoalScreen';
 import HealthAnalyticsScreen from '../features/health/screens/HealthAnalyticsScreen';
@@ -21,6 +38,13 @@ import { useTheme } from '../hooks/useTheme';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
 
+// Minimal fallback shown while the lazy screen chunk loads (usually <100ms)
+const LazyFallback = () => (
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <ActivityIndicator />
+  </View>
+);
+
 const HealthNavigator: React.FC = () => {
   const { colors } = useTheme();
   return (
@@ -33,8 +57,22 @@ const HealthNavigator: React.FC = () => {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name={HealthRoutes.HEART_RATE}       component={HeartRateScreen}       options={{ gestureEnabled: false }} />
-      <Stack.Screen name={HealthRoutes.BLOOD_PRESSURE}   component={BloodPressureScreen} />
+      <Stack.Screen name={HealthRoutes.HEART_RATE} options={{ gestureEnabled: false }}>
+        {props => (
+          <Suspense fallback={<LazyFallback />}>
+            <HeartRateScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name={HealthRoutes.BLOOD_PRESSURE}>
+        {props => (
+          <Suspense fallback={<LazyFallback />}>
+            <BloodPressureScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
+
       <Stack.Screen name={HealthRoutes.HYDRATION}        component={HydrationScreen} />
       <Stack.Screen name={HealthRoutes.EDIT_STEPS_GOAL}  component={EditStepsGoalScreen} />
       <Stack.Screen name={HealthRoutes.HEALTH_ANALYTICS} component={HealthAnalyticsScreen} />

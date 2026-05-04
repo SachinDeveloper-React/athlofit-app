@@ -17,7 +17,6 @@ export function useLogin() {
         setAuth(data.user, {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
-          expiresIn: 36000,
         });
       }
     },

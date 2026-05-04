@@ -35,7 +35,6 @@ export interface ResendOtpRequest {
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number; // seconds
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

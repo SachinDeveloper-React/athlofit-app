@@ -11,8 +11,7 @@ export function useGamification() {
   const query = useQuery({
     queryKey: ['gamification'],
     queryFn: () => gamificationService.getGamification(),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000, // 5 min — matches global default, no need to refetch constantly
   });
 
   // Sync to Zustand store in an effect — never during render
@@ -22,16 +21,8 @@ export function useGamification() {
     }
   }, [query.data, syncWithService]);
 
-  // Keep the same mutate interface so TrackerScreen doesn't need changes
-  const mutation = useMutation({
-    mutationFn: () => gamificationService.getGamification(),
-    onSuccess: (response) => {
-      if (!response.success || !response.data) return;
-      syncWithService(response.data);
-    },
-  });
-
-  return mutation;
+  // Expose refetch so TrackerScreen can trigger a manual refresh
+  return { refetch: query.refetch, isPending: query.isFetching };
 }
 
 export function useCoinData() {

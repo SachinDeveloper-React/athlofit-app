@@ -111,9 +111,15 @@ export function useSyncHealth() {
     onSuccess: (response: any) => {
       const d = response?.data;
 
-      queryClient.invalidateQueries({ queryKey: ['coin-data'] });
-      queryClient.invalidateQueries({ queryKey: ['gamification'] });
-      queryClient.invalidateQueries({ queryKey: ['challenges'] });
+      // Only invalidate queries when the server actually awarded something.
+      // Invalidating on every sync causes GET /gamification/me, /challenges,
+      // and /coins/data to refetch after every POST /health/sync (every 5 min).
+      const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
+      if (awardedCoins) {
+        queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+        queryClient.invalidateQueries({ queryKey: ['gamification'] });
+        queryClient.invalidateQueries({ queryKey: ['challenges'] });
+      }
 
       if (d?.goalCoinsAwarded) {
         if (d.coinsBalance !== undefined) setCoinsBalance(d.coinsBalance);
