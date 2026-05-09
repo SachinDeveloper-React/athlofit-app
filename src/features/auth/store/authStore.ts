@@ -39,10 +39,11 @@ export const useAuthStore = create<AuthState>()(
           useHealthDataStore.getState().setLoginTimestamp(loginTs);
         });
 
-        // Sync login timestamp to native widget + start background auto-update
+        // Sync login timestamp to native widget + start background auto-update + EOD alarm
         import('../../../services/widgetService').then(({ widgetService }) => {
           widgetService.setLoginTimestamp(loginTs);
           widgetService.startAutoUpdate();
+          widgetService.scheduleEodSync(); // native 23:59:50 alarm
         });
 
         // Register FCM token now that we have a session
@@ -82,10 +83,12 @@ export const useAuthStore = create<AuthState>()(
               import('../../../services/widgetService').then(({ widgetService }) => {
                 widgetService.setLoginTimestamp(ts);
                 widgetService.startAutoUpdate();
+                widgetService.scheduleEodSync();
               });
             } else {
               import('../../../services/widgetService').then(({ widgetService }) => {
                 widgetService.startAutoUpdate();
+                widgetService.scheduleEodSync();
               });
             }
           });
@@ -127,9 +130,10 @@ export const useAuthStore = create<AuthState>()(
           setIsLoggingOut(false);
         }
 
-        // Stop widget background updates and clear login timestamp
+        // Stop widget background updates, cancel EOD alarm, and clear login timestamp
         import('../../../services/widgetService').then(({ widgetService }) => {
           widgetService.stopAutoUpdate();
+          widgetService.cancelEodSync();
           widgetService.clearLoginTimestamp();
         });
 

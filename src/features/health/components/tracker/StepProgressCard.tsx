@@ -560,7 +560,7 @@ speedoContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    // paddingHorizontal: 20,
     marginBottom: 8,
   },
   legendRow: {

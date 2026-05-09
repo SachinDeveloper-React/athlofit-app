@@ -1,7 +1,7 @@
 
 
 import { useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { gamificationService } from '../service/gamification.service';
 import { useGamificationStore } from '../store/gamificationStore';
 
@@ -11,32 +11,56 @@ export function useGamification() {
   const query = useQuery({
     queryKey: ['gamification'],
     queryFn: () => gamificationService.getGamification(),
-    staleTime: 5 * 60_000, // 5 min — matches global default, no need to refetch constantly
+    staleTime: 5 * 60_000,
   });
 
-  // Sync to Zustand store in an effect — never during render
   useEffect(() => {
     if (query.data?.success && query.data?.data) {
       syncWithService(query.data.data);
     }
   }, [query.data, syncWithService]);
 
-  // Expose refetch so TrackerScreen can trigger a manual refresh
   return { refetch: query.refetch, isPending: query.isFetching };
 }
 
+// ─── Paginated coin transactions (infinite scroll) ────────────────────────────
+export function useCoinTransactions() {
+  return useInfiniteQuery({
+    queryKey: ['coin-transactions'],
+    queryFn: ({ pageParam = 1 }) =>
+      gamificationService.getCoinData(pageParam as number, 20),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const p = lastPage.data?.pagination;
+      if (!p || !p.hasMore) return undefined;
+      return p.page + 1;
+    },
+    staleTime: 60_000,
+    retry: 2,
+    select: (data) => ({
+      pages: data.pages,
+      pageParams: data.pageParams,
+      // Flatten all transactions across pages
+      transactions: data.pages.flatMap(p => p.data?.transactions ?? []),
+      // Balance and claimable come from the first page (always fresh)
+      balance: data.pages[0]?.data?.balance ?? 0,
+      claimable: data.pages[0]?.data?.claimable ?? [],
+      totalTransactions: data.pages[0]?.data?.pagination?.total ?? 0,
+    }),
+  });
+}
+
+// ─── Legacy single-page query — kept for backward compat (CoinScreen stats) ──
 export function useCoinData() {
-  // Invalidate after a claim so the list refreshes
   return useQuery({
     queryKey: ['coin-data'],
-    queryFn: () => gamificationService.getCoinData(),
-    // Select data from the API response envelope
+    queryFn: () => gamificationService.getCoinData(1, 20),
     select: (response) => response.data ?? {
       balance: 0,
       transactions: [],
       claimable: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 1, hasMore: false },
     },
-    // Keep data fresh — refetch every 60 seconds
     staleTime: 60_000,
     retry: 2,
   });
@@ -51,8 +75,8 @@ export function useClaimReward() {
     onSuccess: (response) => {
       if (response.success && response.data) {
         setCoinsBalance(response.data.newBalance);
-        // Refresh the coin screen data after claiming
         queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+        queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
       }
     },
   });

@@ -40,11 +40,11 @@ const MetricCard = memo(({ metricKey, value, trend, isSelected, onPress, index }
   };
 
   return (
-    <Animated.View
-      entering={FadeInDown.delay(index * 60).duration(400)}
-      style={[animStyle, styles.wrap]}
-    >
-      <TouchableOpacity
+    // Outer wrapper owns the entrance animation only
+    <Animated.View entering={FadeInDown.delay(index * 60).duration(400)} style={styles.wrap}>
+      {/* Inner view owns the press-scale transform only */}
+      <Animated.View style={animStyle}>
+        <TouchableOpacity
         activeOpacity={0.85}
         onPress={handlePress}
         style={[
@@ -71,7 +71,8 @@ const MetricCard = memo(({ metricKey, value, trend, isSelected, onPress, index }
           </AppText>
         </View>
         <TrendBadge trend={trend} />
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
     </Animated.View>
   );
 });

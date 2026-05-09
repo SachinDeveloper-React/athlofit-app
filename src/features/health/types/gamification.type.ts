@@ -74,6 +74,13 @@ export interface CoinData {
   balance: number;
   transactions: CoinTransaction[];
   claimable: ClaimableReward[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
 
 export type CoinDataResponse = ApiResponse<CoinData>;

@@ -22,6 +22,8 @@ import { setupNotifChannels } from '../features/health/hooks/useSyncHealth';
 import { SystemOverlay } from '../components';
 import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { linking } from '../navigation/linkingConfig';
+import { useAuthStore } from '../features/auth/store/authStore';
+import { registerBackgroundSync, stopBackgroundSync } from '../features/health/service/backgroundSync.service';
 
 enableScreens(true);
 
@@ -29,7 +31,7 @@ enableScreens(true);
 GoogleSignin.configure({
   webClientId: '248456486264-if00mjj7r7kt7pejjuoh4t5vg3jo6ges.apps.googleusercontent.com',
   iosClientId:
-      '248456486264-046ntrivtk80o2u60vt8mudj5mme7gnn.apps.googleusercontent.com',
+    '248456486264-046ntrivtk80o2u60vt8mudj5mme7gnn.apps.googleusercontent.com',
   offlineAccess: true,
 });
 
@@ -68,18 +70,26 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 const AppShell: React.FC = () => {
   const { isDark } = useTheme();
   const checkAndResetIfNewDay = useHydrationStore(s => s.checkAndResetIfNewDay);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
 
   // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
   useNotificationSetup();
 
+  // ── Background health sync — register when authenticated, stop on logout ──
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerBackgroundSync().catch(() => {});
+    } else {
+      stopBackgroundSync().catch(() => {});
+    }
+  }, [isAuthenticated]);
+
   // ── Hydration midnight reset setup ───────────────────────────────────────
   useEffect(() => {
-    // Run all startup tasks in parallel — don't block render
     checkAndResetIfNewDay();
 
     notifee.requestPermission().then(settings => {
       if (settings.authorizationStatus >= AuthorizationStatus.AUTHORIZED) {
-        // Fire-and-forget — these don't need to block anything
         Promise.all([
           setupMidnightChannel(),
           setupNotifChannels(),
@@ -103,11 +113,11 @@ const AppShell: React.FC = () => {
   useEffect(() => {
     SystemNavigationBar.setNavigationColor(
       isDark ? '#000000' : '#ffffff',
-    ).catch(() => {});
+    ).catch(() => { });
     SystemNavigationBar.setBarMode(
       isDark ? 'light' : 'dark',
       'navigation',
-    ).catch(() => {});
+    ).catch(() => { });
   }, [isDark]);
 
   return (

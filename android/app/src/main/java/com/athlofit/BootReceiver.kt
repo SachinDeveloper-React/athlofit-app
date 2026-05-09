@@ -16,8 +16,9 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
-            Log.d("BootReceiver", "Device booted — rescheduling widget updates")
+            Log.d("BootReceiver", "Device booted — rescheduling widget updates and EOD sync")
             WidgetScheduler.schedule(context)
+            EodSyncScheduler.schedule(context)
         }
     }
 }

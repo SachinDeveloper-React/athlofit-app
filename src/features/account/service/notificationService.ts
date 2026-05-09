@@ -4,14 +4,21 @@ import { NotificationItem, NotificationType } from '../types/notification.types'
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
-export const fetchNotifications = async (): Promise<{
+export const fetchNotifications = async (page = 1, limit = 30): Promise<{
   notifications: NotificationItem[];
   unreadCount: number;
+  pagination: { page: number; limit: number; total: number; hasMore: boolean };
 }> => {
-  const res = await api.get<{ notifications: NotificationItem[]; unreadCount: number }>(
-    'user/notifications',
-  );
-  return { notifications: res.data?.notifications ?? [], unreadCount: res.data?.unreadCount ?? 0 };
+  const res = await api.get<{
+    notifications: NotificationItem[];
+    unreadCount: number;
+    pagination: { page: number; limit: number; total: number; hasMore: boolean };
+  }>(`user/notifications?page=${page}&limit=${limit}`);
+  return {
+    notifications: res.data?.notifications ?? [],
+    unreadCount:   res.data?.unreadCount   ?? 0,
+    pagination:    res.data?.pagination    ?? { page: 1, limit, total: 0, hasMore: false },
+  };
 };
 
 export const markRead = async (id: string): Promise<void> => {

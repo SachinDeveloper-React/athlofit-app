@@ -112,4 +112,33 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
             promise.reject("INIT_FLAG_ERROR", e.message, e)
         }
     }
+
+    /**
+     * Schedule the nightly 23:59:50 end-of-day health sync alarm.
+     * Call this on login so the day's final step count is committed to the
+     * database before midnight even when the app is fully closed.
+     */
+    @ReactMethod
+    fun scheduleEodSync(promise: Promise) {
+        try {
+            EodSyncScheduler.schedule(reactApplicationContext)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("EOD_SCHEDULE_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Cancel the end-of-day sync alarm.
+     * Call this on logout.
+     */
+    @ReactMethod
+    fun cancelEodSync(promise: Promise) {
+        try {
+            EodSyncScheduler.cancel(reactApplicationContext)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("EOD_CANCEL_ERROR", e.message, e)
+        }
+    }
 }

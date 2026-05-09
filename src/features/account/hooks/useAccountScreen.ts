@@ -8,7 +8,6 @@ import { accountScreenService } from '../service/accountScreenService';
 import { AccountRoutes, RootRoutes } from '../../../navigation/routes';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import { useOrders } from '../../shop/hooks/useShop';
-import { useEffect } from 'react';
 
 export const useAccountScreen = () => {
   const profile = useAuthStore(s => s.user);
@@ -17,12 +16,9 @@ export const useAccountScreen = () => {
   // Live coin balance from Zustand (synced by TrackerScreen.fetchGamification)
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
 
-  // Fetch order count for the badge
-  const { mutate: fetchOrders, data: ordersData } = useOrders();
-  useEffect(() => {
-    fetchOrders({});
-  }, [fetchOrders]);
-  const orderCount = ordersData?.data?.orders?.length ?? 0;
+  // useOrders is now a useQuery — auto-fetches on mount, cached for 2 min
+  const { data: ordersData } = useOrders();
+  const orderCount = ordersData?.orders?.length ?? 0;
 
   const onNotifications = useCallback(() => {
     navigate(RootRoutes.ACCOUNT_NAVIGATOR, {

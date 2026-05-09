@@ -4,8 +4,8 @@ import { PersonalFormValues, personalSchema } from '../../utils/profileSetup.val
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { AppView, AppText, Button, Avatar, Icon } from '../../../../components';
-import { Field } from './Field';
 import { DateField } from './DateField';
+import { PhoneField } from './PhoneField';
 import { GENDER_OPTIONS } from '../../constants/completeProfile.constant';
 
 export const Step1Personal: React.FC<Step1Props> = ({
@@ -60,15 +60,12 @@ export const Step1Personal: React.FC<Step1Props> = ({
         control={control}
         name="phone"
         render={({ field: { onChange, onBlur, value } }) => (
-          <Field
-            label="Phone number"
-            placeholder="+91 98765 43210"
+          <PhoneField
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
             error={errors.phone?.message}
-            keyboardType="phone-pad"
-            hint="We'll use this for account recovery"
+            label="Phone Number"
           />
         )}
       />

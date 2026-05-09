@@ -9,6 +9,8 @@ interface StepsWidgetNativeModule {
   clearLoginTimestamp: () => Promise<boolean>;
   isWidgetAdded: () => Promise<boolean>;
   setAppInitialising: (initialising: boolean) => Promise<boolean>;
+  scheduleEodSync: () => Promise<boolean>;
+  cancelEodSync: () => Promise<boolean>;
 }
 
 const { StepsWidget } = NativeModules;
@@ -119,8 +121,40 @@ class WidgetService {
     try {
       await this.module.setAppInitialising(initialising);
     } catch (e) {
-      // Non-fatal — worst case the worker might race, but it has its own catch
       console.warn('[WidgetService] setAppInitialising failed:', e);
+    }
+  }
+
+  /**
+   * Schedule the native 23:59:50 end-of-day health sync alarm.
+   * Uses AlarmManager.setExactAndAllowWhileIdle — fires even in Doze mode
+   * with the app fully closed. Call this on login.
+   */
+  async scheduleEodSync(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.scheduleEodSync();
+      console.log('[WidgetService] EOD sync alarm scheduled');
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] scheduleEodSync failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Cancel the end-of-day sync alarm.
+   * Call this on logout.
+   */
+  async cancelEodSync(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.cancelEodSync();
+      console.log('[WidgetService] EOD sync alarm cancelled');
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] cancelEodSync failed:', e);
+      return false;
     }
   }
 }

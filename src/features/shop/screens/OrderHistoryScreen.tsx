@@ -1,11 +1,13 @@
-// src/features/shop/screens/OrderHistoryScreen.tsx — Advanced Redesign
-import React, { useCallback, useEffect, useMemo } from 'react';
+
+import React, { useCallback, useMemo } from 'react';
+
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
@@ -142,22 +144,25 @@ const OrderHistoryScreen = () => {
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
 
-  const { mutate: fetchOrders, isPending, data: resData } = useOrders();
+  const {
+    data: ordersData,
+    isLoading: isPending,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch: refetchOrders,
+    isRefetching,
+  } = useOrders();
   const { mutate: cancelOrderMutate, isPending: isCancelling, variables: cancellingId } = useCancelOrder();
 
-  useEffect(() => { fetchOrders({}); }, []);
-
-  const orders: Order[] = useMemo(() => {
-    if (!resData?.success || !resData.data) return [];
-    return resData.data.orders;
-  }, [resData]);
+  const orders: Order[] = useMemo(() => ordersData?.orders ?? [], [ordersData]);
 
   const stats = useMemo(() => ({
-    total: orders.length,
+    total:      ordersData?.total ?? 0,
     coinOrders: orders.filter(o => o.paymentMethod === 'COIN_PURCHASE').length,
-    delivered: orders.filter(o => o.status === 'DELIVERED').length,
-    pending: orders.filter(o => o.status === 'PENDING' || o.status === 'PAID').length,
-  }), [orders]);
+    delivered:  orders.filter(o => o.status === 'DELIVERED').length,
+    pending:    orders.filter(o => o.status === 'PENDING' || o.status === 'PAID').length,
+  }), [orders, ordersData?.total]);
 
   const handleCancel = useCallback((orderId: string) => {
     const order = orders.find(o => o._id === orderId);
@@ -172,27 +177,21 @@ const OrderHistoryScreen = () => {
             if (res.success) {
               if ((res.data?.refundedCoins ?? 0) > 0) setCoinsBalance(coinsBalance + (res.data?.refundedCoins ?? 0));
               Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
-              fetchOrders({});
             } else Alert.alert('Failed', res.message || 'Could not cancel order.');
           },
           onError: (err: any) => Alert.alert('Error', err?.message || 'Failed to cancel order.'),
         }),
       },
     ]);
-  }, [orders, cancelOrderMutate, fetchOrders, setCoinsBalance, coinsBalance]);
+  }, [orders, cancelOrderMutate, setCoinsBalance, coinsBalance]);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      {/* <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="ArrowLeft" size={22} color={colors.foreground} />
-        </Pressable>
-        <AppText variant="headline" weight="semiBold">My Orders</AppText>
-        <View style={{ width: 40 }} />
-      </View> */}
-
-      <Header backLabel='' showBack bordered title='My Order'/>
+      <Header backLabel='' showBack bordered title='My Orders'/>
       {isPending ? (
         <View style={styles.loader}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -222,15 +221,32 @@ const OrderHistoryScreen = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          // ── Pagination ────────────────────────────────────────────────
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.35}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          // ── Pull-to-refresh ───────────────────────────────────────────
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching && !isFetchingNextPage}
+              onRefresh={refetchOrders}
+              tintColor={colors.primary}
+            />
+          }
           ListHeaderComponent={
             <Animated.View entering={FadeInDown.duration(300)}>
-              {/* Stats grid */}
               <View style={[styles.statsGrid, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 16 }]}>
                 {[
-                  { label: 'Total', value: stats.total, icon: 'Package', color: colors.primary },
-                  { label: 'Coin Orders', value: stats.coinOrders, icon: 'Coins', color: '#B45309' },
-                  { label: 'Delivered', value: stats.delivered, icon: 'PackageCheck', color: '#7C3AED' },
-                  { label: 'Active', value: stats.pending, icon: 'Clock', color: '#D97706' },
+                  { label: 'Total',      value: stats.total,      icon: 'Package',     color: colors.primary },
+                  { label: 'Coin Orders',value: stats.coinOrders, icon: 'Coins',       color: '#B45309'      },
+                  { label: 'Delivered',  value: stats.delivered,  icon: 'PackageCheck',color: '#7C3AED'      },
+                  { label: 'Active',     value: stats.pending,    icon: 'Clock',       color: '#D97706'      },
                 ].map((s, i) => (
                   <View key={s.label} style={[styles.statItem, i < 3 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border }]}>
                     <View style={[styles.statIcon, { backgroundColor: withOpacity(s.color, 0.1) }]}>

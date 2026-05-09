@@ -45,9 +45,12 @@ const PeriodRow = memo(({ stat, index, isSelected, onPress, maxSteps }: Props) =
   };
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 80).duration(350)} style={animStyle}>
-      {/* ── Row ── */}
-      <TouchableOpacity
+    // Outer wrapper owns the entrance animation only
+    <Animated.View entering={FadeInDown.delay(index * 80).duration(350)}>
+      {/* Inner view owns the press-scale transform only */}
+      <Animated.View style={animStyle}>
+        {/* ── Row ── */}
+        <TouchableOpacity
         onPress={handlePress}
         activeOpacity={0.85}
         style={[
@@ -136,6 +139,7 @@ const PeriodRow = memo(({ stat, index, isSelected, onPress, maxSteps }: Props) =
           />
         </Animated.View>
       )}
+    </Animated.View>
     </Animated.View>
   );
 });

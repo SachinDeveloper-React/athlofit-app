@@ -1,22 +1,28 @@
-import { useMutation } from '@tanstack/react-query';
-import { gamificationService } from '../service/gamification.service';
-import { useState } from 'react';
+// useStreak delegates to useStreaks so both hooks share the same React Query
+// cache entry (['streaks']). A single network request is made regardless of
+// how many components call either hook simultaneously.
+import { useStreaks } from './useStreaks';
 import type { StreaksResponseData } from '../types/gamification.type';
 
 export function useStreak() {
-  const [streakData, setStreakData] = useState<StreaksResponseData | null>(null);
+  const { streakDays, bestStreakDays, nextBadgeAt, badges, isLoading, isRefetching, refetch } =
+    useStreaks();
 
-  const mutation = useMutation({
-    mutationFn: () => gamificationService.getStreaks(),
-    onSuccess: (response) => {
-      if (response.success && response.data) {
-        setStreakData(response.data);
-      }
-    },
-  });
+  // Reconstruct the StreaksResponseData shape so callers don't need to change.
+  const streakData: StreaksResponseData | null =
+    streakDays !== undefined
+      ? { streakDays, bestStreakDays, nextBadgeAt, badges }
+      : null;
 
   return {
-    ...mutation,
     streakData,
+    isPending: isLoading,
+    isRefetching,
+    // Expose mutate/mutateAsync as no-ops for any legacy callers that still
+    // call fetchStreakData() — the query auto-fetches on mount so this is a
+    // safe no-op.
+    mutate: refetch,
+    mutateAsync: async () => { await refetch(); },
+    refetch,
   };
 }

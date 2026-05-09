@@ -55,7 +55,7 @@ const TabNavigator: React.FC = () => {
       headerShown: false,
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.foreground,
-      lazy: false,
+      lazy: true,
       tabBarAllowFontScaling: true,
       sceneContainerStyle: { backgroundColor: colors.background },
       // Use the built-in ShiftTransition — subtle slide + fade, no blank screen issues

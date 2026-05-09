@@ -16,6 +16,8 @@ import {
   handleNotificationNavigation,
   PUSH_CHANNEL_ID,
 } from './src/services/pushNotificationService';
+import BackgroundFetch from 'react-native-background-fetch';
+import { headlessTask } from './src/features/health/service/backgroundSync.service';
 
 // ─── FCM background message handler ──────────────────────────────────────────
 setBackgroundMessageHandler(getMessaging(), async remoteMessage => {
@@ -37,7 +39,7 @@ setBackgroundMessageHandler(getMessaging(), async remoteMessage => {
 });
 
 // ─── Notifee background event handler ────────────────────────────────────────
-// Handles notification press when app is in background.
+// Handles notification press when app is in background/killed.
 
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type === EventType.PRESS) {
@@ -47,3 +49,8 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 });
 
 AppRegistry.registerComponent(appName, () => App);
+
+// ─── react-native-background-fetch headless task ──────────────────────────────
+// This runs on Android when the app is fully terminated (killed from recents).
+// Must be registered AFTER AppRegistry.registerComponent().
+BackgroundFetch.registerHeadlessTask(headlessTask);

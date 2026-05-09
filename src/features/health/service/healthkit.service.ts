@@ -22,7 +22,7 @@ const PERMISSIONS: HealthKitPermissions = {
       AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
       AppleHealthKit.Constants.Permissions.BodyMass,
       AppleHealthKit.Constants.Permissions.BloodGlucose,
-      AppleHealthKit.Constants.Permissions.Water, // ✅ WaterConsumption → Water
+      AppleHealthKit.Constants.Permissions.Water,
     ],
     write: [
       AppleHealthKit.Constants.Permissions.Steps,

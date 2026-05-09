@@ -9,13 +9,13 @@ import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
-const BASE_URL = "https://athlofit-backend.vercel.app/"
+// export const BASE_URL = "https://athlofit-backend.vercel.app/"
 
-// export const BASE_URL =
-//   Platform.OS === 'android'
-//     // ? 'http://192.168.0.129:5001/'
-//     ? 'http://192.168.1.5:5001/'
-//     : 'http://localhost:5001/';
+export const BASE_URL =
+  Platform.OS === 'android'
+    // ? 'http://192.168.0.129:5001/'
+    ? 'http://192.168.1.10:5001/'
+    : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,10 +52,28 @@ async function request<T>(
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...fetchOptions,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${endpoint}`, {
+      ...fetchOptions,
+      headers,
+    });
+    // Server responded — clear any previous unreachable flag
+    useSystemStore.getState().setServerUnreachable(false);
+  } catch (err: any) {
+    // fetch() throws a TypeError when the network request fails entirely
+    // (no DNS, connection refused, server down, etc.)
+    const isNetworkError =
+      err instanceof TypeError ||
+      err?.message === 'Network request failed' ||
+      err?.message?.includes('Network request failed') ||
+      err?.message?.includes('Failed to fetch');
+
+    if (isNetworkError) {
+      useSystemStore.getState().setServerUnreachable(true);
+    }
+    throw err;
+  }
 
   // ── 401: attempt token refresh ─────────────────────────────────────────────
   if (response.status === 401 && !retry) {

@@ -26,7 +26,15 @@ const NotificationsScreen = () => {
   const { colors } = useTheme();
   const s = useMemo(() => useNotificationStyles(colors), [colors]);
 
-  const { data, isLoading, isRefetching, refetch } = useNotifications();
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+    isRefetching,
+  } = useNotifications();
   const { mutate: markRead }    = useMarkRead();
   const { mutate: markAll }     = useMarkAllRead();
   const { mutate: deleteNotif } = useDeleteNotification();
@@ -68,6 +76,10 @@ const NotificationsScreen = () => {
     ),
     [s.sectionHeader, s.sectionTitle],
   );
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const markAllBtn = unreadCount > 0 ? (
     <Pressable onPress={() => markAll()} style={styles.markAllBtn}>
@@ -145,9 +157,18 @@ const NotificationsScreen = () => {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.35}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
+            refreshing={isRefetching && !isFetchingNextPage}
             onRefresh={refetch}
             tintColor={colors.primary}
           />

@@ -177,6 +177,8 @@ function resolvePermissionScenario(
 const TrackerScreen = memo(() => {
   const [activeTab, setActiveTab] = useState<TabId>(TabId.DailyStats);
   const [gateReason, setGateReason] = useState<HealthGateReason | null>(null);
+  // ── Track whether the current load was triggered by the user pulling down ──
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   const userAvatarUrl = useAuthStore(state => state.user?.avatarUrl);
   const userName = useAuthStore(state => state.user?.name);
@@ -198,8 +200,8 @@ const TrackerScreen = memo(() => {
   const { refetch: fetchGamification } = useGamification();
   const {
     streakData,
-    mutate: fetchStreakData,
     isPending: isStreakPending,
+    refetch: refetchStreak,
   } = useStreak();
   const streakDays = useGamificationStore(s => s.streakDays);
   const syncDailyProgress = useGamificationStore(s => s.syncDailyProgress);
@@ -207,6 +209,15 @@ const TrackerScreen = memo(() => {
   // No manual fetchGamification on mount — useQuery handles it automatically
 
   const { syncHealth } = useSyncHealth();
+
+  // ── Unified initial loading ────────────────────────────────────────────────
+  // Show a single full-screen loader until all parallel data sources have
+  // resolved at least once. After that, individual sections handle their own
+  // in-place loading states so the screen never goes blank on refresh.
+  const isInitialLoad =
+    (isLoading && !isReady) ||
+    (isWeekPending && !weekData) ||
+    (isStreakPending && !streakData);
 
   // Track the last synced user ID to detect account switches
   const lastSyncedUserRef = useRef<string | null>(null);
@@ -298,16 +309,29 @@ const TrackerScreen = memo(() => {
   const handleGateDismiss = useCallback(() => setGateReason(null), []);
 
   const handleRefresh = useCallback(() => {
+    // Mark this as a user-initiated pull-to-refresh so the spinner shows
+    setIsManualRefreshing(true);
     refresh();
     refreshWeek();
-    fetchStreakData();
     fetchGamification();
-  }, [refresh, refreshWeek, fetchStreakData, fetchGamification]);
+    // streak refetch is handled by useStreaks/useStreak via React Query's
+    // refetchOnWindowFocus and the manual refetch below
+    refetchStreak();
+  }, [refresh, refreshWeek, fetchGamification, refetchStreak]);
 
   const handleGateRetry = useCallback(() => {
     setGateReason(null);
     handleRefresh();
   }, [handleRefresh]);
+
+  // ── Clear manual refresh flag once all data has finished loading ──────────
+  // isLoading goes false when health data finishes; isWeekPending and
+  // isStreakPending cover the API queries. Only clear when ALL are done.
+  useEffect(() => {
+    if (isManualRefreshing && !isLoading && !isWeekPending && !isStreakPending) {
+      setIsManualRefreshing(false);
+    }
+  }, [isManualRefreshing, isLoading, isWeekPending, isStreakPending]);
 
   // ── Header ────────────────────────────────────────────────────────────────
 
@@ -330,7 +354,7 @@ const TrackerScreen = memo(() => {
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
-  if (isLoading && !isReady) {
+  if (isInitialLoad) {
     return (
       <Loader message="Connecting to health data…" size="large" fullscreen />
     );
@@ -363,7 +387,7 @@ const TrackerScreen = memo(() => {
         header={header}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
+            refreshing={isManualRefreshing}
             onRefresh={handleRefresh}
             tintColor="#1a1a1a"
           />

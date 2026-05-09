@@ -24,6 +24,7 @@ import {
 } from '../utils/profileSetup.validation';
 import { Field } from '../components/complete-profile/Field';
 import { DateField } from '../components/complete-profile/DateField';
+import { PhoneField } from '../components/complete-profile/PhoneField';
 import {
   GENDER_OPTIONS,
   BLOOD_TYPES,
@@ -154,14 +155,11 @@ const EditProfileScreen: React.FC = () => {
                 control={control}
                 name="phone"
                 render={({ field: { onChange, onBlur, value } }) => (
-                  <Field
-                    label="Phone Number"
-                    placeholder="+91 98765 43210"
+                  <PhoneField
                     value={value || ''}
                     onChangeText={onChange}
                     onBlur={onBlur}
                     error={errors.phone?.message}
-                    keyboardType="phone-pad"
                     isVerified={user?.phoneVerified}
                   />
                 )}

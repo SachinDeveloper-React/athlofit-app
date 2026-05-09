@@ -44,11 +44,11 @@ const ProductCard = memo(({ product, index, onPress }: Props) => {
   }));
 
   return (
-    <Animated.View
-      entering={FadeInDown.delay(index * 55).duration(380)}
-      style={[animStyle, { width: CARD_WIDTH }]}
-    >
-      <AnimatedPressable
+    // Outer wrapper owns the entrance animation only
+    <Animated.View entering={FadeInDown.delay(index * 55).duration(380)} style={{ width: CARD_WIDTH }}>
+      {/* Inner view owns the press-scale transform only */}
+      <Animated.View style={animStyle}>
+        <AnimatedPressable
         onPress={() => onPress(product)}
         onPressIn={() => { scale.value = withSpring(0.96, { damping: 15 }); }}
         onPressOut={() => { scale.value = withSpring(1, { damping: 15 }); }}
@@ -126,7 +126,8 @@ const ProductCard = memo(({ product, index, onPress }: Props) => {
             )}
           </View>
         </View>
-      </AnimatedPressable>
+        </AnimatedPressable>
+      </Animated.View>
     </Animated.View>
   );
 });

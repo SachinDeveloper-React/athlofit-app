@@ -1,5 +1,5 @@
 // src/features/account/hooks/useNotifications.ts
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchNotifications,
   markRead,
@@ -11,11 +11,22 @@ import type { NotificationItem } from '../types/notification.types';
 export const NOTIF_KEY = ['notifications'] as const;
 
 export const useNotifications = () =>
-  useQuery({
+  useInfiniteQuery({
     queryKey: NOTIF_KEY,
-    queryFn:  fetchNotifications,
+    queryFn: ({ pageParam = 1 }) => fetchNotifications(pageParam as number, 30),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.pagination?.hasMore) return undefined;
+      return lastPage.pagination.page + 1;
+    },
     staleTime: 30_000,
     retry: 1,
+    select: (data) => ({
+      pages: data.pages,
+      pageParams: data.pageParams,
+      notifications: data.pages.flatMap(p => p.notifications),
+      unreadCount: data.pages[0]?.unreadCount ?? 0,
+    }),
   });
 
 export const useMarkRead = () => {

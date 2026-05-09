@@ -54,9 +54,9 @@ export const gamificationService = {
     };
   },
 
-  getCoinData: async () => {
+  getCoinData: async (page = 1, limit = 20) => {
     const response = await api.get<CoinDataResponse>(
-      'gamification/coins/data'
+      `gamification/coins/data?page=${page}&limit=${limit}`
     );
     return {
       success: response.success,

@@ -162,5 +162,10 @@
       <receiver
         android:name=".WidgetAlarmReceiver"
         android:exported="false" />
+
+      <!-- Receives the nightly 23:59:50 end-of-day health sync alarm -->
+      <receiver
+        android:name=".EodSyncReceiver"
+        android:exported="false" />
     </application>
 </manifest>
