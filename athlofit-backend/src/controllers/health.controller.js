@@ -69,26 +69,41 @@ const syncHealthData = async (req, res, next) => {
     const dailyGoal = req.user.dailyStepGoal || 10000;
     const isGoalMet = goalMet ?? (steps >= dailyGoal);
 
+    // ── Merge strategy: only overwrite a field if the incoming value is
+    // meaningful (> 0). This prevents a background sync that only has steps
+    // from zeroing out vitals (HR, BP, glucose, weight) that were recorded
+    // manually or by a different source earlier in the day.
+    const existing = await HealthActivity.findOne({ user: req.user._id, date: today });
+
+    const merge = (incoming, stored) =>
+      (incoming !== undefined && incoming !== null && incoming > 0)
+        ? incoming
+        : (stored ?? 0);
+
+    const updateFields = {
+      // Steps, calories, distance, activeMinutes — always take the latest
+      // non-zero value (background sync derives these from steps)
+      steps:                  merge(steps,                  existing?.steps),
+      distance:               merge(distance,               existing?.distance),
+      calories:               merge(calories,               existing?.calories),
+      activeMinutes:          merge(activeMinutes,          existing?.activeMinutes),
+      // Vitals — keep existing value if incoming is 0 (device may not have
+      // a reading for this sync cycle)
+      heartRate:              merge(heartRate,              existing?.heartRate),
+      heartRateMin:           merge(heartRateMin,           existing?.heartRateMin),
+      heartRateMax:           merge(heartRateMax,           existing?.heartRateMax),
+      bloodPressureSystolic:  merge(bloodPressureSystolic,  existing?.bloodPressureSystolic),
+      bloodPressureDiastolic: merge(bloodPressureDiastolic, existing?.bloodPressureDiastolic),
+      hydration:              merge(hydration,              existing?.hydration),
+      sleepHours:             merge(sleepHours,             existing?.sleepHours),
+      bloodGlucose:           merge(bloodGlucose,           existing?.bloodGlucose),
+      weight:                 merge(weight,                 existing?.weight),
+      goalMet: isGoalMet,
+    };
+
     await HealthActivity.findOneAndUpdate(
       { user: req.user._id, date: today },
-      {
-        $set: {
-          steps: steps ?? 0,
-          distance: distance ?? 0,
-          calories: calories ?? 0,
-          activeMinutes: activeMinutes ?? 0,
-          heartRate: heartRate ?? 0,
-          heartRateMin: heartRateMin ?? 0,
-          heartRateMax: heartRateMax ?? 0,
-          bloodPressureSystolic: bloodPressureSystolic ?? 0,
-          bloodPressureDiastolic: bloodPressureDiastolic ?? 0,
-          hydration: hydration ?? 0,
-          sleepHours: sleepHours ?? 0,
-          bloodGlucose: bloodGlucose ?? 0,
-          weight: weight ?? 0,
-          goalMet: isGoalMet,
-        },
-      },
+      { $set: updateFields },
       { upsert: true, new: true }
     );
 

@@ -43,7 +43,18 @@ export const useAuthStore = create<AuthState>()(
         import('../../../services/widgetService').then(({ widgetService }) => {
           widgetService.setLoginTimestamp(loginTs);
           widgetService.startAutoUpdate();
-          widgetService.scheduleEodSync(); // native 23:59:50 alarm
+          widgetService.scheduleEodSync();
+          widgetService.saveAccessToken(tokens.accessToken); // for EodSyncWorker
+          // Persist user weight so native workers use the real value
+          if (user.weight && user.weight > 0) {
+            widgetService.saveUserWeight(user.weight);
+          }
+        });
+
+        // Write weight/height to Health Connect / HealthKit so the platform
+        // has an up-to-date record and derivation uses the real body metrics.
+        import('../../health/service/profileSync.service').then(({ syncProfileToHealthPlatform }) => {
+          syncProfileToHealthPlatform({ weight: user.weight, height: user.height });
         });
 
         // Register FCM token now that we have a session
@@ -84,11 +95,26 @@ export const useAuthStore = create<AuthState>()(
                 widgetService.setLoginTimestamp(ts);
                 widgetService.startAutoUpdate();
                 widgetService.scheduleEodSync();
+                widgetService.saveAccessToken(tokens.accessToken);
+                if (res.data?.weight && res.data.weight > 0) {
+                  widgetService.saveUserWeight(res.data.weight);
+                }
               });
             } else {
               import('../../../services/widgetService').then(({ widgetService }) => {
                 widgetService.startAutoUpdate();
                 widgetService.scheduleEodSync();
+                widgetService.saveAccessToken(tokens.accessToken);
+                if (res.data?.weight && res.data.weight > 0) {
+                  widgetService.saveUserWeight(res.data.weight);
+                }
+              });
+            }
+
+            // Write weight/height to Health Connect / HealthKit
+            if (res.data?.weight || res.data?.height) {
+              import('../../health/service/profileSync.service').then(({ syncProfileToHealthPlatform }) => {
+                syncProfileToHealthPlatform({ weight: res.data?.weight, height: res.data?.height });
               });
             }
           });
@@ -130,11 +156,13 @@ export const useAuthStore = create<AuthState>()(
           setIsLoggingOut(false);
         }
 
-        // Stop widget background updates, cancel EOD alarm, and clear login timestamp
+        // Stop widget background updates, cancel EOD alarm, and clear login timestamp + token
         import('../../../services/widgetService').then(({ widgetService }) => {
           widgetService.stopAutoUpdate();
           widgetService.cancelEodSync();
           widgetService.clearLoginTimestamp();
+          widgetService.clearAccessToken();
+          widgetService.clearUserWeight(); // remove mirrored weight
         });
 
         // Clear user-specific stores to prevent data leakage between accounts
@@ -152,6 +180,16 @@ export const useAuthStore = create<AuthState>()(
         set(state => {
           if (state.user) Object.assign(state.user, partial);
         });
+
+        // If weight changed, re-sync to health platform and native prefs
+        if (partial.weight && partial.weight > 0) {
+          import('../../../services/widgetService').then(({ widgetService }) => {
+            widgetService.saveUserWeight(partial.weight!);
+          });
+          import('../../health/service/profileSync.service').then(({ syncProfileToHealthPlatform }) => {
+            syncProfileToHealthPlatform({ weight: partial.weight, height: partial.height });
+          });
+        }
       },
     })),
     {

@@ -90,7 +90,7 @@ export const isHealthConnectAvailable = async (): Promise<boolean> => {
 /** Small delay after initialize() to let the IPC binding fully settle.
  *  Without this, concurrent readRecords calls immediately after init
  *  cause RemoteException: Binding died / Null binding errors. */
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve: any) => setTimeout(resolve, ms));
 
 export const initializeHealthConnect = async (): Promise<boolean> => {
   const initialized = await initialize();

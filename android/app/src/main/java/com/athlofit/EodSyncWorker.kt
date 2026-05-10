@@ -3,15 +3,13 @@ package com.athlofit
 import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
-import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.BloodGlucoseRecord
+import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.records.BloodPressureRecord
-import androidx.health.connect.client.records.BloodGlucoseRecord
-import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.work.CoroutineWorker
@@ -28,13 +26,9 @@ import java.time.ZoneId
 /**
  * EodSyncWorker
  *
- * A one-shot CoroutineWorker that:
- *  1. Reads today's full health snapshot from Health Connect (steps, calories,
- *     distance, heart rate, sleep, weight, blood pressure, blood glucose, hydration)
- *  2. POSTs it to POST /health/sync with the stored access token
- *
- * Triggered by EodSyncReceiver at 23:59:50 every night via an exact AlarmManager
- * alarm — no JS / React Native context required.
+ * One-shot CoroutineWorker triggered at 23:59:50 by EodSyncScheduler.
+ * Reads today's full health snapshot from Health Connect and POSTs it to
+ * /health/sync so the day's final data is committed before midnight.
  */
 class EodSyncWorker(
     private val context: Context,
@@ -51,16 +45,14 @@ class EodSyncWorker(
 
         val prefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
 
-        // ── Guard: skip if app is initialising Health Connect ─────────────────
         if (prefs.getBoolean("appInitialising", false)) {
             Log.d(TAG, "App is initialising — skipping EOD sync")
             return@withContext Result.success()
         }
 
-        // ── Guard: skip if no access token ────────────────────────────────────
         val token = getAccessToken()
         if (token.isNullOrBlank()) {
-            Log.d(TAG, "No access token — user not logged in, skipping EOD sync")
+            Log.d(TAG, "No access token — skipping EOD sync")
             return@withContext Result.success()
         }
 
@@ -72,157 +64,106 @@ class EodSyncWorker(
             }
 
             val synced = postHealthSync(token, healthData)
-            if (synced) {
-                Log.d(TAG, "EOD sync succeeded — ${healthData.optInt("steps")} steps saved")
-            } else {
-                Log.w(TAG, "EOD sync POST failed")
-            }
+            Log.d(TAG, "EOD sync ${if (synced) "succeeded" else "failed"} — ${healthData.optInt("steps")} steps")
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "EOD sync error: ${e.message}", e)
-            // Don't retry — the alarm will fire again tomorrow
-            Result.success()
+            Result.success() // don't retry — alarm fires again tomorrow
         }
     }
 
-    // ─── Read access token from Keychain via SharedPreferences ────────────────
-    // react-native-keychain stores tokens in Android Keystore-backed SharedPrefs.
-    // The service name matches tokenService.ts: "com.healthapp.accessToken"
-    private fun getAccessToken(): String? {
-        return try {
-            // react-native-keychain uses a SharedPreferences file named after the service
-            val keychainPrefs = context.getSharedPreferences(
-                "com.healthapp.accessToken",
-                Context.MODE_PRIVATE
-            )
-            // The password field is stored under the key "password"
-            keychainPrefs.getString("password", null)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not read access token: ${e.message}")
-            null
-        }
+    private fun getAccessToken(): String? = try {
+        context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+            .getString("accessToken", null)
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read access token: ${e.message}")
+        null
     }
 
-    // ─── Read full health snapshot from Health Connect ────────────────────────
     private suspend fun readHealthConnectData(
         prefs: android.content.SharedPreferences
     ): JSONObject? {
         return try {
-            val client = HealthConnectClient.getOrCreate(context)
-
-            val today = LocalDate.now()
+            val client     = HealthConnectClient.getOrCreate(context)
+            val today      = LocalDate.now()
             val startOfDay = today.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val now = Instant.now()
+            val now        = Instant.now()
 
-            // Respect login timestamp — don't count steps before login
+            // Respect login timestamp — only count steps since login
             val loginTs = prefs.getLong("loginTimestamp", 0L)
             val stepsStart = if (loginTs > 0L) {
                 val loginInstant = Instant.ofEpochMilli(loginTs)
                 if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-            } else {
-                startOfDay
-            }
+            } else startOfDay
 
             val todayFilter  = TimeRangeFilter.between(startOfDay, now)
             val stepsFilter  = TimeRangeFilter.between(stepsStart, now)
-            val weekFilter   = TimeRangeFilter.between(
+            val recentFilter = TimeRangeFilter.between(
                 today.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant(), now
+            )
+            val monthFilter  = TimeRangeFilter.between(
+                today.minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant(), now
             )
 
             // ── Steps ─────────────────────────────────────────────────────────
-            val stepsResp = client.readRecords(
-                ReadRecordsRequest(StepsRecord::class, stepsFilter)
-            )
-            val steps = stepsResp.records.sumOf { it.count }.toInt()
+            val steps = client.readRecords(ReadRecordsRequest(StepsRecord::class, stepsFilter))
+                .records.sumOf { it.count }.toInt()
 
-            // ── Calories ──────────────────────────────────────────────────────
-            val calResp = client.readRecords(
-                ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, todayFilter)
-            )
-            val calories = calResp.records.sumOf {
-                it.energy.inKilocalories
-            }.toInt()
-
-            // ── Distance ──────────────────────────────────────────────────────
-            val distResp = client.readRecords(
-                ReadRecordsRequest(DistanceRecord::class, todayFilter)
-            )
-            val distanceKm = distResp.records.sumOf {
-                it.distance.inKilometers
-            }.let { Math.round(it * 100.0) / 100.0 }
+            // ── Derive calories / distance / activeMinutes from steps ──────────
+            // Mirrors healthConnect.service.ts — never read these from HC
+            // because they may not exist if writeDerivedActivity hasn't run yet.
+            val weightKg      = prefs.getFloat("weightKg", 70.0f).toDouble()
+            val calories      = (steps * (weightKg * 0.57) / 1000).toInt()
+            val distanceKm    = Math.round(steps * (0.76 / 1000) * 100.0) / 100.0
+            val activeMinutes = steps / 100
 
             // ── Heart rate ────────────────────────────────────────────────────
-            val hrResp = client.readRecords(
-                ReadRecordsRequest(HeartRateRecord::class, todayFilter)
-            )
-            val allBpms = hrResp.records.flatMap { it.samples }.map { it.beatsPerMinute }
-            val heartRate    = if (allBpms.isNotEmpty()) (allBpms.sum() / allBpms.size).toInt() else 0
-            val heartRateMin = allBpms.minOrNull()?.toInt() ?: 0
-            val heartRateMax = allBpms.maxOrNull()?.toInt() ?: 0
+            val bpms = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, todayFilter))
+                .records.flatMap { it.samples }.map { it.beatsPerMinute }
+            val heartRate    = if (bpms.isNotEmpty()) (bpms.sum() / bpms.size).toInt() else 0
+            val heartRateMin = bpms.minOrNull()?.toInt() ?: 0
+            val heartRateMax = bpms.maxOrNull()?.toInt() ?: 0
 
             // ── Blood pressure ────────────────────────────────────────────────
-            val bpResp = client.readRecords(
-                ReadRecordsRequest(BloodPressureRecord::class, weekFilter)
-            )
-            val latestBp = bpResp.records.lastOrNull()
+            val latestBp  = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
+                .records.lastOrNull()
             val systolic  = latestBp?.systolic?.inMillimetersOfMercury?.toInt() ?: 0
             val diastolic = latestBp?.diastolic?.inMillimetersOfMercury?.toInt() ?: 0
 
             // ── Sleep ─────────────────────────────────────────────────────────
-            val sleepResp = client.readRecords(
-                ReadRecordsRequest(SleepSessionRecord::class, weekFilter)
-            )
-            val sleepMs = sleepResp.records.sumOf {
-                it.endTime.toEpochMilli() - it.startTime.toEpochMilli()
-            }
+            val sleepMs = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, recentFilter))
+                .records.sumOf { it.endTime.toEpochMilli() - it.startTime.toEpochMilli() }
             val sleepHours = Math.round((sleepMs / 3_600_000.0) * 10.0) / 10.0
 
             // ── Weight ────────────────────────────────────────────────────────
-            val weightResp = client.readRecords(
-                ReadRecordsRequest(WeightRecord::class,
-                    TimeRangeFilter.between(
-                        today.minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant(), now
-                    )
-                )
-            )
-            val weight = weightResp.records.lastOrNull()
-                ?.weight?.inKilograms
+            val weight = client.readRecords(ReadRecordsRequest(WeightRecord::class, monthFilter))
+                .records.lastOrNull()?.weight?.inKilograms
                 ?.let { Math.round(it * 10.0) / 10.0 } ?: 0.0
 
             // ── Blood glucose ─────────────────────────────────────────────────
-            val glucoseResp = client.readRecords(
-                ReadRecordsRequest(BloodGlucoseRecord::class, weekFilter)
-            )
-            val bloodGlucose = glucoseResp.records.lastOrNull()
-                ?.level?.inMillimolesPerLiter
+            val bloodGlucose = client.readRecords(ReadRecordsRequest(BloodGlucoseRecord::class, recentFilter))
+                .records.lastOrNull()?.level?.inMillimolesPerLiter
                 ?.let { Math.round(it * 10.0) / 10.0 } ?: 0.0
 
             // ── Hydration ─────────────────────────────────────────────────────
-            val hydResp = client.readRecords(
-                ReadRecordsRequest(HydrationRecord::class, todayFilter)
-            )
-            val hydrationMl = hydResp.records.sumOf {
-                it.volume.inLiters * 1000.0
-            }.toInt()
-
-            // ── Derive active minutes from steps ──────────────────────────────
-            val activeMinutes = steps / 100
+            val hydrationMl = client.readRecords(ReadRecordsRequest(HydrationRecord::class, todayFilter))
+                .records.sumOf { it.volume.inLiters * 1000.0 }.toInt()
 
             JSONObject().apply {
-                put("steps",                    steps)
-                put("calories",                 calories)
-                put("distance",                 distanceKm)
-                put("activeMinutes",            activeMinutes)
-                put("heartRate",                heartRate)
-                put("heartRateMin",             heartRateMin)
-                put("heartRateMax",             heartRateMax)
-                put("bloodPressureSystolic",    systolic)
-                put("bloodPressureDiastolic",   diastolic)
-                put("sleepHours",               sleepHours)
-                put("weight",                   weight)
-                put("bloodGlucose",             bloodGlucose)
-                put("hydration",                hydrationMl)
-                put("goalMet",                  false) // server recalculates
+                put("steps",                  steps)
+                put("calories",               calories)
+                put("distance",               distanceKm)
+                put("activeMinutes",          activeMinutes)
+                put("heartRate",              heartRate)
+                put("heartRateMin",           heartRateMin)
+                put("heartRateMax",           heartRateMax)
+                put("bloodPressureSystolic",  systolic)
+                put("bloodPressureDiastolic", diastolic)
+                put("sleepHours",             sleepHours)
+                put("weight",                 weight)
+                put("bloodGlucose",           bloodGlucose)
+                put("hydration",              hydrationMl)
+                put("goalMet",                false) // server recalculates
             }
         } catch (e: Exception) {
             Log.e(TAG, "Health Connect read failed: ${e.message}", e)
@@ -230,25 +171,20 @@ class EodSyncWorker(
         }
     }
 
-    // ─── POST /health/sync ────────────────────────────────────────────────────
     private fun postHealthSync(token: String, body: JSONObject): Boolean {
         return try {
-            val url = URL("${BASE_URL}health/sync")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
-
-            conn.outputStream.use { os ->
-                os.write(body.toString().toByteArray(Charsets.UTF_8))
+            val conn = (URL("${BASE_URL}health/sync").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Authorization", "Bearer $token")
+                doOutput       = true
+                connectTimeout = 15_000
+                readTimeout    = 15_000
             }
-
+            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
-            Log.d(TAG, "POST /health/sync → HTTP $code")
             conn.disconnect()
+            Log.d(TAG, "POST /health/sync → HTTP $code")
             code in 200..299
         } catch (e: Exception) {
             Log.e(TAG, "POST /health/sync failed: ${e.message}", e)

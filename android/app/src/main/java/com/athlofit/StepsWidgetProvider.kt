@@ -24,13 +24,23 @@ class StepsWidgetProvider : AppWidgetProvider() {
         /**
          * Called from React Native (StepsWidgetModule) and from WidgetUpdateWorker.
          * Saves data to SharedPreferences then pushes a UI refresh broadcast.
+         * Only updates lastUpdated timestamp when the step count actually changes
+         * so the widget shows an accurate "Xm ago" time, not "just now" every run.
          */
         fun updateWidget(context: Context, steps: Int, goal: Int) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prevSteps = prefs.getInt(PREF_STEPS, -1)
+            val stepsChanged = prevSteps != steps
+
             prefs.edit().apply {
                 putInt(PREF_STEPS, steps)
                 putInt(PREF_GOAL, goal)
-                putLong(PREF_LAST_UPDATED, System.currentTimeMillis())
+                // Only stamp lastUpdated when the step count actually changed.
+                // This prevents the widget from showing "Updated just now" on
+                // every 15-min worker run even when the user hasn't moved.
+                if (stepsChanged) {
+                    putLong(PREF_LAST_UPDATED, System.currentTimeMillis())
+                }
                 apply()
             }
 

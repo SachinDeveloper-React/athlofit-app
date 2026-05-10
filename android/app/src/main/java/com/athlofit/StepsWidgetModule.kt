@@ -11,6 +11,8 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
 
     override fun getName(): String = "StepsWidget"
 
+    // ─── Widget UI ────────────────────────────────────────────────────────────
+
     /** Update widget UI immediately from JS (called when app is open). */
     @ReactMethod
     fun updateWidget(steps: Int, goal: Int, promise: Promise) {
@@ -22,10 +24,8 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Start the background auto-update scheduler.
-     * Call this on login so the widget keeps updating even when app is closed.
-     */
+    // ─── Background scheduler ─────────────────────────────────────────────────
+
     @ReactMethod
     fun startAutoUpdate(promise: Promise) {
         try {
@@ -37,10 +37,6 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Stop the background auto-update scheduler.
-     * Call this on logout.
-     */
     @ReactMethod
     fun stopAutoUpdate(promise: Promise) {
         try {
@@ -51,10 +47,8 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Save the login timestamp so the background worker filters steps correctly.
-     * Call this right after login.
-     */
+    // ─── Login timestamp ──────────────────────────────────────────────────────
+
     @ReactMethod
     fun setLoginTimestamp(timestamp: Double, promise: Promise) {
         try {
@@ -68,9 +62,6 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Clear login timestamp on logout.
-     */
     @ReactMethod
     fun clearLoginTimestamp(promise: Promise) {
         try {
@@ -81,24 +72,86 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /** Check if widget data exists (i.e. widget has been added at least once). */
+    // ─── Access token (for EodSyncWorker) ─────────────────────────────────────
+
+    /**
+     * Save the current access token so EodSyncWorker can use it.
+     * Call this on login AND every time the token is refreshed.
+     */
     @ReactMethod
-    fun isWidgetAdded(promise: Promise) {
+    fun saveAccessToken(token: String, promise: Promise) {
         try {
-            val prefs = reactApplicationContext.getSharedPreferences(
-                "StepsWidgetPrefs", Context.MODE_PRIVATE
-            )
-            promise.resolve(prefs.contains("steps"))
+            reactApplicationContext
+                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("accessToken", token)
+                .apply()
+            promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("CHECK_ERROR", e.message, e)
+            promise.reject("TOKEN_SAVE_ERROR", e.message, e)
         }
     }
 
     /**
-     * Signal that the app is currently initialising Health Connect.
-     * While this flag is true the background WidgetUpdateWorker will skip its
-     * Health Connect read to avoid a concurrent-access crash.
+     * Clear the stored access token on logout.
      */
+    @ReactMethod
+    fun clearAccessToken(promise: Promise) {
+        try {
+            reactApplicationContext
+                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .remove("accessToken")
+                .apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("TOKEN_CLEAR_ERROR", e.message, e)
+        }
+    }
+
+    // ─── User body metrics (for accurate calorie/distance derivation) ─────────
+    //
+    // The user's weight (kg) is stored in StepsWidgetPrefs so native background
+    // workers (WidgetUpdateWorker, EodSyncWorker) can derive calories and
+    // distance accurately instead of using the 70 kg default.
+
+    /**
+     * Save the user's weight in kg.
+     * Call this on login and whenever the user updates their profile weight.
+     */
+    @ReactMethod
+    fun saveUserWeight(weightKg: Double, promise: Promise) {
+        try {
+            reactApplicationContext
+                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .putFloat("weightKg", weightKg.toFloat())
+                .apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("WEIGHT_SAVE_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Clear the stored weight on logout.
+     */
+    @ReactMethod
+    fun clearUserWeight(promise: Promise) {
+        try {
+            reactApplicationContext
+                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+                .edit()
+                .remove("weightKg")
+                .apply()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("WEIGHT_CLEAR_ERROR", e.message, e)
+        }
+    }
+
+    // ─── App initialising flag ────────────────────────────────────────────────
+
     @ReactMethod
     fun setAppInitialising(initialising: Boolean, promise: Promise) {
         try {
@@ -113,11 +166,8 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Schedule the nightly 23:59:50 end-of-day health sync alarm.
-     * Call this on login so the day's final step count is committed to the
-     * database before midnight even when the app is fully closed.
-     */
+    // ─── EOD sync alarm ───────────────────────────────────────────────────────
+
     @ReactMethod
     fun scheduleEodSync(promise: Promise) {
         try {
@@ -128,10 +178,6 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Cancel the end-of-day sync alarm.
-     * Call this on logout.
-     */
     @ReactMethod
     fun cancelEodSync(promise: Promise) {
         try {
@@ -139,6 +185,20 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("EOD_CANCEL_ERROR", e.message, e)
+        }
+    }
+
+    // ─── Misc ─────────────────────────────────────────────────────────────────
+
+    @ReactMethod
+    fun isWidgetAdded(promise: Promise) {
+        try {
+            val prefs = reactApplicationContext.getSharedPreferences(
+                "StepsWidgetPrefs", Context.MODE_PRIVATE
+            )
+            promise.resolve(prefs.contains("steps"))
+        } catch (e: Exception) {
+            promise.reject("CHECK_ERROR", e.message, e)
         }
     }
 }

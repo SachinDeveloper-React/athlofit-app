@@ -31,8 +31,8 @@ object WidgetScheduler {
         Log.d(TAG, "Scheduling periodic widget updates (every 15 min)")
 
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // works offline
-            .setRequiresBatteryNotLow(false)                  // run even on low battery
+            .setRequiredNetworkType(NetworkType.NOT_REQUIRED) // HC read works offline; API call handles its own failure
+            .setRequiresBatteryNotLow(false)
             .build()
 
         val request = PeriodicWorkRequestBuilder<WidgetUpdateWorker>(

@@ -9,13 +9,13 @@ import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
-// export const BASE_URL = "https://athlofit-backend.vercel.app/"
+export const BASE_URL = "https://athlofit-backend.vercel.app/"
 
-export const BASE_URL =
-  Platform.OS === 'android'
-    // ? 'http://192.168.0.129:5001/'
-    ? 'http://192.168.1.10:5001/'
-    : 'http://localhost:5001/';
+// export const BASE_URL =
+//   Platform.OS === 'android'
+//     // ? 'http://192.168.0.129:5001/'
+//     ? 'http://192.168.1.10:5001/'
+//     : 'http://localhost:5001/';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,11 +138,22 @@ async function tryRefresh(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data = await res.json();
+    const newAccessToken: string = data?.data?.accessToken;
+    const newRefreshToken: string = data?.data?.refreshToken;
+
     await tokenService.save({
-      accessToken: data?.data?.accessToken,
-      refreshToken: data?.data?.refreshToken,
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
     });
-    useAuthStore.getState().setAccessToken(data?.data?.accessToken);
+    useAuthStore.getState().setAccessToken(newAccessToken);
+
+    // Keep the native-side mirror in sync so EodSyncWorker always has a
+    // valid token even after a silent refresh while the app is in background.
+    if (newAccessToken) {
+      import('../services/widgetService').then(({ widgetService }) => {
+        widgetService.saveAccessToken(newAccessToken);
+      }).catch(() => {});
+    }
 
     return true;
   } catch {

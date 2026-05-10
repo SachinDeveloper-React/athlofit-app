@@ -295,9 +295,11 @@ const TrackerScreen = memo(() => {
 
   useFocusEffect(
     useCallback(() => {
-      // Silently sync health databases every time the user looks at the tracker
+      // On every focus: silently refresh health data from device AND
+      // re-fetch weekly steps from the server so the chart is always current.
       refresh(true);
-    }, [refresh]),
+      refreshWeek();
+    }, [refresh, refreshWeek]),
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────

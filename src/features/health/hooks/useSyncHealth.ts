@@ -111,9 +111,12 @@ export function useSyncHealth() {
     onSuccess: (response: any) => {
       const d = response?.data;
 
-      // Only invalidate queries when the server actually awarded something.
-      // Invalidating on every sync causes GET /gamification/me, /challenges,
-      // and /coins/data to refetch after every POST /health/sync (every 5 min).
+      // Always invalidate weekly-steps after a sync so the chart reflects
+      // the freshly written data immediately — no stale bar for today.
+      queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });
+
+      // Only invalidate gamification queries when the server actually awarded
+      // something — avoids unnecessary refetches on every 5-min sync.
       const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
       if (awardedCoins) {
         queryClient.invalidateQueries({ queryKey: ['coin-data'] });

@@ -4,8 +4,12 @@
  * Periodic background health sync using react-native-background-fetch.
  * Runs every ~15 minutes even when the app is closed or in recents.
  *
- * The guaranteed end-of-day sync at 23:59:50 is handled natively by
- * EodSyncScheduler + EodSyncWorker (Android) — no JS layer needed.
+ * NOTE: On Android the real periodic background sync is done natively by
+ * WidgetUpdateWorker (WorkManager, every 15 min) which reads Health Connect
+ * and POSTs to /health/sync without needing JS at all.
+ *
+ * This JS layer handles iOS (HealthKit) and acts as a fallback on Android
+ * when the native worker hasn't fired yet.
  */
 
 import BackgroundFetch from 'react-native-background-fetch';
@@ -17,9 +21,9 @@ import {
 } from './healthkit.service';
 import {
   fetchAllHealthConnectData,
-  initializeHealthConnect,
   isHealthConnectAvailable,
 } from './healthConnect.service';
+import { initialize } from 'react-native-health-connect';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
@@ -37,15 +41,26 @@ export async function runHealthSync(): Promise<void> {
   let healthData;
 
   if (Platform.OS === 'ios') {
+    // iOS: initialize HealthKit (no permission dialog in background)
     const ready = await initializeHealthKit();
     if (!ready) return;
     healthData = await fetchAllHealthKitData();
   } else {
+    // Android: only call initialize() — never requestPermission() in background.
+    // Permissions were already granted when the user was in the foreground.
+    // Calling requestPermission() in a headless context throws or hangs.
     const available = await isHealthConnectAvailable();
     if (!available) return;
-    const ready = await initializeHealthConnect();
-    if (!ready) return;
-    healthData = await fetchAllHealthConnectData();
+    const initialized = await initialize();
+    if (!initialized) return;
+    // Small settle delay (same as initializeHealthConnect)
+    await new Promise<void>(r => setTimeout(r, 300));
+
+    // Pass the persisted loginTimestamp so steps are filtered from login time,
+    // not from midnight — prevents syncing the full day's steps on first login.
+    const { useHealthDataStore } = await import('../store/healthDataStore');
+    const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+    healthData = await fetchAllHealthConnectData(undefined, loginTimestamp);
   }
 
   if (!healthData || healthData.steps === 0) return;

@@ -11,6 +11,10 @@ interface StepsWidgetNativeModule {
   setAppInitialising: (initialising: boolean) => Promise<boolean>;
   scheduleEodSync: () => Promise<boolean>;
   cancelEodSync: () => Promise<boolean>;
+  saveAccessToken: (token: string) => Promise<boolean>;
+  clearAccessToken: () => Promise<boolean>;
+  saveUserWeight: (weightKg: number) => Promise<boolean>;
+  clearUserWeight: () => Promise<boolean>;
 }
 
 const { StepsWidget } = NativeModules;
@@ -154,6 +158,64 @@ class WidgetService {
       return true;
     } catch (e) {
       console.warn('[WidgetService] cancelEodSync failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Mirror the access token into StepsWidgetPrefs so EodSyncWorker can
+   * attach it to /health/sync without needing the app open.
+   * Call this on login AND every time the token is refreshed (401 → refresh).
+   */
+  async saveAccessToken(token: string): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.saveAccessToken(token);
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] saveAccessToken failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Remove the mirrored access token on logout.
+   */
+  async clearAccessToken(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.clearAccessToken();
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] clearAccessToken failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Save the user's weight (kg) so native background workers use the real
+   * value for calorie/distance derivation instead of the 70 kg default.
+   * Call this on login and whenever the user updates their profile weight.
+   */
+  async saveUserWeight(weightKg: number): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.saveUserWeight(weightKg);
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] saveUserWeight failed:', e);
+      return false;
+    }
+  }
+
+  /** Remove the stored weight on logout. */
+  async clearUserWeight(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.clearUserWeight();
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] clearUserWeight failed:', e);
       return false;
     }
   }
