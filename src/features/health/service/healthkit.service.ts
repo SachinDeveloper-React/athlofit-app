@@ -55,7 +55,39 @@ const todayRange = () => {
   };
 };
 
+/**
+ * Returns a date range for a specific calendar day.
+ * @param date  The day to build the range for (defaults to today)
+ * @param endAtNow  If true, caps endDate at now (for today); otherwise uses 23:59:59
+ */
+const dayRange = (date: Date = new Date(), endAtNow = true) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = endAtNow ? new Date() : new Date(date);
+  if (!endAtNow) end.setHours(23, 59, 59, 999);
+  return {
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+  };
+};
+
 // ─── Steps ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch step count for a specific time window.
+ * @param startDate  ISO string — start of the query window
+ * @param endDate    ISO string — end of the query window
+ */
+export const getStepsForRange = (startDate: string, endDate: string): Promise<number> =>
+  new Promise(resolve => {
+    AppleHealthKit.getStepCount(
+      { startDate, endDate, includeManuallyAdded: true },
+      (err, result) => {
+        resolve(err ? 0 : Math.round(result.value));
+      },
+    );
+  });
+
 export const getSteps = (): Promise<number> =>
   new Promise(resolve => {
     const options = { ...todayRange(), includeManuallyAdded: true };
@@ -227,6 +259,57 @@ export const fetchAllHealthKitData = async (): Promise<HealthData> => {
     weight,
     bloodGlucose,
     hydration, // ✅ added
+  };
+};
+
+/**
+ * Fetch HealthKit data for a specific time window.
+ * Used by background sync to query today (from loginTimestamp) and yesterday
+ * (full day) independently.
+ *
+ * @param startDate  ISO string — start of the step query window
+ * @param endDate    ISO string — end of the step query window
+ */
+export const fetchHealthKitDataForRange = async (
+  startDate: string,
+  endDate: string,
+): Promise<HealthData> => {
+  const range = { startDate, endDate };
+
+  const steps = await getStepsForRange(startDate, endDate);
+
+  // Calories, distance, and active minutes are derived from steps for the
+  // specific window — we don't query HealthKit for these because the
+  // ActiveEnergyBurned samples may not align with the step window.
+  const calories = Math.round(steps * (70 * 0.57) / 1000);
+  const distance = Math.round(steps * (0.76 / 1000) * 100) / 100;
+  const activeMinutes = Math.round(steps / STEPS_PER_MINUTE);
+
+  // Vitals are always fetched for the full day regardless of the step window
+  const [hr, bp, sleepHours, weight, bloodGlucose, hydration] =
+    await Promise.all([
+      getHeartRate(),
+      getBloodPressure(),
+      getSleep(),
+      getWeight(),
+      getBloodGlucose(),
+      getHydration(),
+    ]);
+
+  return {
+    steps,
+    calories,
+    distance,
+    activeMinutes,
+    heartRate: hr.avg,
+    heartRateMin: hr.min,
+    heartRateMax: hr.max,
+    bloodPressureSystolic: bp.systolic,
+    bloodPressureDiastolic: bp.diastolic,
+    sleepHours,
+    weight,
+    bloodGlucose,
+    hydration,
   };
 };
 

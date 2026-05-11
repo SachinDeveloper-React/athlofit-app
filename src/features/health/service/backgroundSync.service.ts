@@ -2,28 +2,37 @@
  * backgroundSync.service.ts
  *
  * Periodic background health sync using react-native-background-fetch.
- * Runs every ~15 minutes even when the app is closed or in recents.
+ * Handles iOS (HealthKit) and acts as a JS-layer fallback on Android.
  *
- * NOTE: On Android the real periodic background sync is done natively by
- * WidgetUpdateWorker (WorkManager, every 15 min) which reads Health Connect
- * and POSTs to /health/sync without needing JS at all.
+ * On Android the primary sync path is the native WidgetUpdateWorker
+ * (WorkManager, every 15 min) + EodSyncWorker (exact alarm at 23:59:50).
+ * This JS layer runs as a secondary fallback via react-native-background-fetch.
  *
- * This JS layer handles iOS (HealthKit) and acts as a fallback on Android
- * when the native worker hasn't fired yet.
+ * Syncs TWO records per run:
+ *
+ *  TODAY
+ *    - First login day : steps from loginTimestamp → now
+ *    - Subsequent days : steps from 00:00 → now  (loginTimestamp < midnight)
+ *
+ *  YESTERDAY
+ *    - Always full day : 00:00 → 23:59:59  (no login filter)
+ *
+ * Each POST includes an explicit `date` field (YYYY-MM-DD) so the backend
+ * upserts the correct day's record regardless of when the task fires.
  */
 
 import BackgroundFetch from 'react-native-background-fetch';
 import { Platform } from 'react-native';
 import { tokenService } from '../../auth/service/tokenService';
 import {
-  fetchAllHealthKitData,
+  fetchHealthKitDataForRange,
   initializeHealthKit,
 } from './healthkit.service';
 import {
-  fetchAllHealthConnectData,
   isHealthConnectAvailable,
+  deriveFromSteps,
 } from './healthConnect.service';
-import { initialize } from 'react-native-health-connect';
+import { initialize, readRecords } from 'react-native-health-connect';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
@@ -32,59 +41,210 @@ import { BASE_URL } from '../../../utils/api';
 
 const TASK_ID = 'com.athlofit.healthsync';
 
-// ─── Core sync logic ──────────────────────────────────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+/** YYYY-MM-DD for a given Date (local time) */
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Start of a given date at 00:00:00.000 local time */
+function startOf(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+/** End of a given date at 23:59:59.999 local time */
+function endOf(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(23, 59, 59, 999);
+  return r;
+}
+
+// ─── POST helper ──────────────────────────────────────────────────────────────
+
+async function postSync(token: string, body: object): Promise<any> {
+  try {
+    const response = await fetch(`${BASE_URL}health/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) return null;
+    const json = await response.json();
+    return json?.data ?? null;
+  } catch (e) {
+    console.warn('[BackgroundSync] postSync error:', e);
+    return null;
+  }
+}
+
+// ─── iOS single-day sync ──────────────────────────────────────────────────────
+
+/**
+ * Fetch HealthKit data for [startTime, endTime] and POST to /health/sync.
+ * The `dateStr` is the YYYY-MM-DD label sent to the backend for upsert.
+ */
+async function syncOneDayIOS(
+  dateStr: string,
+  startTime: string,
+  endTime: string,
+  token: string,
+): Promise<void> {
+  const data = await fetchHealthKitDataForRange(startTime, endTime);
+  if (data.steps === 0) return;
+
+  const body = {
+    ...data,
+    date: dateStr,
+    goalMet: false, // server recalculates
+  };
+
+  const result = await postSync(token, body);
+
+  if (result?.goalCoinsAwarded) {
+    await showStepGoalNotification(result.stepGoalCoins ?? 50);
+  }
+  if (result?.newlyCompleted?.length) {
+    await showChallengeNotifications(result.newlyCompleted);
+  }
+}
+
+// ─── Android single-day sync ──────────────────────────────────────────────────
+
+/**
+ * Read steps from Health Connect for [startTime, endTime], derive other
+ * metrics, and POST to /health/sync.
+ */
+async function syncOneDayAndroid(
+  dateStr: string,
+  startTime: string,
+  endTime: string,
+  token: string,
+  weightKg: number,
+): Promise<void> {
+  const timeRange = { operator: 'between' as const, startTime, endTime };
+
+  const stepsResp = await readRecords('Steps', { timeRangeFilter: timeRange }).catch(
+    () => ({ records: [] }),
+  );
+  const steps = stepsResp.records.reduce(
+    (sum: number, r: any) => sum + (r.count ?? 0),
+    0,
+  );
+
+  if (steps === 0) return;
+
+  const derived = deriveFromSteps(steps, weightKg);
+
+  const body = {
+    date: dateStr,
+    steps,
+    calories: derived.calories,
+    distance: derived.distanceKm,
+    activeMinutes: derived.activeMinutes,
+    goalMet: false, // server recalculates
+  };
+
+  const result = await postSync(token, body);
+
+  if (result?.goalCoinsAwarded) {
+    await showStepGoalNotification(result.stepGoalCoins ?? 50);
+  }
+  if (result?.newlyCompleted?.length) {
+    await showChallengeNotifications(result.newlyCompleted);
+  }
+}
+
+// ─── Core sync — today + yesterday ───────────────────────────────────────────
 
 export async function runHealthSync(): Promise<void> {
   const token = await tokenService.getAccessToken();
   if (!token) return;
 
-  let healthData;
+  const now       = new Date();
+  const today     = new Date(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
 
+  const todayStr     = toISODate(today);
+  const yesterdayStr = toISODate(yesterday);
+
+  // ── Read loginTimestamp from persisted store ──────────────────────────────
+  // Dynamic import avoids circular deps and works in headless context.
+  const { useHealthDataStore } = await import('../store/healthDataStore');
+  const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+
+  // Effective start for today's step window:
+  //   - If loginTimestamp is within today (after midnight), use it.
+  //   - Otherwise (subsequent days or no timestamp), use midnight.
+  const todayMidnight = startOf(today);
+  const effectiveTodayStart =
+    loginTimestamp && loginTimestamp > todayMidnight.getTime()
+      ? new Date(loginTimestamp)
+      : todayMidnight;
+
+  // ── iOS — HealthKit ───────────────────────────────────────────────────────
   if (Platform.OS === 'ios') {
-    // iOS: initialize HealthKit (no permission dialog in background)
     const ready = await initializeHealthKit();
     if (!ready) return;
-    healthData = await fetchAllHealthKitData();
-  } else {
-    // Android: only call initialize() — never requestPermission() in background.
-    // Permissions were already granted when the user was in the foreground.
-    // Calling requestPermission() in a headless context throws or hangs.
-    const available = await isHealthConnectAvailable();
-    if (!available) return;
-    const initialized = await initialize();
-    if (!initialized) return;
-    // Small settle delay (same as initializeHealthConnect)
-    await new Promise<void>(r => setTimeout(r, 300));
 
-    // Pass the persisted loginTimestamp so steps are filtered from login time,
-    // not from midnight — prevents syncing the full day's steps on first login.
-    const { useHealthDataStore } = await import('../store/healthDataStore');
-    const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
-    healthData = await fetchAllHealthConnectData(undefined, loginTimestamp);
+    // TODAY: from effectiveTodayStart → now
+    await syncOneDayIOS(
+      todayStr,
+      effectiveTodayStart.toISOString(),
+      now.toISOString(),
+      token,
+    );
+
+    // YESTERDAY: full day 00:00 → 23:59:59 (no login filter)
+    await syncOneDayIOS(
+      yesterdayStr,
+      startOf(yesterday).toISOString(),
+      endOf(yesterday).toISOString(),
+      token,
+    );
+
+    return;
   }
 
-  if (!healthData || healthData.steps === 0) return;
+  // ── Android — Health Connect ──────────────────────────────────────────────
+  const available = await isHealthConnectAvailable();
+  if (!available) return;
 
-  const response = await fetch(`${BASE_URL}health/sync`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ ...healthData, goalMet: false }),
-  });
+  const initialized = await initialize();
+  if (!initialized) return;
 
-  if (!response.ok) return;
+  // Give the Health Connect IPC binding time to settle before reading
+  await new Promise<void>(r => setTimeout(r, 300));
 
-  const json = await response.json();
-  const d = json?.data;
+  const { useAuthStore } = await import('../../auth/store/authStore');
+  const weightKg = useAuthStore.getState().user?.weight ?? 70;
 
-  if (d?.goalCoinsAwarded) {
-    await showStepGoalNotification(d.stepGoalCoins ?? 50);
-  }
-  if (d?.newlyCompleted?.length) {
-    await showChallengeNotifications(d.newlyCompleted);
-  }
+  // TODAY: from effectiveTodayStart → now
+  await syncOneDayAndroid(
+    todayStr,
+    effectiveTodayStart.toISOString(),
+    now.toISOString(),
+    token,
+    weightKg,
+  );
+
+  // YESTERDAY: full day 00:00 → 23:59:59 (no login filter)
+  await syncOneDayAndroid(
+    yesterdayStr,
+    startOf(yesterday).toISOString(),
+    endOf(yesterday).toISOString(),
+    token,
+    weightKg,
+  );
 }
 
 // ─── Register periodic background fetch ──────────────────────────────────────
@@ -93,10 +253,10 @@ export async function registerBackgroundSync(): Promise<void> {
   try {
     const status = await BackgroundFetch.configure(
       {
-        minimumFetchInterval: 15,
-        stopOnTerminate: false,
-        startOnBoot: true,
-        enableHeadless: true,
+        minimumFetchInterval: 15,       // minutes (OS minimum)
+        stopOnTerminate: false,          // keep running after app is killed
+        startOnBoot: true,               // reschedule after device reboot
+        enableHeadless: true,            // Android headless task support
         requiredNetworkType: BackgroundFetch.NETWORK_TYPE_ANY,
         requiresCharging: false,
         requiresDeviceIdle: false,
@@ -124,6 +284,8 @@ export async function registerBackgroundSync(): Promise<void> {
 }
 
 // ─── Android headless task ────────────────────────────────────────────────────
+// Runs when the app is fully terminated (killed from recents).
+// Registered in index.js via BackgroundFetch.registerHeadlessTask().
 
 export async function headlessTask(event: { taskId: string }): Promise<void> {
   try {
@@ -141,6 +303,6 @@ export async function stopBackgroundSync(): Promise<void> {
   try {
     await BackgroundFetch.stop(TASK_ID);
   } catch {
-    // ignore
+    // ignore — task may not have been registered yet
   }
 }
