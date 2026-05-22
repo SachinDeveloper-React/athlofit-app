@@ -3,6 +3,7 @@ package com.athlofit
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -10,6 +11,7 @@ import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import org.json.JSONObject
@@ -25,20 +27,11 @@ import java.time.ZoneId
  * Shared logic used by both WidgetUpdateWorker (periodic, every 15 min) and
  * EodSyncWorker (exact alarm at 23:59:50).
  *
- * Syncs TWO records per run:
- *
- *  1. TODAY  — steps counted from max(loginTimestamp, startOfDay) → now
- *              This respects the login time so a user who logged in at 2 PM
- *              only sees steps from 2 PM onward on their first day.
- *              On subsequent days loginTimestamp < startOfDay so the full
- *              day (00:00 → now) is used automatically.
- *
- *  2. YESTERDAY — full day 00:00 → 23:59:59 (no login filter)
- *                 Ensures yesterday's complete data is always committed even
- *                 if the app was closed all day.
- *
- * Each POST includes an explicit `date` field (YYYY-MM-DD) so the backend
- * upserts the correct day's record regardless of when the worker runs.
+ * Steps are read via aggregate() — the Health Connect API designed for
+ * cumulative data. It automatically deduplicates overlapping records from
+ * multiple sources and uses the most authoritative source (the device's
+ * native step counter). This works correctly on every Android OEM without
+ * any package-name allowlist.
  */
 object HealthSyncHelper {
 
@@ -47,14 +40,6 @@ object HealthSyncHelper {
 
     // ─── Public entry point ───────────────────────────────────────────────────
 
-    /**
-     * Read today's and yesterday's health data from Health Connect and POST
-     * both to /health/sync. Returns true if at least one sync succeeded.
-     *
-     * @param context  Android Context
-     * @param prefs    StepsWidgetPrefs — contains loginTimestamp, weightKg, accessToken
-     * @param token    Bearer token for the API
-     */
     suspend fun syncTodayAndYesterday(
         context: android.content.Context,
         prefs: SharedPreferences,
@@ -69,28 +54,14 @@ object HealthSyncHelper {
 
         var anySuccess = false
 
-        // ── 1. Sync TODAY ─────────────────────────────────────────────────────
-        val todayData = readDaySnapshot(
-            client   = client,
-            date     = today,
-            zone     = zone,
-            weightKg = weightKg,
-            loginTs  = loginTs,   // apply login filter for today only
-        )
+        val todayData = readDaySnapshot(client, today, zone, weightKg, loginTs)
         if (todayData != null && todayData.optInt("steps") > 0) {
             val ok = postSync(token, todayData)
             Log.d(TAG, "TODAY sync ${if (ok) "OK" else "FAIL"} — ${todayData.optInt("steps")} steps")
             if (ok) anySuccess = true
         }
 
-        // ── 2. Sync YESTERDAY ─────────────────────────────────────────────────
-        val yesterdayData = readDaySnapshot(
-            client   = client,
-            date     = yesterday,
-            zone     = zone,
-            weightKg = weightKg,
-            loginTs  = 0L,        // no login filter — always full day
-        )
+        val yesterdayData = readDaySnapshot(client, yesterday, zone, weightKg, loginTs = 0L)
         if (yesterdayData != null && yesterdayData.optInt("steps") > 0) {
             val ok = postSync(token, yesterdayData)
             Log.d(TAG, "YESTERDAY sync ${if (ok) "OK" else "FAIL"} — ${yesterdayData.optInt("steps")} steps")
@@ -102,13 +73,6 @@ object HealthSyncHelper {
 
     // ─── Read a single day's health snapshot ──────────────────────────────────
 
-    /**
-     * Reads all health metrics for [date] from Health Connect.
-     *
-     * @param loginTs  If > 0 AND loginTs > startOfDay, steps are counted only
-     *                 from loginTs onward (first-login-day filter).
-     *                 Pass 0 to always use the full day (00:00 → end of day).
-     */
     private suspend fun readDaySnapshot(
         client:   HealthConnectClient,
         date:     LocalDate,
@@ -118,37 +82,37 @@ object HealthSyncHelper {
     ): JSONObject? {
         return try {
             val startOfDay = date.atStartOfDay(zone).toInstant()
-            // End of day: 23:59:59.999 — use start of next day minus 1 ms
-            val endOfDay   = date.plusDays(1).atStartOfDay(zone).toInstant()
-                .minusMillis(1)
-            // For today we cap at "now" so we don't query the future
+            val endOfDay   = date.plusDays(1).atStartOfDay(zone).toInstant().minusMillis(1)
             val isToday    = date == LocalDate.now(zone)
             val endTime    = if (isToday) Instant.now() else endOfDay
 
-            // Apply login filter only when loginTs falls within today's window
+            // Apply login filter only on the first login day
             val stepsStart = if (loginTs > 0L) {
                 val loginInstant = Instant.ofEpochMilli(loginTs)
                 if (loginInstant.isAfter(startOfDay) && loginInstant.isBefore(endTime))
-                    loginInstant
-                else
-                    startOfDay
-            } else {
-                startOfDay
-            }
+                    loginInstant else startOfDay
+            } else startOfDay
 
-            val fullFilter  = TimeRangeFilter.between(startOfDay, endTime)
-            val stepsFilter = TimeRangeFilter.between(stepsStart, endTime)
-            // For vitals that span overnight (sleep, BP) use a 48-h window
+            val stepsFilter  = TimeRangeFilter.between(stepsStart, endTime)
+            val fullFilter   = TimeRangeFilter.between(startOfDay, endTime)
             val recentFilter = TimeRangeFilter.between(
-                date.minusDays(1).atStartOfDay(zone).toInstant(), endTime
-            )
-            val monthFilter = TimeRangeFilter.between(
-                date.minusDays(30).atStartOfDay(zone).toInstant(), endTime
-            )
+                date.minusDays(1).atStartOfDay(zone).toInstant(), endTime)
+            val monthFilter  = TimeRangeFilter.between(
+                date.minusDays(30).atStartOfDay(zone).toInstant(), endTime)
 
-            // ── Steps ─────────────────────────────────────────────────────────
-            val steps = client.readRecords(ReadRecordsRequest(StepsRecord::class, stepsFilter))
-                .records.sumOf { it.count }.toInt()
+            // ── Steps via aggregate() ─────────────────────────────────────────
+            // aggregate() is the correct API for cumulative data. It:
+            //  • Deduplicates overlapping records from multiple apps automatically
+            //  • Uses the most authoritative source (native step counter)
+            //  • Works on every Android OEM without any package-name allowlist
+            val stepsResult: AggregationResult = client.aggregate(
+                AggregateRequest(
+                    metrics      = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = stepsFilter,
+                )
+            )
+            val steps = stepsResult[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
+            Log.d(TAG, "[$date] Steps (aggregate): $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()
@@ -163,7 +127,7 @@ object HealthSyncHelper {
             val heartRateMax = bpms.maxOrNull()?.toInt() ?: 0
 
             // ── Blood pressure ────────────────────────────────────────────────
-            val latestBp  = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
+            val latestBp = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
                 .records.lastOrNull()
             val systolic  = latestBp?.systolic?.inMillimetersOfMercury?.toInt() ?: 0
             val diastolic = latestBp?.diastolic?.inMillimetersOfMercury?.toInt() ?: 0
@@ -187,11 +151,8 @@ object HealthSyncHelper {
             val hydrationMl = client.readRecords(ReadRecordsRequest(HydrationRecord::class, fullFilter))
                 .records.sumOf { it.volume.inLiters * 1000.0 }.toInt()
 
-            // ── ISO date string for this day (YYYY-MM-DD) ─────────────────────
-            val dateStr = date.toString() // LocalDate.toString() = "YYYY-MM-DD"
-
             JSONObject().apply {
-                put("date",                   dateStr)   // ← explicit date for backend upsert
+                put("date",                   date.toString())
                 put("steps",                  steps)
                 put("calories",               calories)
                 put("distance",               distanceKm)
@@ -205,7 +166,7 @@ object HealthSyncHelper {
                 put("weight",                 weight)
                 put("bloodGlucose",           bloodGlucose)
                 put("hydration",              hydrationMl)
-                put("goalMet",                false) // server recalculates
+                put("goalMet",                false)
             }
         } catch (e: Exception) {
             Log.e(TAG, "readDaySnapshot($date) failed: ${e.message}", e)

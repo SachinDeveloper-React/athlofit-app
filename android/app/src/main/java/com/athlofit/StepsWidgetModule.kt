@@ -166,6 +166,36 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // ─── Step counter notification (foreground service) ───────────────────────
+
+    /**
+     * Start the persistent step-count foreground notification.
+     * Call this on login (after notification permission is granted).
+     */
+    @ReactMethod
+    fun startStepNotification(promise: Promise) {
+        try {
+            StepNotificationService.start(reactApplicationContext)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("STEP_NOTIF_START_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Stop the persistent step-count foreground notification.
+     * Call this on logout.
+     */
+    @ReactMethod
+    fun stopStepNotification(promise: Promise) {
+        try {
+            StepNotificationService.stop(reactApplicationContext)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("STEP_NOTIF_STOP_ERROR", e.message, e)
+        }
+    }
+
     // ─── EOD sync alarm ───────────────────────────────────────────────────────
 
     @ReactMethod

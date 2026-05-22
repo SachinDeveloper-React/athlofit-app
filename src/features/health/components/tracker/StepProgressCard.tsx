@@ -248,13 +248,17 @@ Speedometer.displayName = 'Speedometer';
 
 type DayBarProps = {
   data: WeeklyStepEntry;
-  goal: number;
+  currentGoal: number; // today's / current goal — used for bars with no snapshot
   maxSteps: number;
   isToday: boolean;
 };
 
-const DayBar = memo(({ data, goal, maxSteps, isToday }: DayBarProps) => {
+const DayBar = memo(({ data, currentGoal, maxSteps, isToday }: DayBarProps) => {
   const { colors } = useTheme();
+
+  // Use the goal that was active on that specific day if available,
+  // otherwise fall back to the current goal (e.g. today or unsynced days).
+  const goal = data.goalSnapshot && data.goalSnapshot > 0 ? data.goalSnapshot : currentGoal;
 
   // ── Color derived from progress ratio ─────────────────────────────────────
   const { barColor, dotColor, ratio } = useMemo(
@@ -501,7 +505,7 @@ export const StepProgressCard = memo(
                 <DayBar
                   key={`${day.date}-${i}`}
                   data={day}
-                  goal={goal}
+                  currentGoal={goal}
                   maxSteps={maxSteps}
                   isToday={day.date === todayIdx}
                 />

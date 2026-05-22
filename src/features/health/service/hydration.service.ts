@@ -2,22 +2,10 @@
 // Handles all REST calls for hydration history persistence
 
 import { HistoryEntry } from '../types/hydration.type';
+import { BASE_URL as API_BASE_URL } from '../../../utils/api';
 
-const BASE_URL = 'https://api.yourapp.com';
-
-interface ApiHistoryEntry {
-  id: string;
-  amount_ml: number;
-  recorded_at: string; // ISO string
-  source: 'manual' | 'health_connect' | 'healthkit';
-}
-
-const toHistoryEntry = (raw: ApiHistoryEntry): HistoryEntry => ({
-  id: raw.id,
-  amount: raw.amount_ml,
-  time: new Date(raw.recorded_at),
-  source: raw.source,
-});
+// Strip trailing slash so we can append paths cleanly
+const BASE_URL = API_BASE_URL.replace(/\/$/, '');
 
 export const hydrationService = {
   /**
@@ -26,7 +14,7 @@ export const hydrationService = {
   async fetchTodayHistory(authToken: string): Promise<HistoryEntry[]> {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    const res = await fetch(`${BASE_URL}/v1/hydration/history?date=${today}`, {
+    const res = await fetch(`${BASE_URL}/health/history?from=${today}&to=${today}&limit=1`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${authToken}`,
@@ -38,28 +26,39 @@ export const hydrationService = {
       throw new Error(`Failed to fetch hydration history: ${res.status}`);
     }
 
-    const data: { entries: ApiHistoryEntry[] } = await res.json();
-    return data.entries.map(toHistoryEntry);
+    const data: { data: { hydration?: number; date: string }[] } = await res.json();
+    // Backend returns daily aggregates — convert to HistoryEntry format
+    const records = data.data ?? [];
+    return records
+      .filter(r => r.date === today && (r.hydration ?? 0) > 0)
+      .map(r => ({
+        id: `server-${r.date}`,
+        amount: r.hydration ?? 0,
+        time: new Date(`${r.date}T00:00:00`),
+        source: 'manual' as const,
+      }));
   },
 
   /**
-   * Log a water intake entry to backend
+   * Log a water intake entry to backend via health sync
    */
   async logWaterIntake(
     authToken: string,
     amount: number,
     source: HistoryEntry['source'] = 'manual',
   ): Promise<HistoryEntry> {
-    const res = await fetch(`${BASE_URL}/v1/hydration/log`, {
+    const today = new Date().toISOString().split('T')[0];
+
+    const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        amount_ml: amount,
-        recorded_at: new Date().toISOString(),
-        source,
+        date: today,
+        hydration: amount,
+        goalMet: false,
       }),
     });
 
@@ -67,8 +66,12 @@ export const hydrationService = {
       throw new Error(`Failed to log water intake: ${res.status}`);
     }
 
-    const data: { entry: ApiHistoryEntry } = await res.json();
-    return toHistoryEntry(data.entry);
+    return {
+      id: `server-${Date.now()}`,
+      amount,
+      time: new Date(),
+      source,
+    };
   },
 
   /**
@@ -77,12 +80,17 @@ export const hydrationService = {
   async resetToday(authToken: string): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
 
-    const res = await fetch(`${BASE_URL}/v1/hydration/reset?date=${today}`, {
-      method: 'DELETE',
+    const res = await fetch(`${BASE_URL}/health/sync`, {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        date: today,
+        hydration: 0,
+        goalMet: false,
+      }),
     });
 
     if (!res.ok) {
@@ -99,18 +107,19 @@ export const hydrationService = {
   ): Promise<void> {
     if (entries.length === 0) return;
 
-    const res = await fetch(`${BASE_URL}/v1/hydration/sync`, {
+    const today = new Date().toISOString().split('T')[0];
+    const totalHydration = entries.reduce((sum, e) => sum + e.amount, 0);
+
+    const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        entries: entries.map(e => ({
-          amount_ml: e.amount,
-          recorded_at: e.time.toISOString(),
-          source: e.source,
-        })),
+        date: today,
+        hydration: totalHydration,
+        goalMet: false,
       }),
     });
 

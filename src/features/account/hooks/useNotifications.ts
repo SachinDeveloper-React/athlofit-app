@@ -37,18 +37,28 @@ export const useMarkRead = () => {
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: NOTIF_KEY });
       const prev = qc.getQueryData(NOTIF_KEY);
-      
+
       qc.setQueryData(NOTIF_KEY, (old: any) => {
-        if (!old?.notifications) return old;
+        if (!old?.pages) return old;
         return {
           ...old,
-          notifications: old.notifications.map((n: NotificationItem) =>
-            n.id === id ? { ...n, read: true } : n
-          ),
-          unreadCount: Math.max(0, (old.unreadCount ?? 0) - 1),
+          pages: old.pages.map((page: any) => {
+            const wasUnread = page.notifications?.some(
+              (n: NotificationItem) => n.id === id && !n.read,
+            );
+            return {
+              ...page,
+              notifications: page.notifications?.map((n: NotificationItem) =>
+                n.id === id ? { ...n, read: true } : n,
+              ),
+              unreadCount: wasUnread
+                ? Math.max(0, (page.unreadCount ?? 0) - 1)
+                : page.unreadCount,
+            };
+          }),
         };
       });
-      
+
       return { prev };
     },
     onError: (_err, _id, context) => {
@@ -71,16 +81,23 @@ export const useMarkAllRead = () => {
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: NOTIF_KEY });
       const prev = qc.getQueryData(NOTIF_KEY);
-      
+
       qc.setQueryData(NOTIF_KEY, (old: any) => {
-        if (!old?.notifications) return old;
+        if (!old?.pages) return old;
         return {
           ...old,
-          notifications: old.notifications.map((n: NotificationItem) => ({ ...n, read: true })),
-          unreadCount: 0,
+          pages: old.pages.map((page: any, index: number) => ({
+            ...page,
+            notifications: page.notifications?.map((n: NotificationItem) => ({
+              ...n,
+              read: true,
+            })),
+            // Only zero out unreadCount on the first page (that's where it lives)
+            unreadCount: index === 0 ? 0 : page.unreadCount,
+          })),
         };
       });
-      
+
       return { prev };
     },
     onError: (_err, _vars, context) => {
@@ -102,19 +119,29 @@ export const useDeleteNotification = () => {
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: NOTIF_KEY });
       const prev = qc.getQueryData(NOTIF_KEY);
-      
+
       qc.setQueryData(NOTIF_KEY, (old: any) => {
-        if (!old?.notifications) return old;
-        const deletedNotif = old.notifications.find((n: NotificationItem) => n.id === id);
-        const wasUnread = deletedNotif && !deletedNotif.read;
-        
+        if (!old?.pages) return old;
         return {
           ...old,
-          notifications: old.notifications.filter((n: NotificationItem) => n.id !== id),
-          unreadCount: wasUnread ? Math.max(0, (old.unreadCount ?? 0) - 1) : old.unreadCount,
+          pages: old.pages.map((page: any) => {
+            const deletedNotif = page.notifications?.find(
+              (n: NotificationItem) => n.id === id,
+            );
+            const wasUnread = deletedNotif && !deletedNotif.read;
+            return {
+              ...page,
+              notifications: page.notifications?.filter(
+                (n: NotificationItem) => n.id !== id,
+              ),
+              unreadCount: wasUnread
+                ? Math.max(0, (page.unreadCount ?? 0) - 1)
+                : page.unreadCount,
+            };
+          }),
         };
       });
-      
+
       return { prev };
     },
     onError: (_err, _id, context) => {

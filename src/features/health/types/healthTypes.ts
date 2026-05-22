@@ -38,6 +38,7 @@ export type WeeklyStepEntry = {
   date: string;      // short label "Mon", "Tue" etc.
   fullDate?: string; // "YYYY-MM-DD" — used for navigation to StepDetailScreen
   steps: number;
+  goalSnapshot?: number; // goal that was active on this specific day
 };
 
 export type WeeklyStepsRequest = {

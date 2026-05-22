@@ -1,173 +1,175 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
 
-    <uses-permission android:name="android.permission.INTERNET" />
-<!-- NOTIFICATION -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Widget auto-update after reboot -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Exact alarms for immediate widget refresh (widget tap-to-refresh) -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- USE_EXACT_ALARM: granted automatically, no user prompt needed (Android 13+) -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <!-- BLUETOOTH -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Camera & Media -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-<!-- Background -->
-<uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-<!-- Steps (read from device sensor, write for manual entry) -->
-<uses-permission android:name="android.permission.health.READ_STEPS"/>
-<uses-permission android:name="android.permission.health.WRITE_STEPS"/>
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-<!-- Hydration -->
-<uses-permission android:name="android.permission.health.READ_HYDRATION"/>
-<uses-permission android:name="android.permission.health.WRITE_HYDRATION"/>
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
-<!-- Active calories (write derived values back) -->
-<uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
-<uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED"/>
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
-<!-- Distance (write derived values back) -->
-<uses-permission android:name="android.permission.health.READ_DISTANCE"/>
-<uses-permission android:name="android.permission.health.WRITE_DISTANCE"/>
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+  <uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+  <uses-permission
+    android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:maxSdkVersion="29" />
+  <uses-feature
+    android:name="android.hardware.camera"
+    android:required="false" />
+  <uses-feature
+    android:name="android.hardware.camera.flash"
+    android:required="false" />
+  <uses-feature
+    android:name="android.hardware.camera.autofocus"
+    android:required="false" />
 
-<!-- Exercise session / active time (write derived values back) -->
-<uses-permission android:name="android.permission.health.READ_EXERCISE"/>
-<uses-permission android:name="android.permission.health.WRITE_EXERCISE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-<!-- Heart rate -->
-<uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
-<uses-permission android:name="android.permission.health.WRITE_HEART_RATE"/>
+  <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
-<!-- Blood pressure -->
-<uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE"/>
-<uses-permission android:name="android.permission.health.WRITE_BLOOD_PRESSURE"/>
+  <uses-permission android:name="android.permission.health.READ_STEPS" />
+  <!-- No WRITE_STEPS — writing our own step records would inflate aggregate() counts -->
 
-<!-- Weight -->
-<uses-permission android:name="android.permission.health.WRITE_WEIGHT"/>
-<uses-permission android:name="android.permission.health.READ_WEIGHT"/>
+  <uses-permission android:name="android.permission.health.READ_HYDRATION" />
+  <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
 
-<!-- Sleep -->
-<uses-permission android:name="android.permission.health.READ_SLEEP"/>
-<uses-permission android:name="android.permission.health.WRITE_SLEEP"/>
+  <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+  <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
 
-<!-- Blood glucose -->
-<uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
-<uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE"/>
+  <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+  <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
 
-    <application
-      android:enableOnBackInvokedCallback="false"
-      android:name=".MainApplication"
+  <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+  <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+
+  <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+  <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
+
+  <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+  <uses-permission android:name="android.permission.health.WRITE_BLOOD_PRESSURE" />
+
+  <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
+  <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+
+  <uses-permission android:name="android.permission.health.READ_SLEEP" />
+  <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
+
+  <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
+  <uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE" />
+
+  <application
+    android:enableOnBackInvokedCallback="false"
+    android:name=".MainApplication"
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher_adaptive_for"
+    android:roundIcon="@mipmap/ic_launcher"
+    android:allowBackup="false"
+    android:theme="@style/AppTheme"
+    android:usesCleartextTraffic="${usesCleartextTraffic}"
+    android:supportsRtl="true">
+    <activity
+      android:name=".MainActivity"
       android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-      <activity
-        android:name=".MainActivity"
-        android:label="@string/app_name"
-        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-        android:launchMode="singleTask"
-        android:windowSoftInputMode="adjustResize"
-        android:exported="true">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
-        <!-- Deep linking: athlofit:// -->
-        <intent-filter android:autoVerify="true">
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.DEFAULT" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="athlofit" />
-        </intent-filter>
-        <!-- Universal links: https://athlofit.app -->
-        <intent-filter android:autoVerify="true">
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.DEFAULT" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="athlofit.app" />
-        </intent-filter>
-        <!-- For supported versions through Android 13, create an activity to show the rationale
-         of Health Connect permissions once users click the privacy policy link. -->
-        <intent-filter>
-            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-        </intent-filter>
-      </activity>
-      <activity
-        android:name=".PermissionsRationaleActivity"
-        android:exported="true">
-          <intent-filter>
-            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-          </intent-filter>
-      </activity>
+      android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+      android:launchMode="singleTask"
+      android:windowSoftInputMode="adjustResize"
+      android:exported="true"
+      android:theme="@style/BootTheme">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
 
-      <!-- For versions starting Android 14, create an activity alias to show the rationale
-         of Health Connect permissions once users click the privacy policy link. -->
-      <activity-alias
-        android:name="ViewPermissionUsageActivity"
-        android:exported="true"
-        android:targetActivity=".MainActivity"
-        android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
-          <intent-filter>
-            <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-            <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-          </intent-filter>
-      </activity-alias>
-      <!-- FileProvider required by react-native-image-picker for camera capture -->
-      <provider
-        android:name="androidx.core.content.FileProvider"
-        android:authorities="${applicationId}.provider"
-        android:exported="false"
-        android:grantUriPermissions="true">
-        <meta-data
-          android:name="android.support.FILE_PROVIDER_PATHS"
-          android:resource="@xml/image_picker_provider_paths" />
-      </provider>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="athlofit" />
+      </intent-filter>
 
-      <!-- Steps Widget -->
-      <receiver
-        android:name=".StepsWidgetProvider"
-        android:exported="true">
-        <intent-filter>
-          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-          <action android:name="com.athlofit.WIDGET_REFRESH" />
-        </intent-filter>
-        <meta-data
-          android:name="android.appwidget.provider"
-          android:resource="@xml/widget_info" />
-      </receiver>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+          android:scheme="https"
+          android:host="athlofit.app" />
+      </intent-filter>
 
-      <!-- Reschedule widget updates after device reboot -->
-      <receiver
-        android:name=".BootReceiver"
-        android:exported="true">
-        <intent-filter>
-          <action android:name="android.intent.action.BOOT_COMPLETED" />
-          <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-        </intent-filter>
-      </receiver>
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+      </intent-filter>
+    </activity>
+    <activity
+      android:name=".PermissionsRationaleActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+      </intent-filter>
+    </activity>
 
-      <!-- Receives AlarmManager broadcasts for immediate widget refresh -->
-      <receiver
-        android:name=".WidgetAlarmReceiver"
-        android:exported="false" />
+    <activity-alias
+      android:name="ViewPermissionUsageActivity"
+      android:exported="true"
+      android:targetActivity=".MainActivity"
+      android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+        <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+      </intent-filter>
+    </activity-alias>
 
-      <!-- Receives the nightly 23:59:50 end-of-day health sync alarm -->
-      <receiver
-        android:name=".EodSyncReceiver"
-        android:exported="false" />
-    </application>
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.provider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/image_picker_provider_paths" />
+    </provider>
+
+    <receiver
+      android:name=".StepsWidgetProvider"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="com.athlofit.WIDGET_REFRESH" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/widget_info" />
+    </receiver>
+
+    <receiver
+      android:name=".BootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+      </intent-filter>
+    </receiver>
+
+    <receiver
+      android:name=".WidgetAlarmReceiver"
+      android:exported="false" />
+
+    <receiver
+      android:name=".EodSyncReceiver"
+      android:exported="false" />
+
+    <service
+      android:name=".StepNotificationService"
+      android:foregroundServiceType="dataSync"
+      android:exported="false" />
+  </application>
 </manifest>

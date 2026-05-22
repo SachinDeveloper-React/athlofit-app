@@ -32,7 +32,7 @@ import {
   isHealthConnectAvailable,
   deriveFromSteps,
 } from './healthConnect.service';
-import { initialize, readRecords } from 'react-native-health-connect';
+import { initialize, aggregateRecord } from 'react-native-health-connect';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
@@ -130,16 +130,15 @@ async function syncOneDayAndroid(
   token: string,
   weightKg: number,
 ): Promise<void> {
-  const timeRange = { operator: 'between' as const, startTime, endTime };
+  // aggregateRecord() deduplicates overlapping records from multiple apps
+  // and uses the most authoritative source (native step counter).
+  // Works on every Android OEM without any package-name allowlist.
+  const stepsResult = await aggregateRecord({
+    recordType: 'Steps',
+    timeRangeFilter: { operator: 'between' as const, startTime, endTime },
+  }).catch(() => ({ COUNT_TOTAL: 0 }));
 
-  const stepsResp = await readRecords('Steps', { timeRangeFilter: timeRange }).catch(
-    () => ({ records: [] }),
-  );
-  const steps = stepsResp.records.reduce(
-    (sum: number, r: any) => sum + (r.count ?? 0),
-    0,
-  );
-
+  const steps: number = (stepsResult as any).COUNT_TOTAL ?? 0;
   if (steps === 0) return;
 
   const derived = deriveFromSteps(steps, weightKg);

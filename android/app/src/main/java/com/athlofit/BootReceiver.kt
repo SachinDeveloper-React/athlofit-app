@@ -19,6 +19,8 @@ class BootReceiver : BroadcastReceiver() {
             Log.d("BootReceiver", "Device booted — rescheduling widget updates and EOD sync")
             WidgetScheduler.schedule(context)
             EodSyncScheduler.schedule(context)
+            // Restart the live step-count foreground notification
+            StepNotificationService.start(context)
         }
     }
 }

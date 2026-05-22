@@ -21,7 +21,7 @@ export const useHydrationStore = create<HydrationStore>()(
   persist(
     subscribeWithSelector((set, get) => ({
       consumed: 0,
-      dailyGoal: 5000,
+      dailyGoal: 2000, // matches backend AppConfig default (hydrationGoalMl: 2000)
       history: [],
       isLoading: false,
       isSyncing: false,
@@ -33,6 +33,8 @@ export const useHydrationStore = create<HydrationStore>()(
         set({ history: entries, consumed: sumConsumed(entries) }),
 
       setConsumed: (amount: number) => set({ consumed: amount }),
+
+      setDailyGoal: (goal: number) => set({ dailyGoal: goal }),
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),
 
@@ -60,7 +62,9 @@ export const useHydrationStore = create<HydrationStore>()(
       fetchHistory: async () => {
         set({ isLoading: true, error: null });
         try {
-          const token = 'AUTH_TOKEN_PLACEHOLDER';
+          const { tokenService } = await import('../../../features/auth/service/tokenService');
+          const token = await tokenService.getAccessToken();
+          if (!token) throw new Error('Not authenticated');
           const entries = await hydrationService.fetchTodayHistory(token);
           const sorted = [...entries].sort(
             (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
@@ -93,11 +97,35 @@ export const useHydrationStore = create<HydrationStore>()(
         );
         const optimisticHistory = [optimisticEntry, ...filteredHistory];
 
+        // Optimistic update
         set({
           history: optimisticHistory,
           consumed: sumConsumed(optimisticHistory),
           error: null,
         });
+
+        // Persist to server
+        try {
+          const { tokenService } = await import('../../../features/auth/service/tokenService');
+          const token = await tokenService.getAccessToken();
+          if (token) {
+            const saved = await hydrationService.logWaterIntake(token, amount);
+            // Replace the optimistic entry with the real server entry if returned
+            if (saved) {
+              const updated = get().history.map(e =>
+                e.id === optimisticEntry.id ? { ...e, id: saved.id ?? e.id } : e,
+              );
+              set({ history: updated });
+            }
+          }
+        } catch (err) {
+          // Roll back on failure
+          set({
+            history,
+            consumed: sumConsumed(history),
+            error: 'Failed to save water entry. Please try again.',
+          });
+        }
       },
 
       // ── resetDay ───────────────────────────────────────────────────────────
@@ -105,24 +133,29 @@ export const useHydrationStore = create<HydrationStore>()(
         const { history } = get();
         const today = new Date().toDateString();
 
+        // Optimistic update first
         set({ history: [], consumed: 0, error: null, lastResetDate: today });
 
-        // try {
-        //   const token = 'AUTH_TOKEN_PLACEHOLDER';
-        //   await hydrationService.resetToday(token);
-        // } catch (err) {
-        //   set({
-        //     history,
-        //     consumed: sumConsumed(history),
-        //     error: 'Failed to reset. Please try again.',
-        //   });
-        // }
+        try {
+          const { tokenService } = await import('../../../features/auth/service/tokenService');
+          const token = await tokenService.getAccessToken();
+          if (token) {
+            await hydrationService.resetToday(token);
+          }
+        } catch (err) {
+          // Roll back on failure
+          set({
+            history,
+            consumed: sumConsumed(history),
+            error: 'Failed to reset. Please try again.',
+          });
+        }
       },
 
       // ── Reset all hydration data (called on logout) ────────────────────────
       reset: () => set({
         consumed: 0,
-        dailyGoal: 5000,
+        dailyGoal: 2000,
         history: [],
         isLoading: false,
         isSyncing: false,

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated as RNAnimated } from 'react-native';
 import { Camera } from 'react-native-vision-camera';
 import { useHeartRate } from '../hooks/useHeartRate';
+import { useHealth } from '../hooks/useHealth';
 import { Button, Header, Screen, AppText, AppView } from '../../../components';
 import { InstructionCard } from '../components/heart-rate/InstructionCard';
 import { ManualEntryModal } from '../components/heart-rate/ManualEntryModal';
@@ -113,6 +114,7 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight })
 export default function HeartRateScreen() {
   const { bottom } = useSafeAreaInsets();
   const styles = useStyles();
+  const { platform } = useHealth();
   const {
     measureState,
     progress,
@@ -128,7 +130,7 @@ export default function HeartRateScreen() {
     cancelMeasurement,
     onTorchReady,
     saveResult,
-  } = useHeartRate();
+  } = useHeartRate(platform);
 
   const [showManual, setShowManual] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -146,11 +148,20 @@ export default function HeartRateScreen() {
     setTorchOn(true);
     // Animate warmup bar over TORCH_WARMUP_MS
     warmupAnim.setValue(0);
+
+    // Fallback timeout — if the JS-thread animation stalls (busy thread),
+    // call onTorchReady after warmup + 500ms grace period so measurement
+    // never gets permanently stuck at "30s left".
+    const fallbackTimer = setTimeout(() => {
+      onTorchReady();
+    }, TORCH_WARMUP_MS + 500);
+
     RNAnimated.timing(warmupAnim, {
       toValue: 1,
       duration: TORCH_WARMUP_MS,
       useNativeDriver: false,
     }).start(({ finished }) => {
+      clearTimeout(fallbackTimer);
       if (finished) onTorchReady();
     });
   };
@@ -207,6 +218,7 @@ export default function HeartRateScreen() {
             video={true}
             audio={false}
             pixelFormat="yuv"
+            exposure={-1}
             frameProcessor={frameProcessor}
             onInitialized={handleCameraInit}
           />

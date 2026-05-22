@@ -15,6 +15,8 @@ interface StepsWidgetNativeModule {
   clearAccessToken: () => Promise<boolean>;
   saveUserWeight: (weightKg: number) => Promise<boolean>;
   clearUserWeight: () => Promise<boolean>;
+  startStepNotification: () => Promise<boolean>;
+  stopStepNotification: () => Promise<boolean>;
 }
 
 const { StepsWidget } = NativeModules;
@@ -216,6 +218,39 @@ class WidgetService {
       return true;
     } catch (e) {
       console.warn('[WidgetService] clearUserWeight failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Start the persistent step-count foreground notification.
+   * Shows live today's steps in the Android notification shade.
+   * Call this on login (after POST_NOTIFICATIONS permission is granted).
+   */
+  async startStepNotification(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.startStepNotification();
+      console.log('[WidgetService] Step notification started');
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] startStepNotification failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Stop the persistent step-count foreground notification.
+   * Call this on logout.
+   */
+  async stopStepNotification(): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.stopStepNotification();
+      console.log('[WidgetService] Step notification stopped');
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] stopStepNotification failed:', e);
       return false;
     }
   }

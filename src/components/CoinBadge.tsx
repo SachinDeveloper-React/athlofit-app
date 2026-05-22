@@ -23,7 +23,16 @@ interface Props {
 }
 
 function formatCoins(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  const format = (value: number, suffix: string) => {
+    const fixed = parseFloat(value.toFixed(1));
+    // Keep as integer if no decimal needed (e.g. 2000 → "2k" not "2.0k")
+    return `${Number.isInteger(fixed) ? fixed : fixed.toFixed(1)}${suffix}`;
+  };
+
+  if (n >= 10000000) return format(n / 10000000, 'Cr');
+  if (n >= 100000)   return format(n / 100000,   'L');
+  if (n >= 1000)     return format(n / 1000,     'k');
+
   return n.toString();
 }
 
@@ -62,6 +71,8 @@ export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => 
         {
           flexDirection: 'row',
           alignItems: 'center',
+          flexShrink: 0,
+          flexWrap: 'nowrap',
           gap: spacing[1],
           paddingHorizontal: px,
           height,
@@ -75,13 +86,15 @@ export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => 
     >
       <Icon name="HandCoins" size={iconSize} color={colors.gold} />
       <AppText
+        numberOfLines={1}
         style={{
           fontSize: textSize,
           fontWeight: fontWeight.bold,
           color: colors.gold,
           letterSpacing: 0.3,
-          lineHeight: textSize + 7,
+          lineHeight: height,
           includeFontPadding: false,
+          flexShrink: 0,
         }}
       >
         {formatCoins(balance)}

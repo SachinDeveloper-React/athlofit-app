@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { StatusBar } from 'react-native';
+import BootSplash from 'react-native-bootsplash';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -36,31 +37,24 @@ GoogleSignin.configure({
 });
 
 // ─── React Query Client ───────────────────────────────────────────────────────
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes
-      refetchOnWindowFocus: false,
-    },
-    mutations: {
-      retry: 1,
-    },
-  },
-});
+// BUG-042: QueryClient created inside App component (via useState) so it is
+// recreated on Fast Refresh and not shared across test evaluations.
 
 // ─── Notifee background event (hydration midnight reset) ─────────────────────
-
+// BUG-041: Wrapped in try/catch — onBackgroundEvent runs in a separate JS
+// context where MMKV/Zustand may not be initialised yet.
 notifee.onBackgroundEvent(async ({ type, detail }) => {
-  if (
-    type === EventType.DELIVERED &&
-    detail.notification?.id === 'hydration_midnight_reset'
-  ) {
-    const { setHistory, setConsumed } = useHydrationStore.getState();
-    setHistory([]);
-    setConsumed(0);
+  try {
+    if (
+      type === EventType.DELIVERED &&
+      detail.notification?.id === 'hydration_midnight_reset'
+    ) {
+      const { setHistory, setConsumed } = useHydrationStore.getState();
+      setHistory([]);
+      setConsumed(0);
+    }
+  } catch (err) {
+    console.error('[Background event] hydration reset failed:', err);
   }
 });
 
@@ -69,8 +63,17 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 // AppShell renders inside QueryClientProvider so hooks like useQueryClient work.
 const AppShell: React.FC = () => {
   const { isDark } = useTheme();
-  const checkAndResetIfNewDay = useHydrationStore(s => s.checkAndResetIfNewDay);
+  // BUG-043: Stabilise with useCallback so the hydration useEffect dependency
+  // array is accurate and the eslint suppression can be removed.
+  const checkAndResetIfNewDay = useHydrationStore(
+    useCallback((s) => s.checkAndResetIfNewDay, [])
+  );
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+
+  // ── Hide boot splash on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    BootSplash.hide({ fade: true }).catch(() => {});
+  }, []);
 
   // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
   useNotificationSetup();
@@ -106,8 +109,7 @@ const AppShell: React.FC = () => {
       unsubscribe();
       unsubscribeForeground();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [checkAndResetIfNewDay]);
 
   // ── System navigation bar theming ─────────────────────────────────────────
   useEffect(() => {
@@ -136,10 +138,28 @@ const AppShell: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <QueryClientProvider client={queryClient}>
-    <AppShell />
-  </QueryClientProvider>
-);
+const App: React.FC = () => {
+  // BUG-042: QueryClient created inside App via useState so it is recreated
+  // on Fast Refresh and not shared across test evaluations.
+  const [queryClient] = React.useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 2,
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        gcTime: 1000 * 60 * 10, // 10 minutes
+        refetchOnWindowFocus: false,
+      },
+      mutations: {
+        retry: 1,
+      },
+    },
+  }));
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell />
+    </QueryClientProvider>
+  );
+};
 
 export default App;

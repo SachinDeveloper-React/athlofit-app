@@ -9,13 +9,13 @@ import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
-export const BASE_URL = "https://athlofit-backend.vercel.app/"
-
-// export const BASE_URL =
-//   Platform.OS === 'android'
-//     // ? 'http://192.168.0.129:5001/'
-//     ? 'http://192.168.1.10:5001/'
-//     : 'http://localhost:5001/';
+// BUG-044: Read BASE_URL from env variable with platform-aware localhost fallback.
+// Never hardcode the production URL — developers hitting prod from local is dangerous.
+export const BASE_URL =
+  process.env.REACT_APP_API_URL ??
+  (Platform.OS === 'android'
+    ? 'http://10.0.2.2:5001/'
+    : 'http://localhost:5001/');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,8 +92,12 @@ async function request<T>(
     }
     const refreshed = await refreshPromise;
 
-    if (refreshed) {
+    // BUG-045: If the user logged out while the refresh was in flight,
+    // don't re-authenticate them by retrying the original request.
+    if (refreshed && !isLoggingOut()) {
       return request<T>(endpoint, { ...options, retry: true });
+    } else if (refreshed && isLoggingOut()) {
+      throw createError('Session expired. Please log in again.', 401);
     } else {
       // Refresh failed — full logout so the user lands on the sign-in screen
       setIsLoggingOut(true);
@@ -140,6 +144,10 @@ async function tryRefresh(): Promise<boolean> {
     const data = await res.json();
     const newAccessToken: string = data?.data?.accessToken;
     const newRefreshToken: string = data?.data?.refreshToken;
+
+    // BUG-046: Validate tokens are non-empty before saving — a null/empty token
+    // would overwrite valid stored tokens and silently break the session.
+    if (!newAccessToken || !newRefreshToken) return false;
 
     await tokenService.save({
       accessToken: newAccessToken,

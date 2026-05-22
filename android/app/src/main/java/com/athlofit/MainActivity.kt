@@ -9,6 +9,8 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate
 
+import com.zoontek.rnbootsplash.RNBootSplash
+
 class MainActivity : ReactActivity() {
 
   /**
@@ -19,6 +21,7 @@ class MainActivity : ReactActivity() {
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
+     RNBootSplash.init(this, R.style.BootTheme)
     supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
     super.onCreate(savedInstanceState)
     HealthConnectPermissionDelegate.setPermissionDelegate(this)

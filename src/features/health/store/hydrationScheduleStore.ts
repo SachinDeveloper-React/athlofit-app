@@ -65,23 +65,26 @@ export const useHydrationScheduleStore = create<HydrationScheduleStore>()(
         set({ isLoading: true, error: null });
         try {
           await setupHydrationChannel();
+
+          // Always request permission — on Android 13+ this shows the system
+          // dialog on first call; subsequent calls return the current status.
           const granted = await requestNotificationPermission();
           set({ permissionGranted: granted });
 
           if (granted) {
             // Reconcile: re-schedule any persisted times that Notifee lost
-            // (e.g. after app reinstall / device reboot)
+            // (e.g. after app reinstall / device reboot / OS killed triggers)
             const active = await getScheduledAlarmTimes();
             const { scheduledTimes } = get();
 
-            for (const t of scheduledTimes) {
-              if (!active.includes(t)) {
-                await scheduleHydrationAlarm(t).catch(() => {});
-              }
-            }
+            const reschedulePromises = scheduledTimes
+              .filter(t => !active.includes(t))
+              .map(t => scheduleHydrationAlarm(t).catch(() => {}));
+
+            await Promise.all(reschedulePromises);
           }
-        } catch (e) {
-          set({ error: 'Failed to initialize notifications' });
+        } catch (e: any) {
+          set({ error: e?.message ?? 'Failed to initialize notifications' });
         } finally {
           set({ isLoading: false });
         }
@@ -89,8 +92,18 @@ export const useHydrationScheduleStore = create<HydrationScheduleStore>()(
 
       // ── Toggle a preset on/off ───────────────────────────────────────────
       toggleAlarm: async (timeStr: string) => {
-        const { scheduledTimes } = get();
+        const { scheduledTimes, permissionGranted } = get();
         const isOn = scheduledTimes.includes(timeStr);
+
+        // Re-request permission if not yet granted (user may have just enabled it)
+        if (!isOn && !permissionGranted) {
+          const granted = await requestNotificationPermission();
+          set({ permissionGranted: granted });
+          if (!granted) {
+            set({ error: 'Notification permission required to set reminders' });
+            return;
+          }
+        }
 
         try {
           if (isOn) {
@@ -98,9 +111,7 @@ export const useHydrationScheduleStore = create<HydrationScheduleStore>()(
             set({ scheduledTimes: scheduledTimes.filter(t => t !== timeStr) });
           } else {
             await scheduleHydrationAlarm(timeStr);
-            set({
-              scheduledTimes: [...scheduledTimes, timeStr].sort(),
-            });
+            set({ scheduledTimes: [...scheduledTimes, timeStr].sort() });
           }
         } catch (e) {
           set({ error: `Failed to ${isOn ? 'cancel' : 'schedule'} alarm` });

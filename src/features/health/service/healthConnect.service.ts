@@ -13,6 +13,7 @@ import {
   initialize,
   requestPermission,
   readRecords,
+  aggregateRecord,
   insertRecords,
   deleteRecordsByTimeRange,
   getSdkStatus,
@@ -48,7 +49,8 @@ export const deriveFromSteps = (
 const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
   // ── Activity ──────────────────────────────────────────────────────────────
   { accessType: 'read',  recordType: 'Steps' },
-  { accessType: 'write', recordType: 'Steps' },
+  // NOTE: We do NOT write Steps — writing our own step records would cause
+  // them to appear as a second source in aggregate(), inflating the count.
 
   // Derived metrics — write-only (we compute from steps, never read back)
   { accessType: 'write', recordType: 'ActiveCaloriesBurned' },
@@ -251,7 +253,7 @@ export const fetchAllHealthConnectData = async (
     const stepsTimeRange = sinceLoginRange(loginTimestamp);
     
     const [
-      stepsRecords,
+      stepsResult,
       hrRecords,
       bpRecords,
       sleepRecords,
@@ -259,11 +261,20 @@ export const fetchAllHealthConnectData = async (
       glucoseRecords,
       hydrationRecord,
     ] = await Promise.all([
-      // Steps — read from Android built-in step sensor via Health Connect
-      // IMPORTANT: Use sinceLoginRange to only get steps since user logged in
-      readWithRetry(() => readRecords('Steps', { timeRangeFilter: stepsTimeRange })).catch(e => {
-        console.warn('Steps read failed:', e);
-        return { records: [] };
+      // Steps via aggregateRecord() — the correct API for cumulative data.
+      // Automatically deduplicates overlapping records from multiple apps
+      // (Sweatcoin, Strava, etc.) and uses the most authoritative source
+      // (the device's native step counter). Works on every Android OEM.
+      readWithRetry(() => aggregateRecord({
+        recordType: 'Steps',
+        timeRangeFilter: {
+          operator: 'between' as const,
+          startTime: stepsTimeRange.startTime,
+          endTime:   stepsTimeRange.endTime,
+        },
+      })).catch(e => {
+        console.warn('Steps aggregate failed:', e);
+        return { COUNT_TOTAL: 0 };
       }),
 
       readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: todayRange() })).catch(e => {
@@ -297,13 +308,9 @@ export const fetchAllHealthConnectData = async (
       }),
     ]);
 
-    // ── Steps: sum all Step records (filtered by login timestamp) ──────────
-    const steps = stepsRecords.records.reduce(
-      (sum, r) => sum + (r.count ?? 0),
-      0,
-    );
-    
-    console.log(`[HealthConnect] Fetched ${steps} steps since ${stepsTimeRange.startTime}`);
+    // ── Steps ─────────────────────────────────────────────────────────────
+    const steps: number = (stepsResult as any).COUNT_TOTAL ?? 0;
+    console.log(`[HealthConnect] Steps (aggregate): ${steps} since ${stepsTimeRange.startTime}`);
 
     // ── Always derive calories / distance / activeMinutes from steps ────────
     // This ensures values are always consistent with current step count,
@@ -453,19 +460,16 @@ export const writeSleepHC = async (
   ]);
 };
 
+/** @deprecated Do not write Steps — it creates a second source that inflates aggregate() counts. */
 export const writeStepsHC = async (
   count: number,
   start: Date,
   end: Date,
 ): Promise<void> => {
-  await insertRecords([
-    {
-      recordType: 'Steps',
-      count,
-      startTime: start.toISOString(),
-      endTime: end.toISOString(),
-    },
-  ]);
+  // No-op: writing Steps from the app causes double-counting in aggregate().
+  // The platform step counter (com.google.android.gms etc.) is the only
+  // authoritative source and writes steps automatically.
+  console.warn('[writeStepsHC] Skipped — app must not write Steps to Health Connect');
 };
 
 export const writeHydrationHC = async (

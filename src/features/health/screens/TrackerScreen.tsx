@@ -130,6 +130,10 @@ const TabPanels = memo(
     prev.data === next.data &&
     prev.weekData === next.weekData &&
     prev.metricRows === next.metricRows &&
+    prev.streakData === next.streakData &&
+    prev.streakDays === next.streakDays &&
+    prev.isStreakPending === next.isStreakPending &&
+    prev.syncDailyProgress === next.syncDailyProgress &&
     prev.onUpdate === next.onUpdate,
 );
 

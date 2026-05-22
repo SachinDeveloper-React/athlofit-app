@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { appConfigService } from '../services/appConfigService';
 import { useAppConfigStore } from '../store/appConfigStore';
+import { useHydrationStore } from '../features/health/store/hydrationStore';
 
 /**
  * Call this once near the root of the app (e.g. in the AuthenticatedStack or
@@ -18,7 +19,14 @@ export function useAppConfig() {
 
   const { mutate: fetchConfig, isPending, isError } = useMutation({
     mutationFn: appConfigService.fetchConfig,
-    onSuccess: config => setConfig(config),
+    onSuccess: config => {
+      setConfig(config);
+      // Keep hydration daily goal in sync with the live server value
+      const goalMl = config.rewards?.hydrationGoalMl;
+      if (goalMl && goalMl > 0) {
+        useHydrationStore.getState().setDailyGoal(goalMl);
+      }
+    },
     // On error, we silently fall back to the persisted / default config
     onError: err => {
       console.warn('[AppConfig] Failed to fetch remote config:', err);

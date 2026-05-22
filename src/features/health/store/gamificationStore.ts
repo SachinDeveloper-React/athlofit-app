@@ -1,9 +1,18 @@
-// ─── gamificationStore.ts ───────────────────────────────────────────────────
-
 import { create } from 'zustand';
 import { persist, createJSONStorage, subscribeWithSelector } from 'zustand/middleware';
 import { mmkvStorage } from '../../../store';
 import { GamificationStore } from '../types/gamification.type';
+
+// BUG-049: Use local timezone date string instead of UTC ISO string.
+// new Date().toISOString().slice(0,10) returns the UTC date, which is wrong
+// for users in UTC+ timezones after midnight UTC but before local midnight.
+const getLocalDateString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const useGamificationStore = create<GamificationStore>()(
   persist(
@@ -19,7 +28,7 @@ export const useGamificationStore = create<GamificationStore>()(
       
       syncDailyProgress: (coinsEarnedThisDay, metGoal) => {
         const { coinsEarnedToday, coinsBalance, lastCoinDate, lastActiveDate, streakDays, bestStreakDays } = get();
-        const todayStr = new Date().toDateString();
+        const todayStr = getLocalDateString(); // BUG-049: local timezone, not UTC
         const updates: Partial<GamificationStore> = {};
         
         // Coins logic
@@ -34,13 +43,18 @@ export const useGamificationStore = create<GamificationStore>()(
           updates.lastCoinDate = todayStr;
         }
 
-        // Streak logic
+        // Streak logic — use local date arithmetic to match the server
         if (metGoal && lastActiveDate !== todayStr) {
           let newStreak = streakDays;
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
+
+          const yest = new Date();
+          yest.setDate(yest.getDate() - 1);
+          const yy = yest.getFullYear();
+          const ym = String(yest.getMonth() + 1).padStart(2, '0');
+          const yd = String(yest.getDate()).padStart(2, '0');
+          const yesterdayStr = `${yy}-${ym}-${yd}`;
           
-          if (lastActiveDate === yesterday.toDateString() || !lastActiveDate) {
+          if (lastActiveDate === yesterdayStr || !lastActiveDate) {
             newStreak += 1;
           } else {
              newStreak = 1;
@@ -57,11 +71,13 @@ export const useGamificationStore = create<GamificationStore>()(
       },
 
       checkAndResetDaily: () => {
-         const today = new Date();
-         const todayStr = today.toDateString();
+         const todayStr = getLocalDateString(); // BUG-049: local timezone, not UTC
          const yesterday = new Date();
          yesterday.setDate(yesterday.getDate() - 1);
-         const yesterdayStr = yesterday.toDateString();
+         const yy = yesterday.getFullYear();
+         const ym = String(yesterday.getMonth() + 1).padStart(2, '0');
+         const yd = String(yesterday.getDate()).padStart(2, '0');
+         const yesterdayStr = `${yy}-${ym}-${yd}`;
          
          const { lastActiveDate, lastCoinDate } = get();
          
@@ -69,7 +85,6 @@ export const useGamificationStore = create<GamificationStore>()(
          
          if (lastCoinDate && lastCoinDate !== todayStr) {
             updates.coinsEarnedToday = 0;
-            // Note: we don't update lastCoinDate here until they actually earn a coin
          }
          
          // If last active was before yesterday, streak is broken

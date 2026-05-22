@@ -22,6 +22,7 @@ export interface HydrationActions {
   resetDay: () => Promise<void>;
   setHistory: (entries: HistoryEntry[]) => void;
   setConsumed: (amount: number) => void;
+  setDailyGoal: (goal: number) => void;
   setLoading: (loading: boolean) => void;
   setSyncing: (syncing: boolean) => void;
   setError: (error: string | null) => void;

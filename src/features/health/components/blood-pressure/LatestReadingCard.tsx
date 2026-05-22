@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppText, AppView, Card } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { BPReading } from '../../types/bloodpressure.types';
 import { CATEGORY_META } from '../../constants/bpClassifier.constant';
 import { makeStyles } from '../../../../hooks/makeStyles';
@@ -29,13 +30,21 @@ export const LatestReadingCard: React.FC<LatestReadingCardProps> = ({
   reading,
 }) => {
   const styles = useStyles();
+  const { isDark, colors } = useTheme();
   const meta = CATEGORY_META[reading.category];
+
+  // In dark mode use the card background with a tinted border instead of
+  // the hardcoded light pastel backgrounds which look wrong on dark themes.
+  const cardBg = isDark
+    ? colors.card
+    : meta.bg;
+  const cardBorder = withOpacity(meta.color, isDark ? 0.4 : 0.25);
 
   return (
     <Card
       style={[
         styles.card,
-        { backgroundColor: meta.bg, borderColor: meta.color + '40' },
+        { backgroundColor: cardBg, borderColor: cardBorder },
       ]}
       variant="outlined"
     >

@@ -78,16 +78,16 @@ PODS:
   - hermes-engine (250829098.0.9):
     - hermes-engine/Pre-built (= 250829098.0.9)
   - hermes-engine/Pre-built (250829098.0.9)
-  - MMKVCore (2.3.0)
+  - MMKVCore (2.4.0)
   - MultiplatformBleAdapter (0.2.0)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
-  - NitroMmkv (4.2.0):
+  - NitroMmkv (4.3.1):
     - hermes-engine
-    - MMKVCore (= 2.3.0)
+    - MMKVCore (= 2.4.0)
     - NitroModules
     - RCTRequired
     - RCTTypeSafety
@@ -110,7 +110,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - NitroModules (0.35.2):
+  - NitroModules (0.35.6):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1576,6 +1576,51 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-keyboard-controller (1.21.7):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - react-native-keyboard-controller/common (= 1.21.7)
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-keyboard-controller/common (1.21.7):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - react-native-netinfo (11.5.2):
     - hermes-engine
     - RCTRequired
@@ -1669,7 +1714,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-slider (5.1.2):
+  - react-native-slider (5.2.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1681,7 +1726,7 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-slider/common (= 5.1.2)
+    - react-native-slider/common (= 5.2.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1692,7 +1737,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-slider/common (5.1.2):
+  - react-native-slider/common (5.2.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2123,9 +2168,51 @@ PODS:
   - ReactNativeDependencies (0.84.1)
   - RNAppleHealthKit (1.7.0):
     - React
-  - RNBackgroundFetch (4.3.0):
+  - RNBackgroundFetch (4.4.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
     - React-Core
-    - TSBackgroundFetch (~> 4.0.0)
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - TSBackgroundFetch (~> 4.1.0)
+    - Yoga
+  - RNBootSplash (7.3.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNCClipboard (1.16.3):
     - hermes-engine
     - RCTRequired
@@ -2246,7 +2333,7 @@ PODS:
     - RNNotifee/NotifeeCore (= 9.1.8)
   - RNNotifee/NotifeeCore (9.1.8):
     - React-Core
-  - RNReanimated (4.2.2):
+  - RNReanimated (4.3.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2268,35 +2355,11 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNReanimated/reanimated (= 4.2.2)
+    - RNReanimated/apple (= 4.3.1)
+    - RNReanimated/common (= 4.3.1)
     - RNWorklets
     - Yoga
-  - RNReanimated/reanimated (4.2.2):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-hermes
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - RNReanimated/reanimated/apple (= 4.2.2)
-    - RNWorklets
-    - Yoga
-  - RNReanimated/reanimated/apple (4.2.2):
+  - RNReanimated/apple (4.3.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2320,7 +2383,31 @@ PODS:
     - ReactNativeDependencies
     - RNWorklets
     - Yoga
-  - RNScreens (4.24.0):
+  - RNReanimated/common (4.3.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets
+    - Yoga
+  - RNScreens (4.25.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2342,9 +2429,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNScreens/common (= 4.24.0)
+    - RNScreens/common (= 4.25.0)
     - Yoga
-  - RNScreens/common (4.24.0):
+  - RNScreens/common (4.25.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2367,7 +2454,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNSVG (15.15.4):
+  - RNSVG (15.15.5):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2388,9 +2475,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNSVG/common (= 15.15.4)
+    - RNSVG/common (= 15.15.5)
     - Yoga
-  - RNSVG/common (15.15.4):
+  - RNSVG/common (15.15.5):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2412,31 +2499,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNWorklets (0.7.4):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-hermes
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - RNWorklets/worklets (= 0.7.4)
-    - Yoga
-  - RNWorklets/worklets (0.7.4):
+  - RNWorklets (0.8.3):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2458,9 +2521,10 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNWorklets/worklets/apple (= 0.7.4)
+    - RNWorklets/apple (= 0.8.3)
+    - RNWorklets/common (= 0.8.3)
     - Yoga
-  - RNWorklets/worklets/apple (0.7.4):
+  - RNWorklets/apple (0.8.3):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2483,7 +2547,30 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - TSBackgroundFetch (4.0.6)
+  - RNWorklets/common (0.8.3):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - TSBackgroundFetch (4.1.1)
   - VisionCamera (4.7.3):
     - VisionCamera/Core (= 4.7.3)
     - VisionCamera/FrameProcessors (= 4.7.3)
@@ -2543,6 +2630,7 @@ DEPENDENCIES:
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-ble-plx (from `../node_modules/react-native-ble-plx`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
+  - react-native-keyboard-controller (from `../node_modules/react-native-keyboard-controller`)
   - "react-native-netinfo (from `../node_modules/@react-native-community/netinfo`)"
   - react-native-quick-base64 (from `../node_modules/react-native-quick-base64`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
@@ -2584,6 +2672,7 @@ DEPENDENCIES:
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - RNAppleHealthKit (from `../node_modules/react-native-health`)
   - RNBackgroundFetch (from `../node_modules/react-native-background-fetch`)
+  - RNBootSplash (from `../node_modules/react-native-bootsplash`)
   - "RNCClipboard (from `../node_modules/@react-native-clipboard/clipboard`)"
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
   - "RNFBMessaging (from `../node_modules/@react-native-firebase/messaging`)"
@@ -2706,6 +2795,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-ble-plx"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
+  react-native-keyboard-controller:
+    :path: "../node_modules/react-native-keyboard-controller"
   react-native-netinfo:
     :path: "../node_modules/@react-native-community/netinfo"
   react-native-quick-base64:
@@ -2788,6 +2879,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-health"
   RNBackgroundFetch:
     :path: "../node_modules/react-native-background-fetch"
+  RNBootSplash:
+    :path: "../node_modules/react-native-bootsplash"
   RNCClipboard:
     :path: "../node_modules/@react-native-clipboard/clipboard"
   RNFBApp:
@@ -2830,11 +2923,11 @@ SPEC CHECKSUMS:
   GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   hermes-engine: c0f64e960cae8ec5d652548fac52360810d26f06
-  MMKVCore: d078dce7d6586a888b2c2ef5343b6242678e3ee8
+  MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
   MultiplatformBleAdapter: b1fddd0d499b96b607e00f0faa8e60648343dc1d
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  NitroMmkv: de7cbc3e19320b6f42cd17241fb4f2b53f42c712
-  NitroModules: e9f827e79b3fac2d24e13d0e2c18e8d2848049e2
+  NitroMmkv: 72d41f3931a05ab8846c54b008d16703cb3f4948
+  NitroModules: 5345b1631c080fe6990603c08c238dba43f807a7
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RCTDeprecation: af44b104091a34482596cd9bd7e8d90c4e9b4bd7
   RCTRequired: bb77b070f75f53398ce43c0aaaa58337cebe2bf6
@@ -2874,10 +2967,11 @@ SPEC CHECKSUMS:
   React-microtasksnativemodule: 7ccd4c74006eec09a2df88ca31ba8b0c22c50a4d
   react-native-ble-plx: 2fdb9ea56ce356a9cbbccfcd5d9b4d670fda28da
   react-native-image-picker: 4123dc2b15a0b6fc2f027e6cf94ae5f48c9ae9b0
+  react-native-keyboard-controller: afb565d9bc6611e5a01f7c83b64df98974dd5d71
   react-native-netinfo: b71941e80630ec2db186ab770e1138e344208bd0
   react-native-quick-base64: 6568199bb2ac8e72ecdfdc73a230fbc5c1d3aac4
   react-native-safe-area-context: 90476586077446d5eab1d41ac3e767b016ac41d6
-  react-native-slider: 93063b5034e5c8ae011aeb2d96d57866191e6d6b
+  react-native-slider: 18a19901b3bda943d7dc74e79abe6acdd979c101
   react-native-worklets-core: bd9d07ee4cadabb8eef131d3cb45fce41c399040
   React-NativeModulesApple: 5ba0903927f6b8d335a091700e9fda143980f819
   React-networking: ad2727500e93943a43da70d3b162454af151469c
@@ -2914,18 +3008,19 @@ SPEC CHECKSUMS:
   ReactCommon: 07572bf9e687c8a52fbe4a3641e9e3a1a477c78e
   ReactNativeDependencies: 18826a56ee18e06e4f3d7ef6b4e19abf365df886
   RNAppleHealthKit: 86ef7ab70f762b802f5c5289372de360cca701f9
-  RNBackgroundFetch: a5c9975c270d869a666364ade366d92f7435dd74
+  RNBackgroundFetch: 1bb513c6b5b7988816dfc7453eae03ece90dde65
+  RNBootSplash: 337f670ed722fb7445b7d571154230780ed797d7
   RNCClipboard: fc456104340b49bdf812f68bd00e764abf360361
   RNFBApp: a600bd13799bb4d8268a1d9b37b032e6e3a3f2e2
   RNFBMessaging: d44795f92d33cc74a2f7f6458b56a5e0f96b7cf2
   RNGoogleSignin: 4590097b5c265e55e01bf2e824e0f5f5f66d2dfd
   RNKeychain: ce2cee63eab83888c3da68684da50b9c83c33461
   RNNotifee: 5e3b271e8ea7456a36eec994085543c9adca9168
-  RNReanimated: e8365b1438aba0119ea2656b56e70b9a1708b930
-  RNScreens: ca829379d20b0d1ff41a0b87bc37bdc50276cef5
-  RNSVG: 68baaafbd26ef58405193d56290537362fa8e6e4
-  RNWorklets: 30f9a363d681c776a5f9d74f6d21a6d1bb7bfe80
-  TSBackgroundFetch: 0afbeaae4e1132866e1d4b6e55265af26b5958ae
+  RNReanimated: c1928328da032d33b4737eeda8e50fc549cabe12
+  RNScreens: 5eaec5576efeacd4418fcf940524a637e3e50be3
+  RNSVG: 47ec2fc15b17426d7c22ccf14b9f4d8c1f88acaa
+  RNWorklets: 06ce05d69455cc14f5676c177050a39aa557d4d2
+  TSBackgroundFetch: 18918b6449a1e3f01eb0f5b44d6d79ce6160a5a5
   VisionCamera: 0044a94f7489f19e19d5938e97dfc36f4784af3c
   Yoga: 846fbe6f595136be802ad81d05688ff748839764
 

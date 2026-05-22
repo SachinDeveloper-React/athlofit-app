@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -17,16 +17,13 @@ import java.time.ZoneId
 /**
  * WidgetUpdateWorker
  *
- * Runs every 15 minutes via WorkManager — even when the app is fully closed
- * or in the recent apps tray.
+ * Runs every 15 minutes via WorkManager — even when the app is fully closed.
  *
- * Per run it:
- *  1. Reads today's steps → updates the home-screen widget
- *  2. Syncs TODAY's health data (steps from loginTimestamp or midnight → now)
- *  3. Syncs YESTERDAY's health data (full day 00:00 → 23:59:59, no login filter)
- *
- * Both syncs include an explicit `date` field so the backend upserts the
- * correct day's record regardless of when the worker fires.
+ * Steps are read via aggregate() — the Health Connect API designed for
+ * cumulative data. It automatically deduplicates overlapping records from
+ * multiple sources (Sweatcoin, Strava, etc.) and uses the most authoritative
+ * source (the device's native step counter). Works on every Android OEM
+ * without any package-name allowlist.
  */
 class WidgetUpdateWorker(
     private val context: Context,
@@ -52,12 +49,10 @@ class WidgetUpdateWorker(
             val goal  = prefs.getInt("goal", 10000)
             val token = prefs.getString("accessToken", null)
 
-            // ── 1. Update widget with today's steps (fast, no API needed) ─────
             val todaySteps = readTodaySteps(prefs)
             StepsWidgetProvider.updateWidget(context, todaySteps, goal)
             Log.d(TAG, "Widget updated: $todaySteps steps / $goal goal")
 
-            // ── 2 & 3. Sync today + yesterday to backend ──────────────────────
             if (!token.isNullOrBlank()) {
                 HealthSyncHelper.syncTodayAndYesterday(context, prefs, token)
             } else {
@@ -70,9 +65,6 @@ class WidgetUpdateWorker(
             Result.failure()
         }
     }
-
-    // ─── Read today's steps only (for widget display) ─────────────────────────
-    // Lightweight — only reads Steps, no other metrics.
 
     private suspend fun readTodaySteps(prefs: android.content.SharedPreferences): Int {
         return try {
@@ -88,12 +80,20 @@ class WidgetUpdateWorker(
                 if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
             } else startOfDay
 
-            client.readRecords(
-                ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(stepsStart, now))
-            ).records.sumOf { it.count }.toInt()
+            // aggregate() deduplicates across all sources automatically —
+            // no allowlist needed, works on every phone.
+            val result = client.aggregate(
+                AggregateRequest(
+                    metrics         = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(stepsStart, now),
+                )
+            )
+            val steps = result[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
+            Log.d(TAG, "Steps (aggregate): $steps")
+            steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")
-            prefs.getInt("steps", 0) // fall back to last known value
+            prefs.getInt("steps", 0)
         }
     }
 }

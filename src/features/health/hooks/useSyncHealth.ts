@@ -115,6 +115,11 @@ export function useSyncHealth() {
       // the freshly written data immediately — no stale bar for today.
       queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });
 
+      // Always invalidate streaks — the server may have incremented the streak
+      // counter even when no coins were awarded (e.g. goal met but coins already
+      // claimed today). Keeping this stale would show the wrong streak count.
+      queryClient.invalidateQueries({ queryKey: ['streaks'] });
+
       // Only invalidate gamification queries when the server actually awarded
       // something — avoids unnecessary refetches on every 5-min sync.
       const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;

@@ -43,6 +43,11 @@ function navigateWhenReady(data?: Record<string, string>): void {
   }, 100);
 }
 
+// ─── Module-level flag — BUG-052 ─────────────────────────────────────────────
+// Ensures getInitialNotification runs only once per cold start, not on every
+// component mount (AppShell re-mounts on auth state changes).
+let initialNotificationHandled = false;
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useNotificationSetup(): void {
@@ -107,20 +112,22 @@ export function useNotificationSetup(): void {
   }, [isAuthenticated, qc]);
 
   // ── 7. Quit-state: app opened by tapping notification ────────────────────
-  // getInitialNotification fires once when app cold-starts from a notification
-  // NOTE: Backend already persists notifications before sending FCM push,
-  // so we don't need to persist again here (was causing duplicates).
+  // BUG-052: getInitialNotification must run only ONCE per app cold-start.
+  // useNotificationSetup is called from AppShell which re-mounts on auth
+  // state changes (logout → login), so a component-level ref would re-run
+  // on every re-mount. A module-level flag persists for the full app lifecycle.
   useEffect(() => {
+    if (initialNotificationHandled) return;
+    initialNotificationHandled = true;
+
     const handleQuitState = async () => {
       const messaging = getMessaging();
       const initialFcm = await getInitialNotification(messaging);
 
       if (initialFcm) {
         if (isAuthenticated) {
-          // Just invalidate to refresh the notification list
           qc.invalidateQueries({ queryKey: NOTIF_KEY });
         }
-        // Use polling — navigator is not ready at this point
         navigateWhenReady(initialFcm.data as Record<string, string>);
       }
 

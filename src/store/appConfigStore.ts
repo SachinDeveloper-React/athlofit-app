@@ -55,3 +55,7 @@ export const useSupportContact = () =>
 /** Selector: feature flags */
 export const useFeatureFlags = () =>
   useAppConfigStore(s => s.config.features);
+
+/** Selector: hydration goal in ml */
+export const useHydrationGoalMl = () =>
+  useAppConfigStore(s => s.config.rewards?.hydrationGoalMl ?? 2000);

@@ -24,8 +24,12 @@ export const useAuthStore = create<AuthState>()(
         });
       },
       // ── Called on successful login / register ───────────────────────────────
-      setAuth: (user: User, tokens: AuthTokens) => {
-        tokenService.save(tokens);
+      // BUG-047: setAuth is async and awaits tokenService.save so tokens are
+      // persisted to Keychain before the store state is updated. Previously
+      // the save was fire-and-forget — a crash/background immediately after
+      // login could leave the user with store state but no persisted tokens.
+      setAuth: async (user: User, tokens: AuthTokens) => {
+        await tokenService.save(tokens);
         set(state => {
           state.user = user;
           state.accessToken = tokens.accessToken;
@@ -45,6 +49,7 @@ export const useAuthStore = create<AuthState>()(
           widgetService.startAutoUpdate();
           widgetService.scheduleEodSync();
           widgetService.saveAccessToken(tokens.accessToken); // for EodSyncWorker
+          widgetService.startStepNotification();             // live step count in notification
           // Persist user weight so native workers use the real value
           if (user.weight && user.weight > 0) {
             widgetService.saveUserWeight(user.weight);
@@ -96,6 +101,7 @@ export const useAuthStore = create<AuthState>()(
                 widgetService.startAutoUpdate();
                 widgetService.scheduleEodSync();
                 widgetService.saveAccessToken(tokens.accessToken);
+                widgetService.startStepNotification();
                 if (res.data?.weight && res.data.weight > 0) {
                   widgetService.saveUserWeight(res.data.weight);
                 }
@@ -105,6 +111,7 @@ export const useAuthStore = create<AuthState>()(
                 widgetService.startAutoUpdate();
                 widgetService.scheduleEodSync();
                 widgetService.saveAccessToken(tokens.accessToken);
+                widgetService.startStepNotification();
                 if (res.data?.weight && res.data.weight > 0) {
                   widgetService.saveUserWeight(res.data.weight);
                 }
@@ -162,17 +169,33 @@ export const useAuthStore = create<AuthState>()(
           widgetService.cancelEodSync();
           widgetService.clearLoginTimestamp();
           widgetService.clearAccessToken();
-          widgetService.clearUserWeight(); // remove mirrored weight
+          widgetService.clearUserWeight();     // remove mirrored weight
+          widgetService.stopStepNotification(); // dismiss live step notification
         });
 
         // Clear user-specific stores to prevent data leakage between accounts
-        const { useGamificationStore } = await import('../../health/store/gamificationStore');
-        const { useHydrationStore } = await import('../../health/store/hydrationStore');
-        const { useHealthDataStore } = await import('../../health/store/healthDataStore');
+        // BUG-048: Each dynamic import is individually wrapped in try/catch so
+        // a single import failure cannot leave the app in a broken half-reset state.
+        try {
+          const { useGamificationStore } = await import('../../health/store/gamificationStore');
+          useGamificationStore.getState().reset();
+        } catch (err) {
+          console.error('[logout] failed to reset gamificationStore:', err);
+        }
 
-        useGamificationStore.getState().reset();
-        useHydrationStore.getState().reset();
-        useHealthDataStore.getState().reset();
+        try {
+          const { useHydrationStore } = await import('../../health/store/hydrationStore');
+          useHydrationStore.getState().reset();
+        } catch (err) {
+          console.error('[logout] failed to reset hydrationStore:', err);
+        }
+
+        try {
+          const { useHealthDataStore } = await import('../../health/store/healthDataStore');
+          useHealthDataStore.getState().reset();
+        } catch (err) {
+          console.error('[logout] failed to reset healthDataStore:', err);
+        }
       },
 
       // ── Partial user update (e.g. after edit profile) ───────────────────────
