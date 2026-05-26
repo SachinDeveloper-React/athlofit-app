@@ -2,10 +2,11 @@ import { AppText, AppView } from '../../../../components';
 import { MEASURE_DURATION_S } from '../../service/heartRate.service';
 import { memo } from 'react';
 import { makeStyles } from '../../../../hooks/makeStyles';
+import { useTheme } from '../../../../hooks/useTheme';
 
 const RING = 180;
 
-const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+const useStyles = makeStyles(({ colors, spacing, fontSize, fontWeight }) => ({
   ringWrap: {
     width: RING,
     height: RING,
@@ -19,7 +20,7 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight })
     height: RING,
     borderRadius: RING / 2,
     borderWidth: 7,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: colors.border,
   },
   ringArc: {
     position: 'absolute' as const,
@@ -29,12 +30,13 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight })
     borderWidth: 7,
   },
   ringInner: { alignItems: 'center' as const },
-  ringNum: { fontSize: 48, fontWeight: fontWeight.bold, color: '#fff' },
-  ringSub: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.7)', marginTop: spacing[0.5] },
+  ringNum: { fontSize: 48, fontWeight: fontWeight.bold, color: colors.foreground },
+  ringSub: { fontSize: fontSize.sm, color: colors.mutedForeground, marginTop: spacing[0.5] },
 }));
 
 export const ProgressRing = memo(({ progress }: { progress: number }) => {
   const styles = useStyles();
+  const { colors } = useTheme();
   const remaining = Math.max(
     0,
     Math.round(MEASURE_DURATION_S * (1 - progress)),
@@ -47,10 +49,10 @@ export const ProgressRing = memo(({ progress }: { progress: number }) => {
         style={[
           styles.ringArc,
           {
-            borderTopColor: '#D85A30',
-            borderRightColor: p > 0.25 ? '#D85A30' : 'transparent',
-            borderBottomColor: p > 0.5 ? '#D85A30' : 'transparent',
-            borderLeftColor: p > 0.75 ? '#D85A30' : 'transparent',
+            borderTopColor: colors.primary,
+            borderRightColor: p > 0.25 ? colors.primary : 'transparent',
+            borderBottomColor: p > 0.5 ? colors.primary : 'transparent',
+            borderLeftColor: p > 0.75 ? colors.primary : 'transparent',
             transform: [{ rotate: '-90deg' }],
           },
         ]}

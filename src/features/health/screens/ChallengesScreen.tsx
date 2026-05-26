@@ -7,8 +7,9 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { AppText, Header, Screen } from '../../../components';
+import { AppText, Header, OfflineBanner, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
+import { useNetworkStore } from '../../../store/networkStore';
 import { withOpacity } from '../../../utils/withOpacity';
 import { useChallenges, useChallengeConfig } from '../hooks/useChallenges';
 import ChallengeCard from '../components/challenges/ChallengeCard';
@@ -22,17 +23,17 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
     flexDirection: 'row' as const,
     borderRadius: radius.xl,
     borderWidth: 1,
-    padding: spacing[3.5 as any] ?? 14,
+    padding: spacing[3] ?? 14,
     marginVertical: spacing[4],
   },
-  bannerItem: { flex: 1, alignItems: 'center' as const, gap: spacing[0.75 as any] ?? 3 },
+  bannerItem: { flex: 1, alignItems: 'center' as const, gap: spacing[1] ?? 3 },
   bannerDivider: { width: 1, marginVertical: spacing[1.5] },
   filterRow: { gap: spacing[2], paddingBottom: spacing[1], marginBottom: spacing[2] },
   typePill: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing[1.25 as any] ?? 5,
-    paddingHorizontal: spacing[3.5 as any] ?? 14,
+    gap: spacing[1.25] ?? 5,
+    paddingHorizontal: spacing[3] ?? 14,
     paddingVertical: spacing[2],
     borderRadius: radius['2xl'],
     borderWidth: 1,
@@ -50,13 +51,14 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   section: { marginBottom: spacing[6] },
   sectionTitle: { marginBottom: spacing[3] },
   list: { gap: spacing[2.5] },
-  loader: { paddingVertical: spacing[15 as any] ?? 60, alignItems: 'center' as const },
-  empty: { paddingVertical: spacing[15 as any] ?? 60, alignItems: 'center' as const, paddingHorizontal: spacing[8] },
+  loader: { paddingVertical: spacing[15] ?? 60, alignItems: 'center' as const },
+  empty: { paddingVertical: spacing[15] ?? 60, alignItems: 'center' as const, paddingHorizontal: spacing[8] },
 }));
 
 const ChallengesScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useStyles();
+  const isOnline = useNetworkStore(state => state.isOnline);
 
   const [typeFilter, setTypeFilter] = useState('all');
   const [catFilter,  setCatFilter]  = useState('all');
@@ -117,6 +119,8 @@ const ChallengesScreen: React.FC = () => {
         <RefreshControl refreshing={isPending} onRefresh={load} tintColor={colors.primary} />
       }
     >
+      <OfflineBanner />
+
       {/* ── Stats banner ── */}
       <Animated.View
         entering={FadeInDown.duration(400)}
@@ -199,6 +203,12 @@ const ChallengesScreen: React.FC = () => {
           <ActivityIndicator size="large" color={colors.primary} />
           <AppText variant="subhead" style={{ color: colors.mutedForeground, marginTop: 12 }}>
             Loading challenges…
+          </AppText>
+        </View>
+      ) : !isOnline && challenges.length === 0 ? (
+        <View style={styles.empty}>
+          <AppText variant="body" style={{ color: colors.mutedForeground, textAlign: 'center' }}>
+            Content unavailable offline. Will load when connected.
           </AppText>
         </View>
       ) : filtered.length === 0 ? (

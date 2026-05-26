@@ -126,7 +126,11 @@ const Screen = memo(
               stickyHeaderIndices={header ? [0] : []}
             >
               {/* Header — no horizontal padding, sticky when provided */}
-              {header ?? null}
+              {header ? (
+                <View collapsable={false} style={{ zIndex: 10 }}>
+                  {header}
+                </View>
+              ) : null}
 
               {/* Main content — padded */}
               <View style={[pad, contentContainerStyle]}>{children}</View>

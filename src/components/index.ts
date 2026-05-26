@@ -13,6 +13,7 @@ export { default as Header } from './Header';
 export { default as Input } from './Input';
 export { default as Loader } from './Loader';
 export { NotificationBell } from './NotificationBell';
+export { OfflineBanner } from './OfflineBanner';
 export { default as ProgressBar } from './ProgressBar';
 export { default as Screen } from './Screen';
 export { Icon } from './Icon';

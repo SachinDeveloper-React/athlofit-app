@@ -3,7 +3,6 @@ package com.athlofit
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.aggregate.AggregationResult
 import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -11,7 +10,6 @@ import androidx.health.connect.client.records.HydrationRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import org.json.JSONObject
@@ -100,19 +98,24 @@ object HealthSyncHelper {
             val monthFilter  = TimeRangeFilter.between(
                 date.minusDays(30).atStartOfDay(zone).toInstant(), endTime)
 
-            // ── Steps via aggregate() ─────────────────────────────────────────
-            // aggregate() is the correct API for cumulative data. It:
-            //  • Deduplicates overlapping records from multiple apps automatically
-            //  • Uses the most authoritative source (native step counter)
-            //  • Works on every Android OEM without any package-name allowlist
-            val stepsResult: AggregationResult = client.aggregate(
-                AggregateRequest(
-                    metrics      = setOf(StepsRecord.COUNT_TOTAL),
-                    timeRangeFilter = stepsFilter,
-                )
-            )
-            val steps = stepsResult[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
-            Log.d(TAG, "[$date] Steps (aggregate): $steps")
+            // ── Steps via readRecords() + single-source dedup ─────────────────
+            // aggregate() sums steps from ALL data origins — including third-party
+            // apps like Sweatcoin, Google Fit, Samsung Health that also write
+            // StepsRecord. This inflates the count vs the native step counter.
+            //
+            // Fix: read individual records, group by dataOrigin, and keep only
+            // the single source with the highest total. This matches what the
+            // native step counter app shows (one authoritative source).
+            val stepRecords = client.readRecords(
+                ReadRecordsRequest(StepsRecord::class, stepsFilter)
+            ).records
+
+            val stepsByOrigin = stepRecords
+                .groupBy { it.metadata.dataOrigin.packageName }
+                .mapValues { (_, records) -> records.sumOf { it.count } }
+
+            val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+            Log.d(TAG, "[$date] Steps by origin: $stepsByOrigin → using $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()

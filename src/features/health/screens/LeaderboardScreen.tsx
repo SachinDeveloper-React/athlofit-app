@@ -1,7 +1,8 @@
 import React from 'react';
 import { RefreshControl } from 'react-native';
-import { AppText, AppView, Header, Screen } from '../../../components';
+import { AppText, AppView, Header, OfflineBanner, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
+import { useNetworkStore } from '../../../store/networkStore';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import Avatar from '../components/leaderboard/Avatar';
 import Podium from '../components/leaderboard/Podium';
@@ -22,6 +23,7 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
 const LeaderboardScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useStyles();
+  const isOnline = useNetworkStore(state => state.isOnline);
   const { entries, myEntry, isLoading, isRefetching, refetch } = useLeaderboard();
 
   const below3 = entries.slice(3);
@@ -35,6 +37,7 @@ const LeaderboardScreen: React.FC = () => {
       }
       header={<Header title="Leaderboard" showBack backLabel="" />}
     >
+      <OfflineBanner />
       <AppView style={styles.container}>
         {/* Hero banner */}
         <AppView style={[styles.heroCard, { backgroundColor: colors.primary + '14', borderColor: colors.primary + '30' }]}>
@@ -66,7 +69,13 @@ const LeaderboardScreen: React.FC = () => {
           </AppView>
         )}
 
-        {entries.length === 0 && !isLoading && (
+        {!isOnline && entries.length === 0 && !isLoading ? (
+          <AppView center style={{ marginTop: 60, gap: 8 }}>
+            <AppText variant="body" align="center" style={{ opacity: 0.55 }}>
+              Content unavailable offline. Will load when connected.
+            </AppText>
+          </AppView>
+        ) : entries.length === 0 && !isLoading && (
           <AppView center style={{ marginTop: 60, gap: 8 }}>
             <AppText style={{ fontSize: 48 }}>🏆</AppText>
             <AppText variant="title3" align="center">No data yet</AppText>

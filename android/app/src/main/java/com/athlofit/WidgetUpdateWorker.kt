@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -80,16 +80,19 @@ class WidgetUpdateWorker(
                 if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
             } else startOfDay
 
-            // aggregate() deduplicates across all sources automatically —
-            // no allowlist needed, works on every phone.
-            val result = client.aggregate(
-                AggregateRequest(
-                    metrics         = setOf(StepsRecord.COUNT_TOTAL),
-                    timeRangeFilter = TimeRangeFilter.between(stepsStart, now),
-                )
-            )
-            val steps = result[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
-            Log.d(TAG, "Steps (aggregate): $steps")
+            // readRecords + single-source dedup — same logic as HealthSyncHelper.
+            // aggregate() sums steps from ALL origins (Sweatcoin, Google Fit, etc.)
+            // causing inflation. We pick the single highest-count source instead.
+            val stepRecords = client.readRecords(
+                ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(stepsStart, now))
+            ).records
+
+            val stepsByOrigin = stepRecords
+                .groupBy { it.metadata.dataOrigin.packageName }
+                .mapValues { (_, records) -> records.sumOf { it.count } }
+
+            val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+            Log.d(TAG, "Steps by origin: $stepsByOrigin → using $steps")
             steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")

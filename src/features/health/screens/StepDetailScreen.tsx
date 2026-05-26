@@ -29,6 +29,7 @@ import { useDayDetail } from '../hooks/useDayDetail';
 import { getStepColor } from '../utils/stepColorUtils';
 import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
+import { useNetworkStore } from '../../../store/networkStore';
 
 type Props = NativeStackScreenProps<HealthStackParamList, typeof HealthRoutes.STEP_DETAIL>;
 
@@ -248,6 +249,7 @@ const StepDetailScreen = memo(({ route }: Props) => {
   const { colors, isDark } = useTheme();
   const s = useStyles();
   const { data, isLoading } = useDayDetail(date);
+  const isOnline = useNetworkStore(state => state.isOnline);
 
   const { barColor } = useMemo(
     () => getStepColor(data?.steps ?? 0, data?.dailyGoal ?? 10000, colors.muted, false),
@@ -258,7 +260,7 @@ const StepDetailScreen = memo(({ route }: Props) => {
   const headerSubtitle = formatShortDate(date);
 
   // ── Loading ────────────────────────────────────────────────────────────────
-  if (isLoading) {
+  if (isLoading && isOnline) {
     return (
       <Screen
         scroll={false}

@@ -31,13 +31,15 @@
     android:name="android.hardware.camera.autofocus"
     android:required="false" />
 
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
   <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
   <uses-permission android:name="android.permission.health.READ_STEPS" />
-  <!-- No WRITE_STEPS — writing our own step records would inflate aggregate() counts -->
+  <uses-permission android:name="android.permission.health.WRITE_STEPS" />
 
   <uses-permission android:name="android.permission.health.READ_HYDRATION" />
   <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
@@ -170,6 +172,17 @@
     <service
       android:name=".StepNotificationService"
       android:foregroundServiceType="dataSync"
+      android:exported="false" />
+
+    <service
+      android:name=".StepCounterService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="health" />
+
+    <receiver
+      android:name=".MidnightResetReceiver"
+      android:enabled="true"
       android:exported="false" />
   </application>
 </manifest>

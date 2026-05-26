@@ -49,8 +49,9 @@ export const deriveFromSteps = (
 const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
   // ── Activity ──────────────────────────────────────────────────────────────
   { accessType: 'read',  recordType: 'Steps' },
-  // NOTE: We do NOT write Steps — writing our own step records would cause
-  // them to appear as a second source in aggregate(), inflating the count.
+  { accessType: 'write', recordType: 'Steps' },
+  // Write permission needed for native step counter on pre-Android 14 devices
+  // to insert hardware sensor steps into Health Connect.
 
   // Derived metrics — write-only (we compute from steps, never read back)
   { accessType: 'write', recordType: 'ActiveCaloriesBurned' },
@@ -242,6 +243,53 @@ export const writeDerivedActivity = async (
   ]);
 };
 
+// ─── Step deduplication ───────────────────────────────────────────────────────
+//
+// Health Connect aggregate() sums steps from ALL data origins — including
+// third-party apps like Sweatcoin, Google Fit, Samsung Health, etc. that also
+// write StepsRecord. This causes inflated counts vs the native step counter.
+//
+// Fix: read individual StepsRecord entries, group by dataOrigin, and keep only
+// the single source with the highest step count for the window. This mirrors
+// what the native step counter app and Money Walk do — they read from one
+// authoritative source (the device's hardware pedometer), not the aggregate.
+//
+export async function readStepsDeduped(
+  startTime: string,
+  endTime: string,
+): Promise<number> {
+  try {
+    const { records } = await readWithRetry(() =>
+      readRecords('Steps', {
+        timeRangeFilter: { operator: 'between' as const, startTime, endTime },
+      }),
+    );
+
+    if (!records.length) return 0;
+
+    // Group step totals by data origin (package name)
+    const totals: Record<string, number> = {};
+    for (const r of records) {
+      const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+      totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
+    }
+
+    console.log('[HealthConnect] Steps by origin:', totals);
+
+    // Return the highest single-source total — this is what the native
+    // step counter app shows (it reads from one source, not the sum).
+    return Math.max(...Object.values(totals));
+  } catch (e) {
+    console.warn('[HealthConnect] readStepsDeduped failed, falling back to aggregate:', e);
+    // Fallback to aggregate if readRecords fails
+    const result = await aggregateRecord({
+      recordType: 'Steps',
+      timeRangeFilter: { operator: 'between' as const, startTime, endTime },
+    }).catch(() => ({ COUNT_TOTAL: 0 }));
+    return (result as any).COUNT_TOTAL ?? 0;
+  }
+}
+
 // ─── Main fetch ───────────────────────────────────────────────────────────────
 
 export const fetchAllHealthConnectData = async (
@@ -261,21 +309,16 @@ export const fetchAllHealthConnectData = async (
       glucoseRecords,
       hydrationRecord,
     ] = await Promise.all([
-      // Steps via aggregateRecord() — the correct API for cumulative data.
-      // Automatically deduplicates overlapping records from multiple apps
-      // (Sweatcoin, Strava, etc.) and uses the most authoritative source
-      // (the device's native step counter). Works on every Android OEM.
-      readWithRetry(() => aggregateRecord({
-        recordType: 'Steps',
-        timeRangeFilter: {
-          operator: 'between' as const,
-          startTime: stepsTimeRange.startTime,
-          endTime:   stepsTimeRange.endTime,
-        },
-      })).catch(e => {
-        console.warn('Steps aggregate failed:', e);
-        return { COUNT_TOTAL: 0 };
-      }),
+      // Steps via readStepsDeduped() — reads individual records and picks the
+      // single highest-count source. This prevents inflation from third-party
+      // apps (Sweatcoin, Google Fit, Samsung Health) that also write Steps to
+      // Health Connect. aggregate() sums all sources and over-counts.
+      readStepsDeduped(stepsTimeRange.startTime, stepsTimeRange.endTime)
+        .then(count => ({ COUNT_TOTAL: count }))
+        .catch(e => {
+          console.warn('Steps read failed:', e);
+          return { COUNT_TOTAL: 0 };
+        }),
 
       readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: todayRange() })).catch(e => {
         console.warn('HeartRate read failed:', e);
@@ -308,6 +351,18 @@ export const fetchAllHealthConnectData = async (
       }),
     ]);
 
+
+  //    readRecords('Steps', {
+  //   timeRangeFilter: {
+  //     operator: 'between',
+  //        startTime: stepsTimeRange.startTime,
+  //         endTime:   stepsTimeRange.endTime,
+  //   },
+  // }).then(({ records }) => {
+  //   console.log('Retrieved records: ', JSON.stringify({ records }, null, 2)); // Retrieved records:  {"records":[{"startTime":"2023-01-09T12:00:00.405Z","endTime":"2023-01-09T23:53:15.405Z","energy":{"inCalories":15000000,"inJoules":62760000.00989097,"inKilojoules":62760.00000989097,"inKilocalories":15000},"metadata":{"id":"239a8cfd-990d-42fc-bffc-c494b829e8e1","lastModifiedTime":"2023-01-17T21:06:23.335Z","clientRecordId":null,"dataOrigin":"com.healthconnectexample","clientRecordVersion":0,"device":0}}]}
+  // });
+
+  
     // ── Steps ─────────────────────────────────────────────────────────────
     const steps: number = (stepsResult as any).COUNT_TOTAL ?? 0;
     console.log(`[HealthConnect] Steps (aggregate): ${steps} since ${stepsTimeRange.startTime}`);

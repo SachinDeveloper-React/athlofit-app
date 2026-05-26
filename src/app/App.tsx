@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'react-native';
 import BootSplash from 'react-native-bootsplash';
 import { NavigationContainer } from '@react-navigation/native';
@@ -25,6 +25,9 @@ import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { linking } from '../navigation/linkingConfig';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { registerBackgroundSync, stopBackgroundSync } from '../features/health/service/backgroundSync.service';
+import { connectivityMonitor } from '../services/connectivityMonitor';
+import { syncEngine } from '../services/syncEngine';
+import { stepService } from '../services/stepService';
 
 enableScreens(true);
 
@@ -63,6 +66,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 // AppShell renders inside QueryClientProvider so hooks like useQueryClient work.
 const AppShell: React.FC = () => {
   const { isDark } = useTheme();
+  const [isConnectivityReady, setIsConnectivityReady] = useState(false);
   // BUG-043: Stabilise with useCallback so the hydration useEffect dependency
   // array is accurate and the eslint suppression can be removed.
   const checkAndResetIfNewDay = useHydrationStore(
@@ -70,10 +74,28 @@ const AppShell: React.FC = () => {
   );
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
 
+  // ── Initialize ConnectivityMonitor before navigation renders ──────────────
+  // Sets initial offline/online state and wires SyncEngine Zustand subscription
+  // so that offline→online transitions trigger queue drain.
+  useEffect(() => {
+    connectivityMonitor.initialize().then(() => {
+      setIsConnectivityReady(true);
+    }).catch(() => {
+      // Fail-safe: allow app to render even if initialization fails.
+      // ConnectivityMonitor defaults to offline on error.
+      setIsConnectivityReady(true);
+    });
+
+    return () => {
+      connectivityMonitor.destroy();
+    };
+  }, []);
+
   // ── Hide boot splash on mount ─────────────────────────────────────────────
   useEffect(() => {
+    if (!isConnectivityReady) { return; }
     BootSplash.hide({ fade: true }).catch(() => {});
-  }, []);
+  }, [isConnectivityReady]);
 
   // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
   useNotificationSetup();
@@ -82,6 +104,8 @@ const AppShell: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) {
       registerBackgroundSync().catch(() => {});
+      // Initialize native step counter (requests permission on Android 10+ and starts service)
+      stepService.initialize().catch(() => {});
     } else {
       stopBackgroundSync().catch(() => {});
     }
@@ -122,6 +146,12 @@ const AppShell: React.FC = () => {
     ).catch(() => { });
   }, [isDark]);
 
+  // Gate rendering until ConnectivityMonitor has set initial state.
+  // This ensures screens mount with the correct offline/online state (Req 1.4, 1.5).
+  if (!isConnectivityReady) {
+    return null;
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar
@@ -141,19 +171,24 @@ const AppShell: React.FC = () => {
 const App: React.FC = () => {
   // BUG-042: QueryClient created inside App via useState so it is recreated
   // on Fast Refresh and not shared across test evaluations.
-  const [queryClient] = React.useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: 2,
-        staleTime: 1000 * 60 * 5, // 5 minutes
-        gcTime: 1000 * 60 * 10, // 10 minutes
-        refetchOnWindowFocus: false,
+  const [queryClient] = React.useState(() => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: 2,
+          staleTime: 1000 * 60 * 5, // 5 minutes
+          gcTime: 1000 * 60 * 10, // 10 minutes
+          refetchOnWindowFocus: false,
+        },
+        mutations: {
+          retry: 1,
+        },
       },
-      mutations: {
-        retry: 1,
-      },
-    },
-  }));
+    });
+    // Wire QueryClient into SyncEngine for cache invalidation after drain
+    syncEngine.setQueryClient(client);
+    return client;
+  });
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -30,6 +30,7 @@ export const NotificationRow = memo(
       if (item.type === 'CHALLENGE') return colors.notificationChallenge;
       if (item.type === 'COIN')      return colors.notificationCoin;
       if (item.type === 'PRODUCT')   return colors.notificationProduct;
+      if (item.type === 'SYSTEM')   return colors.warning;
       return colors.primary;
     }, [item.type, colors]);
 
@@ -38,14 +39,15 @@ export const NotificationRow = memo(
 
     return (
       <Pressable onPress={onRowPress}>
+         
         <Card
           style={[
             s.rowCard,
             style,
-            !item.read && { borderLeftWidth: 3, borderLeftColor: accent },
+          
           ]}
         >
-          {/* Unread dot */}
+      
           {!item.read && (
             <View style={[styles.unreadDot, { backgroundColor: accent }]} />
           )}

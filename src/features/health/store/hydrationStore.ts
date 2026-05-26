@@ -9,6 +9,8 @@ import {
 import { HistoryEntry, HydrationStore } from '../types/hydration.type';
 import { hydrationService } from '../service/hydration.service';
 import { mmkvStorage } from '../../../store';
+import { useNetworkStore } from '../../../store/networkStore';
+import { offlineQueue } from '../../../services/offlineQueue';
 
 const sumConsumed = (entries: HistoryEntry[]): number => {
   const todayStr = new Date().toDateString();
@@ -103,6 +105,22 @@ export const useHydrationStore = create<HydrationStore>()(
           consumed: sumConsumed(optimisticHistory),
           error: null,
         });
+
+        // Offline path: enqueue for later sync instead of calling server
+        const { isOnline } = useNetworkStore.getState();
+        if (!isOnline) {
+          offlineQueue.enqueue({
+            endpoint: 'health/sync',
+            method: 'POST',
+            payload: {
+              hydration: amount,
+              date: new Date().toISOString().slice(0, 10),
+            },
+            timestamp: new Date().toISOString(),
+            actionType: 'hydration_sync',
+          });
+          return; // Keep optimistic state, no rollback needed
+        }
 
         // Persist to server
         try {

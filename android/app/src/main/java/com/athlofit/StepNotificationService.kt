@@ -14,7 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +47,7 @@ class StepNotificationService : Service() {
         const val CHANNEL_ID = "step_counter_live"
         const val NOTIF_ID = 1001
 
-        private const val REFRESH_INTERVAL_MS = 60_000L
+        private const val REFRESH_INTERVAL_MS = 60_000L  // refresh every 10 s for near-real-time steps
         private const val PREFS_NAME = "StepsWidgetPrefs"
         private const val KEY_GOAL   = "goal"
 
@@ -112,27 +112,61 @@ class StepNotificationService : Service() {
     // ── Step fetch via aggregate() ────────────────────────────────────────────
 
     private fun fetchAndRefresh() {
+        // If the native sensor is active, read steps directly from StepCounterPrefs
+        // instead of querying Health Connect. This ensures correct data is shown
+        // even if this service is started on a pre-API 34 device.
+        if (StepSourceResolver.resolve(this) == StepSourceResolver.Source.NATIVE_SENSOR) {
+            val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+            val steps = stepPrefs.getInt("dailySteps", 0)
+            val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val goal = goalPrefs.getInt(KEY_GOAL, 10000)
+            if (steps != lastSteps) {
+                lastSteps = steps
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildNotification(steps, goal))
+                Log.d(TAG, "Notification updated (native sensor): $steps steps")
+            }
+            return
+        }
+
         serviceScope.launch {
             try {
                 val prefs  = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val goal   = prefs.getInt(KEY_GOAL, 10000)
                 val zone   = ZoneId.systemDefault()
                 val now    = Instant.now()
-
-                // Always read from midnight today — no loginTimestamp filter here.
-                // The login filter is only needed for backend sync (to avoid
-                // crediting pre-install steps as new). For display we always
-                // want the full day's count.
                 val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
 
+                // Apply the same loginTimestamp filter used by the app UI and
+                // WidgetUpdateWorker. On the first login day the notification
+                // must show steps only from login time onward — not the full
+                // day — so it stays consistent with what the app displays.
+                val loginTs = prefs.getLong("loginTimestamp", 0L)
+                val stepsStart = if (loginTs > 0L) {
+                    val loginInstant = Instant.ofEpochMilli(loginTs)
+                    // Use loginTimestamp only if it falls within today.
+                    // On subsequent days loginTimestamp < midnight, so midnight wins.
+                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
+                } else startOfDay
+
                 val client = HealthConnectClient.getOrCreate(this@StepNotificationService)
-                val result = client.aggregate(
-                    AggregateRequest(
-                        metrics         = setOf(StepsRecord.COUNT_TOTAL),
-                        timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+
+                // readRecords + single-source dedup — same logic as HealthSyncHelper.
+                // aggregate() sums steps from ALL origins (Sweatcoin, Google Fit, etc.)
+                // causing inflation. We pick the single highest-count source instead.
+                val stepRecords = client.readRecords(
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        TimeRangeFilter.between(stepsStart, now),
                     )
-                )
-                val todaySteps = result[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
+                ).records
+
+                val stepsByOrigin = stepRecords
+                    .groupBy { it.metadata.dataOrigin.packageName }
+                    .mapValues { (_, records) -> records.sumOf { it.count } }
+
+                val todaySteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+                Log.d(TAG, "Steps by origin: $stepsByOrigin → using $todaySteps")
 
                 // Health Connect batches step data — it may not have flushed
                 // today's steps yet (common early in the morning or after reboot).

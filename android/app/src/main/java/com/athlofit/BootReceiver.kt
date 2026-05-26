@@ -21,6 +21,12 @@ class BootReceiver : BroadcastReceiver() {
             EodSyncScheduler.schedule(context)
             // Restart the live step-count foreground notification
             StepNotificationService.start(context)
+
+            // Start native step counter service if device uses the hardware sensor
+            if (StepSourceResolver.resolve(context) == StepSourceResolver.Source.NATIVE_SENSOR) {
+                Log.d("BootReceiver", "Native sensor source — starting StepCounterService")
+                StepCounterService.start(context)
+            }
         }
     }
 }

@@ -26,6 +26,7 @@ export const HealthRoutes = {
   BLOOD_PRESSURE: 'BloodPressureScreen',
   HYDRATION: 'HydrationScreen',
   EDIT_STEPS_GOAL: 'EditStepsGoalScreen',
+  EDIT_HYDRATION_GOAL: 'EditHydrationGoalScreen',
   ANALYTICS: 'HealthAnalyticsScreen',
   STREAK: 'StreakScreen',
   HEALTH_ANALYTICS: 'HealthAnalyticsScreen',

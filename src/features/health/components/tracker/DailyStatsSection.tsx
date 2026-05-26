@@ -126,7 +126,7 @@ const DailyStatsSection = memo(
           <MetricRowPair key={i} row={row} />
         ))}
 
-        <HydrationCard value={stats.hydration} max={5000} onUpdate={onUpdate} />
+        <HydrationCard value={stats.hydration} onUpdate={onUpdate} />
 
         <AppView style={{ flexDirection: 'row', gap: 18 }}>
           <MetricCard

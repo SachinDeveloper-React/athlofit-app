@@ -33,7 +33,7 @@ const BmiHistoryChart = memo(({ data }: Props) => {
         <LineChart
           data={{ labels: data.map((_, i) => `${i + 1}`), datasets: [{ data, strokeWidth: 2 }] }}
           width={320}
-          height={140}
+          height={160}
           chartConfig={{
             backgroundColor: 'transparent',
             backgroundGradientFrom: colors.card,

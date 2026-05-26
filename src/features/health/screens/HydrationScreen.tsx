@@ -1,6 +1,6 @@
 // ─── HydrationScreen ──────────────────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
@@ -15,6 +15,8 @@ import { HistoryList } from '../components/hydration/HistoryList';
 import { ScheduleModal } from '../components/hydration/ScheduleModal';
 import { useHydrationScheduleStore } from '../store/hydrationScheduleStore';
 import { makeStyles } from '../../../hooks/makeStyles';
+import { navigate } from '../../../navigation/navigationRef';
+import { useNetworkStore } from '../../../store/networkStore';
 
 const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
   bgLayer2: {
@@ -92,6 +94,11 @@ const HydrationScreen = (_props: Props) => {
   const scheduledCount = useHydrationScheduleStore(
     s => s.scheduledTimes.length,
   );
+  const isOnline = useNetworkStore(state => state.isOnline);
+
+  const handleEditGoal = useCallback(() => {
+    navigate('HealthStack', { screen: 'EditHydrationGoalScreen' });
+  }, []);
   return (
     <Screen
       scroll
@@ -137,14 +144,14 @@ const HydrationScreen = (_props: Props) => {
         <AppText style={[styles.statusMsg, { color: colors.primary }]}>
           {statusMessage}
         </AppText>
-        {isSyncing && (
+        {isSyncing && isOnline && (
           <AppText
             style={[styles.syncingText, { color: colors.mutedForeground }]}
           >
             ↻ Syncing health data…
           </AppText>
         )}
-        {error && (
+        {error && isOnline && (
           <AppText style={[styles.errorText, { color: colors.destructive }]}>
             ⚠ {error}
           </AppText>
@@ -167,6 +174,16 @@ const HydrationScreen = (_props: Props) => {
           />
         </View>
       </StatsCard>
+
+      {/* Edit goal */}
+      <TouchableOpacity onPress={handleEditGoal} activeOpacity={0.7}>
+        <AppText
+          variant="caption1"
+          style={{ color: colors.primary, textAlign: 'center', marginTop: 8, fontWeight: '600' }}
+        >
+          ✏️ Edit Daily Goal ({dailyGoal}ml)
+        </AppText>
+      </TouchableOpacity>
 
       {/* Quick add + reset */}
       <QuickAddButtons onAdd={addWater} onReset={resetDay} />

@@ -33,7 +33,7 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   sliderLabelWrap: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: spacing[1] },
   slider: { width: '100%' as const, height: 36 },
   sliderRange: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginTop: -4 },
-  divider: { height: 0.5, marginVertical: spacing[3.5 as any] ?? 14 },
+  divider: { height: 0.5, marginVertical: spacing[4] ?? 14 },
   idealCard: { borderRadius: radius.xl, borderWidth: 0.5, padding: spacing[4] },
   idealRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[3] },
   idealIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center' as const, justifyContent: 'center' as const },
@@ -45,12 +45,23 @@ const BmiCalculatorScreen = memo(() => {
 
   const { weight: sdkWeight, height: sdkHeight, isLoading: sdkLoading, permissionDenied, error: sdkError, refresh: refreshSdk } = useHealthMetrics();
 
-  const [weight, setWeight] = useState(70);
-  const [height, setHeight] = useState(1.70);
+  // Get user's stored weight/height from profile as defaults
+  const userWeight = useAuthStore(s => s.user?.weight);
+  const userHeight = useAuthStore(s => s.user?.height); // stored in cm
 
+  const [weight, setWeight] = useState(() => {
+    if (userWeight && userWeight > 0) return parseFloat(userWeight.toFixed(1));
+    return 70;
+  });
+  const [height, setHeight] = useState(() => {
+    if (userHeight && userHeight > 0) return parseFloat((userHeight / 100).toFixed(2)); // cm → m
+    return 1.70;
+  });
+
+  // Override with Health Connect SDK data if available (more recent)
   useEffect(() => {
-    if (sdkWeight) setWeight(parseFloat(sdkWeight.toFixed(1)));
-    if (sdkHeight) setHeight(parseFloat(sdkHeight.toFixed(2)));
+    if (sdkWeight && sdkWeight > 0) setWeight(parseFloat(sdkWeight.toFixed(1)));
+    if (sdkHeight && sdkHeight > 0) setHeight(parseFloat(sdkHeight.toFixed(2)));
   }, [sdkWeight, sdkHeight]);
 
   const bmi      = useMemo(() => calcBmi(weight, height), [weight, height]);
@@ -85,7 +96,7 @@ const BmiCalculatorScreen = memo(() => {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
           {/* ── Health SDK panel ── */}
-          <Animated.View
+          {/* <Animated.View
             entering={FadeInDown.duration(400)}
             style={[styles.sdkCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
@@ -116,7 +127,7 @@ const BmiCalculatorScreen = memo(() => {
                   : <Icon name="RefreshCw" size={16} color={colors.primary} />}
               </TouchableOpacity>
             </AppView>
-          </Animated.View>
+          </Animated.View> */}
 
           {/* ── Manual sliders ── */}
           <Animated.View

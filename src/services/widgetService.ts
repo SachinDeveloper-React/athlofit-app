@@ -1,5 +1,6 @@
 // src/services/widgetService.ts
 import { NativeModules, Platform } from 'react-native';
+import { stepService } from './stepService';
 
 interface StepsWidgetNativeModule {
   updateWidget: (steps: number, goal: number) => Promise<boolean>;
@@ -226,9 +227,17 @@ class WidgetService {
    * Start the persistent step-count foreground notification.
    * Shows live today's steps in the Android notification shade.
    * Call this on login (after POST_NOTIFICATIONS permission is granted).
+   *
+   * When the native step counter is active, the StepCounterService already
+   * manages its own foreground notification, so we skip the legacy
+   * StepNotificationService to avoid duplicate notifications.
    */
   async startStepNotification(): Promise<boolean> {
     if (!this.module) return false;
+    if (stepService.getSource() === 'native_sensor') {
+      console.log('[WidgetService] Skipping startStepNotification — native step counter manages its own notification');
+      return true;
+    }
     try {
       await this.module.startStepNotification();
       console.log('[WidgetService] Step notification started');
@@ -242,9 +251,16 @@ class WidgetService {
   /**
    * Stop the persistent step-count foreground notification.
    * Call this on logout.
+   *
+   * When the native step counter is active, the StepCounterService manages
+   * its own lifecycle, so we skip the legacy StepNotificationService stop call.
    */
   async stopStepNotification(): Promise<boolean> {
     if (!this.module) return false;
+    if (stepService.getSource() === 'native_sensor') {
+      console.log('[WidgetService] Skipping stopStepNotification — native step counter manages its own notification');
+      return true;
+    }
     try {
       await this.module.stopStepNotification();
       console.log('[WidgetService] Step notification stopped');

@@ -16,7 +16,7 @@ import { makeStyles } from '../../../../hooks/makeStyles';
 const FITNESS_CRITERIA = new Set(['STEPS', 'CALORIES', 'ACTIVE_MINUTES', 'DISTANCE', 'HYDRATION']);
 
 const useStyles = makeStyles(({ colors, spacing, radius }) => ({
-  card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing[3.5 as any] ?? 14 },
+  card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing[4] ?? 14 },
   header: { flexDirection: 'row' as const, alignItems: 'center' as const, marginBottom: spacing[2.5] },
   headerIcon: { width: 28, height: 28, borderRadius: radius.md, alignItems: 'center' as const, justifyContent: 'center' as const },
   overallBar: { height: 4, borderRadius: spacing[0.5], overflow: 'hidden' as const, marginBottom: spacing[3] },
@@ -96,9 +96,10 @@ const ChallengeTrackerCard = memo(() => {
         </AppText>
         <Pressable
           onPress={() => navigate(RootRoutes.HEALTH_NAVIGATOR, { screen: HealthRoutes.CHALLENGES } as any)}
-          style={{ marginLeft: 10 }}
+          style={{ marginLeft: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}
         >
-          <AppText variant="caption1" style={{ color: colors.primary }}>All →</AppText>
+          <AppText variant="caption1" style={{ color: colors.primary }}>All</AppText>
+          <Icon name="ChevronRight" size={14} color={colors.primary} />
         </Pressable>
       </View>
 

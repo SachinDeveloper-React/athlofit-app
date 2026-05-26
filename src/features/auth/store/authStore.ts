@@ -62,6 +62,23 @@ export const useAuthStore = create<AuthState>()(
           syncProfileToHealthPlatform({ weight: user.weight, height: user.height });
         });
 
+        // Auto-calculate and save BMI if user has both height and weight
+        if (user.weight && user.weight > 0 && user.height && user.height > 0) {
+          import('../../health/service/bmi.service').then(({ bmiService }) => {
+            bmiService.getHistory(1).then(history => {
+              const heightM = user.height / 100;
+              // Skip if the latest record already has the same weight and height
+              if (history.length > 0) {
+                const last = history[0];
+                if (last.weight === user.weight && Math.abs(last.height - heightM) < 0.01) {
+                  return; // No change — skip
+                }
+              }
+              bmiService.save({ weight: user.weight, height: heightM }).catch(() => {});
+            }).catch(() => {});
+          });
+        }
+
         // Register FCM token now that we have a session
         import('../../../services/fcmService').then(({ registerFcmToken }) =>
           registerFcmToken(),
@@ -122,6 +139,23 @@ export const useAuthStore = create<AuthState>()(
             if (res.data?.weight || res.data?.height) {
               import('../../health/service/profileSync.service').then(({ syncProfileToHealthPlatform }) => {
                 syncProfileToHealthPlatform({ weight: res.data?.weight, height: res.data?.height });
+              });
+            }
+
+            // Auto-calculate and save BMI if user has both height and weight
+            if (res.data?.weight && res.data.weight > 0 && res.data?.height && res.data.height > 0) {
+              import('../../health/service/bmi.service').then(({ bmiService }) => {
+                bmiService.getHistory(1).then(history => {
+                  const heightM = res.data.height / 100;
+                  // Skip if the latest record already has the same weight and height
+                  if (history.length > 0) {
+                    const last = history[0];
+                    if (last.weight === res.data.weight && Math.abs(last.height - heightM) < 0.01) {
+                      return; // No change — skip
+                    }
+                  }
+                  bmiService.save({ weight: res.data.weight, height: heightM }).catch(() => {});
+                }).catch(() => {});
               });
             }
           });

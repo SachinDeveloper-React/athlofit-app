@@ -42,6 +42,7 @@ export type HealthStackParamList = {
   [HealthRoutes.BLOOD_PRESSURE]: undefined;
   [HealthRoutes.HYDRATION]: undefined;
   [HealthRoutes.EDIT_STEPS_GOAL]: undefined;
+  [HealthRoutes.EDIT_HYDRATION_GOAL]: undefined;
   [HealthRoutes.ANALYTICS]: undefined;
   [HealthRoutes.STREAK]: undefined;
   [HealthRoutes.COINS]: undefined;

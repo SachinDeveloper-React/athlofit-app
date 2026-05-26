@@ -2,7 +2,7 @@ import { writeHeartRateHC } from './healthConnect.service';
 import { writeHeartRateHK } from './healthkit.service';
 import type { HealthPlatform } from '../hooks/useHealth';
 
-export const MEASURE_DURATION_S = 30;
+export const MEASURE_DURATION_S = 15;
 export const VALID_BPM_MIN = 40;
 export const VALID_BPM_MAX = 200;
 

@@ -16,7 +16,6 @@ import { useCoinData, useClaimReward } from '../../hooks/useGamification';
 
 type Props = {
   value?: number;
-  max?: number;
   onUpdate?: () => void;
 };
 
@@ -26,14 +25,15 @@ const CIRCLE_SIZE = SCREEN_WIDTH * 0.3;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const HydrationCard = memo(({ value = 1220, max = 2500, onUpdate }: Props) => {
-  const { consumed, addWater } = useHydration();
+export const HydrationCard = memo(({ value = 0, onUpdate }: Props) => {
+  const { consumed, dailyGoal, addWater } = useHydration();
+  const max = dailyGoal;
   
   const { data: coinData } = useCoinData();
   const { mutate: claimReward, isPending: claimPending } = useClaimReward();
 
   const hydrationReward = coinData?.claimable?.find(c => c.id === 'hydration_daily');
-  const isGoalMet = value >= 2000;
+  const isGoalMet = value >= max;
   const isClaimed = hydrationReward?.isClaimed;
 
   const { colors } = useTheme();

@@ -81,7 +81,12 @@ const dayRange = (date: Date = new Date(), endAtNow = true) => {
 export const getStepsForRange = (startDate: string, endDate: string): Promise<number> =>
   new Promise(resolve => {
     AppleHealthKit.getStepCount(
-      { startDate, endDate, includeManuallyAdded: true },
+      // includeManuallyAdded: false — only count steps from the device's
+      // native motion sensor (same source as the built-in Health app,
+      // Money Walk, Sweatcoin, etc.). Including manually-added records
+      // causes double-counting when other apps or this app write steps
+      // back to HealthKit.
+      { startDate, endDate, includeManuallyAdded: false },
       (err, result) => {
         resolve(err ? 0 : Math.round(result.value));
       },
@@ -90,7 +95,7 @@ export const getStepsForRange = (startDate: string, endDate: string): Promise<nu
 
 export const getSteps = (): Promise<number> =>
   new Promise(resolve => {
-    const options = { ...todayRange(), includeManuallyAdded: true };
+    const options = { ...todayRange(), includeManuallyAdded: false };
     AppleHealthKit.getStepCount(options, (err, result) => {
       resolve(err ? 0 : Math.round(result.value));
     });

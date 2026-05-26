@@ -28,6 +28,12 @@ const OnboardingScreen = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const { fadeAnim, slideAnim, transition } = useSlideTransition();
   const { finishOnboarding } = useOnboardingStore();
+  const { colors, isDark } = useTheme();
+
+  // Theme-aware onboarding colors
+  const bgColor = isDark ? C.bg1 : colors.background;
+  const textColor = isDark ? C.white : colors.foreground;
+  const mutedColor = isDark ? C.muted : colors.mutedForeground;
 
   // Progress bar animation
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -100,10 +106,11 @@ const OnboardingScreen = () => {
         {
           paddingBottom: bottom,
           paddingTop: top,
+          backgroundColor: bgColor,
         },
       ]}
     >
-      <StatusBar barStyle="light-content" backgroundColor={C.bg1} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={bgColor} />
 
       {/* Background orbs */}
       <AppView style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -137,7 +144,7 @@ const OnboardingScreen = () => {
           size="sm"
           onPress={skipToLast}
           style={styles.skipBtn}
-          labelStyle={styles.skipText}
+          labelStyle={[styles.skipText, { color: mutedColor }]}
         />
       )}
 
@@ -149,8 +156,8 @@ const OnboardingScreen = () => {
       {/* Bottom controls */}
       <Animated.View style={[styles.bottomArea, contentStyle]}>
         <AppView style={[styles.accentLine, { backgroundColor: slide.accent }]} />
-        <AppText style={styles.title}>{slide.title}</AppText>
-        <AppText style={styles.subtitle}>{slide.subtitle}</AppText>
+        <AppText style={[styles.title, { color: textColor }]}>{slide.title}</AppText>
+        <AppText style={[styles.subtitle, { color: mutedColor }]}>{slide.subtitle}</AppText>
 
         <Dots
           slides={SLIDES}
@@ -177,7 +184,6 @@ export default OnboardingScreen;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.bg1,
   },
 
   bgOrb: {

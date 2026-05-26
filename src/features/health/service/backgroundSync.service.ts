@@ -31,13 +31,16 @@ import {
 import {
   isHealthConnectAvailable,
   deriveFromSteps,
+  readStepsDeduped,
 } from './healthConnect.service';
-import { initialize, aggregateRecord } from 'react-native-health-connect';
+import { initialize } from 'react-native-health-connect';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
 } from '../hooks/useSyncHealth';
 import { BASE_URL } from '../../../utils/api';
+import { useNetworkStore } from '../../../store/networkStore';
+import { offlineQueue } from '../../../services/offlineQueue';
 
 const TASK_ID = 'com.athlofit.healthsync';
 
@@ -68,6 +71,19 @@ function endOf(d: Date): Date {
 // ─── POST helper ──────────────────────────────────────────────────────────────
 
 async function postSync(token: string, body: object): Promise<any> {
+  // If offline, enqueue the payload for later sync instead of calling the server
+  const { isOnline } = useNetworkStore.getState();
+  if (!isOnline) {
+    offlineQueue.enqueue({
+      endpoint: 'health/sync',
+      method: 'POST',
+      payload: body as Record<string, unknown>,
+      timestamp: new Date().toISOString(),
+      actionType: 'health_sync',
+    });
+    return null;
+  }
+
   try {
     const response = await fetch(`${BASE_URL}health/sync`, {
       method: 'POST',
@@ -130,15 +146,11 @@ async function syncOneDayAndroid(
   token: string,
   weightKg: number,
 ): Promise<void> {
-  // aggregateRecord() deduplicates overlapping records from multiple apps
-  // and uses the most authoritative source (native step counter).
-  // Works on every Android OEM without any package-name allowlist.
-  const stepsResult = await aggregateRecord({
-    recordType: 'Steps',
-    timeRangeFilter: { operator: 'between' as const, startTime, endTime },
-  }).catch(() => ({ COUNT_TOTAL: 0 }));
-
-  const steps: number = (stepsResult as any).COUNT_TOTAL ?? 0;
+  // readStepsDeduped() reads individual records and picks the single
+  // highest-count source. This prevents inflation from third-party apps
+  // (Sweatcoin, Google Fit, Samsung Health) that also write Steps to
+  // Health Connect. aggregate() sums all sources and over-counts.
+  const steps = await readStepsDeduped(startTime, endTime).catch(() => 0);
   if (steps === 0) return;
 
   const derived = deriveFromSteps(steps, weightKg);

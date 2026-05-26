@@ -33,4 +33,14 @@ class MainActivity : ReactActivity() {
    */
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int,
+    permissions: Array<out String>,
+    grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    // Forward to StepPermissionManager for ACTIVITY_RECOGNITION handling
+    StepPermissionManager.onRequestPermissionsResult(requestCode, grantResults)
+  }
 }

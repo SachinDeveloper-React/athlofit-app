@@ -7,15 +7,17 @@ import { Platform } from 'react-native';
 import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
+import { useNetworkStore } from '../store/networkStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
 // BUG-044: Read BASE_URL from env variable with platform-aware localhost fallback.
 // Never hardcode the production URL — developers hitting prod from local is dangerous.
-export const BASE_URL =
-  process.env.REACT_APP_API_URL ??
-  (Platform.OS === 'android'
-    ? 'http://10.0.2.2:5001/'
-    : 'http://localhost:5001/');
+// export const BASE_URL =
+//   process.env.REACT_APP_API_URL ??
+//   (Platform.OS === 'android'
+//     ? 'http://192.168.0.129:5001/'
+//     : 'http://localhost:5001/');
+export const BASE_URL = 'https://athlofit-backend.vercel.app/'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +72,12 @@ async function request<T>(
       err?.message?.includes('Failed to fetch');
 
     if (isNetworkError) {
-      useSystemStore.getState().setServerUnreachable(true);
+      // Only show the server-unreachable modal if the device is online.
+      // When offline, the offline mode handles this gracefully (queuing, banners, etc.)
+      const isOnline = useNetworkStore.getState().isOnline;
+      if (isOnline) {
+        useSystemStore.getState().setServerUnreachable(true);
+      }
     }
     throw err;
   }

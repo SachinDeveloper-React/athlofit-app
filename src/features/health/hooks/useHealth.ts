@@ -40,7 +40,7 @@ interface UseHealthOptions {
 
 export function useHealth(options: UseHealthOptions = {}) {
   const {
-    refreshInterval = 60_000,
+    refreshInterval = 60_000,  // refresh every 10 s for near-real-time steps
     pauseInBackground = true,
     weightKg = 70,
   } = options;
@@ -104,7 +104,9 @@ export function useHealth(options: UseHealthOptions = {}) {
     if (refreshInterval <= 0) return;
     stopAutoRefresh();
     intervalRef.current = setInterval(() => {
-      if (isReadyRef.current) loadData(platformRef.current);
+      // silent=true — don't show loading spinner on background polls,
+      // only update the data when it arrives so the UI doesn't flash.
+      if (isReadyRef.current) loadData(platformRef.current, true);
     }, refreshInterval);
   }, [refreshInterval]);
 
@@ -161,6 +163,17 @@ export function useHealth(options: UseHealthOptions = {}) {
         if (ok) {
           await loadData('healthconnect');
           startAutoRefresh();
+        } else {
+          // Health Connect unavailable — check if native step counter can provide data
+          const { stepService } = await import('../../../services/stepService');
+          if (stepService.getSource() === 'native_sensor') {
+            // Native sensor is active — mark as ready so the UI renders with native step data
+            platformRef.current = 'healthconnect'; // keep platform label for loadData routing
+            isReadyRef.current = true;
+            setIsReady(true);
+            await loadData('healthconnect');
+            startAutoRefresh();
+          }
         }
       }
     } catch (e: any) {
@@ -183,6 +196,18 @@ export function useHealth(options: UseHealthOptions = {}) {
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
       }
+
+      // If native step counter is active, use its value as the step count.
+      // This ensures steps show immediately (native counter updates in real-time)
+      // rather than waiting for the 5-min Health Connect write cycle.
+      const { stepService } = await import('../../../services/stepService');
+      if (stepService.getSource() === 'native_sensor') {
+        const nativeSteps = await stepService.getCurrentSteps();
+        if (nativeSteps > 0 || result.steps === 0) {
+          result = { ...result, steps: nativeSteps };
+        }
+      }
+
       setData(result);
       setLastUpdated(new Date());
     } catch (e: any) {

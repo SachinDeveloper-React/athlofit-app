@@ -308,7 +308,7 @@ const SystemOverlay = () => {
 
       {/* ── Server unreachable modal ──────────────────────────────────────── */}
       <Modal
-        visible={isServerUnreachable && !isMaintenance}
+        visible={isServerUnreachable && !isMaintenance && !isOffline}
         animationType="fade"
         transparent={false}
       >

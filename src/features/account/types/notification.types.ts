@@ -1,4 +1,4 @@
-export type NotificationType = 'GOAL' | 'HYDRATION' | 'PRODUCT' | 'SECURITY' | 'HEART' | 'CHALLENGE' | 'COIN';
+export type NotificationType = 'GOAL' | 'HYDRATION' | 'PRODUCT' | 'SECURITY' | 'HEART' | 'CHALLENGE' | 'COIN' | 'SYSTEM';
 
 export type NotificationItem = {
   id: string;

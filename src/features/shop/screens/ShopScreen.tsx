@@ -21,7 +21,9 @@ import { useTheme } from '../../../hooks/useTheme';
 import AppText from '../../../components/AppText';
 import { Icon } from '../../../components/Icon';
 import { CoinBadge } from '../../../components/CoinBadge';
+import { OfflineBanner } from '../../../components';
 import { withOpacity } from '../../../utils/withOpacity';
+import { useNetworkStore } from '../../../store/networkStore';
 import { useShopState } from '../hooks/useShop';
 import CategoryPill from '../components/CategoryPill';
 import FeaturedCard from '../components/FeaturedCard';
@@ -253,6 +255,7 @@ const ShopScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<ShopNavProp>();
   const { itemCount } = useCart();
+  const isOnline = useNetworkStore(state => state.isOnline);
 
   const {
     categories, featuredProducts, products, pagination,
@@ -298,6 +301,7 @@ const ShopScreen = () => {
             // Render as JSX directly — not a new component reference each render.
             // StaticHeader is memo so its entering animation only fires on mount.
             <>
+              <OfflineBanner />
               <StaticHeader
                 insetTop={insets.top}
                 categories={categories}
@@ -329,7 +333,13 @@ const ShopScreen = () => {
             ) : null
           }
           ListEmptyComponent={() =>
-            !isLoading && !isProductsPending ? (
+            !isOnline && !isLoading && products.length === 0 ? (
+              <View style={styles.emptyState}>
+                <AppText variant="body" secondary align="center">
+                  Content unavailable offline. Will load when connected.
+                </AppText>
+              </View>
+            ) : !isLoading && !isProductsPending ? (
               <Animated.View entering={FadeInUp.duration(350)} style={styles.emptyState}>
                 <View style={[styles.emptyIcon, { backgroundColor: withOpacity(colors.primary, 0.1), borderRadius: 999 }]}>
                   <Icon name="ShoppingBag" size={36} color={colors.primary} />

@@ -24,6 +24,7 @@ const BloodPressureScreen = React.lazy(() => import('../features/health/screens/
 // Screens with no heavy native init — eager imports are fine
 import HydrationScreen from '../features/health/screens/HydrationScreen';
 import EditStepsGoalScreen from '../features/health/screens/EditStepsGoalScreen';
+import EditHydrationGoalScreen from '../features/health/screens/EditHydrationGoalScreen';
 import HealthAnalyticsScreen from '../features/health/screens/HealthAnalyticsScreen';
 import CoinScreen from '../features/health/screens/CoinScreen';
 import FoodCatalogScreen from '../features/health/screens/FoodCatalogScreen';
@@ -75,6 +76,7 @@ const HealthNavigator: React.FC = () => {
 
       <Stack.Screen name={HealthRoutes.HYDRATION}        component={HydrationScreen} />
       <Stack.Screen name={HealthRoutes.EDIT_STEPS_GOAL}  component={EditStepsGoalScreen} />
+      <Stack.Screen name={HealthRoutes.EDIT_HYDRATION_GOAL} component={EditHydrationGoalScreen} />
       <Stack.Screen name={HealthRoutes.HEALTH_ANALYTICS} component={HealthAnalyticsScreen} />
       <Stack.Screen name={HealthRoutes.COINS}            component={CoinScreen} />
       <Stack.Screen name={HealthRoutes.FOOD_CATALOG}     component={FoodCatalogScreen} />

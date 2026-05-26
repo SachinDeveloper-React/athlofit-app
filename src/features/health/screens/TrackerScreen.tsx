@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { RefreshControl } from 'react-native';
+import { Platform, RefreshControl, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Header, Loader, Screen, Tabs } from '../../../components';
+import { AppView, Header, Loader, Screen, Tabs } from '../../../components';
 import RightTrackerHeader from '../components/tracker/RightTrackerHeader';
 import DailyStatsSection, {
   type MetricRow,
@@ -33,6 +33,8 @@ import {
   HealthRoutes,
   RootRoutes,
 } from '../../../navigation/routes';
+import { useNetworkStore } from '../../../store/networkStore';
+import { Spacing } from '../../../constants/spacing';
 
 const RIGHTACTION = memo(
   ({
@@ -106,7 +108,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] as const)[(new Date().getDay() + 6) % 7]}
+        todayIndex={(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const)[(new Date().getDay() + 6) % 7]}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,
@@ -183,6 +185,7 @@ const TrackerScreen = memo(() => {
   const [gateReason, setGateReason] = useState<HealthGateReason | null>(null);
   // ── Track whether the current load was triggered by the user pulling down ──
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const isOnline = useNetworkStore(state => state.isOnline);
 
   const userAvatarUrl = useAuthStore(state => state.user?.avatarUrl);
   const userName = useAuthStore(state => state.user?.name);
@@ -360,7 +363,7 @@ const TrackerScreen = memo(() => {
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
-  if (isInitialLoad) {
+  if (isInitialLoad && isOnline) {
     return (
       <Loader message="Connecting to health data…" size="large" fullscreen />
     );
@@ -389,7 +392,8 @@ const TrackerScreen = memo(() => {
     <>
       <Screen
         safeArea={false}
-        scroll
+        // scroll
+        padded={false}
         header={header}
         refreshControl={
           <RefreshControl
@@ -399,24 +403,48 @@ const TrackerScreen = memo(() => {
           />
         }
       >
-        <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
-        <TabPanels
-          goal={dailyStepGoal || 8000}
-          activeTab={activeTab}
-          data={data}
-          weekData={weekData || []}
-          isWeekPending={isWeekPending}
-          metricRows={metricRows}
-          streakData={streakData}
-          isStreakPending={isStreakPending}
-          streakDays={streakDays}
-          syncDailyProgress={syncDailyProgress}
-          onUpdate={() => refresh(true)}
-        />
+        <ScrollView
+
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+          contentInset={{ bottom: 100 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingBottom:
+              Platform.OS === 'android'
+                ? 100 + 16
+                : 100,
+          }}
+          refreshControl={<RefreshControl
+            refreshing={isManualRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#1a1a1a"
+          />}
+
+
+        >
+          <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
+          <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
+          <TabPanels
+            goal={dailyStepGoal || 8000}
+            activeTab={activeTab}
+            data={data}
+            weekData={weekData || []}
+            isWeekPending={isWeekPending}
+            metricRows={metricRows}
+            streakData={streakData}
+            isStreakPending={isStreakPending}
+            streakDays={streakDays}
+            syncDailyProgress={syncDailyProgress}
+            onUpdate={() => refresh(true)}
+          />
+          </AppView>
+        </ScrollView>
       </Screen>
 
       <HealthGate
-        reason={gateReason}
+        reason={isOnline ? gateReason : null}
         errorMessage={error ?? undefined}
         onRetry={handleGateRetry}
         onDismiss={handleGateDismiss}
