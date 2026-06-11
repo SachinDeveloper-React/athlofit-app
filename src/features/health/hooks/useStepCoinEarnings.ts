@@ -1,0 +1,58 @@
+// src/features/health/hooks/useStepCoinEarnings.ts
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { stepService } from '../../../services/stepService';
+import { useStepCoinRate } from '../../../store/appConfigStore';
+
+const SYNC_INTERVAL_MS = 30_000; // 30 seconds
+
+/**
+ * Hook that calculates real-time step-based coin earnings
+ * using the backend-configurable step coin rate.
+ *
+ * - Subscribes to native step sensor updates for live recalculation
+ * - Runs a periodic timer (≤30s) to poll for the latest step count
+ * - Exposes earnings, steps, isStale, and lastCalcTime
+ */
+export function useStepCoinEarnings() {
+  const rate = useStepCoinRate();
+  const [steps, setSteps] = useState(0);
+  const [lastCalcTime, setLastCalcTime] = useState(Date.now());
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const calculateEarnings = useCallback(
+    (currentSteps: number) => {
+      // Keep 2 decimal places for fractional coin display
+      return parseFloat((Math.floor(currentSteps / 100) * rate).toFixed(2));
+    },
+    [rate],
+  );
+
+  // Subscribe to real-time step updates from the native sensor
+  useEffect(() => {
+    const unsubscribe = stepService.onStepUpdate((newSteps) => {
+      setSteps(newSteps);
+      setLastCalcTime(Date.now());
+    });
+    return unsubscribe;
+  }, []);
+
+  // Periodic recalculation (≤30s interval)
+  useEffect(() => {
+    intervalRef.current = setInterval(async () => {
+      const currentSteps = await stepService.getCurrentSteps();
+      setSteps(currentSteps);
+      setLastCalcTime(Date.now());
+    }, SYNC_INTERVAL_MS);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const earnings = calculateEarnings(steps);
+  const isStale = Date.now() - lastCalcTime > SYNC_INTERVAL_MS;
+
+  return { earnings, steps, isStale, lastCalcTime };
+}

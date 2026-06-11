@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
+import { useHealthDataStore } from '../store/healthDataStore';
+import { useHealthInitStore } from '../store/healthInitStore';
 
 import {
   initializeHealthKit,
@@ -45,21 +47,45 @@ export function useHealth(options: UseHealthOptions = {}) {
     weightKg = 70,
   } = options;
 
-  const [platform, setPlatform] = useState<HealthPlatform>('unavailable');
-  const [isReady, setIsReady] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState<HealthData>(defaultHealthData);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // ── Cache hydration from MMKV store ──────────────────────────────────────
+  const cachedData = useHealthDataStore.getState().data;
+  const cachedLastUpdated = useHealthDataStore.getState().lastUpdated;
+  const hasCachedData = cachedData !== null && cachedData !== defaultHealthData;
 
-  const platformRef = useRef<HealthPlatform>('unavailable');
-  const isReadyRef = useRef(false);
+  // ── Pre-initialized state from splash/bootstrap ───────────────────────────
+  const initState = useHealthInitStore.getState();
+  const preInitialized = initState.isInitialized && initState.isReady;
+
+  const [platform, setPlatform] = useState<HealthPlatform>(
+    initState.isInitialized ? initState.platform : 'unavailable'
+  );
+  const [isReady, setIsReady] = useState(preInitialized);
+  const [isLoading, setIsLoading] = useState(!preInitialized && !hasCachedData);
+  const [data, setData] = useState<HealthData>(cachedData ?? defaultHealthData);
+  const [error, setError] = useState<string | null>(
+    initState.isInitialized ? initState.error : null
+  );
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(cachedLastUpdated);
+
+  const platformRef = useRef<HealthPlatform>(
+    initState.isInitialized ? initState.platform : 'unavailable'
+  );
+  const isReadyRef = useRef(preInitialized);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const lastFetchedAtRef = useRef<number>(useHealthDataStore.getState().lastFetchedAt ?? 0);
+  const isSettingUpRef = useRef(false);
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    setup();
+    if (preInitialized) {
+      // Already initialized during splash — skip setup, just load data
+      loadData(initState.platform);
+      startAutoRefresh();
+    } else {
+      // Fallback: run full setup if pre-init didn't happen (e.g. fresh install)
+      setup();
+    }
     return () => stopAutoRefresh();
   }, []);
 
@@ -84,7 +110,9 @@ export function useHealth(options: UseHealthOptions = {}) {
         stopAutoRefresh();
       } else if (wasBackground && !isBackground) {
         if (isReadyRef.current) {
-          // Already initialised — just refresh data
+          // Already initialised — force refresh data (bypass staleness guard
+          // since the user is returning to the app and expects fresh data)
+          lastFetchedAtRef.current = 0;
           loadData(platformRef.current);
           startAutoRefresh();
         } else {
@@ -119,6 +147,8 @@ export function useHealth(options: UseHealthOptions = {}) {
 
   // ── Setup ─────────────────────────────────────────────────────────────────
   const setup = async () => {
+    if (isSettingUpRef.current) return;
+    isSettingUpRef.current = true;
     setIsLoading(true);
     setError(null);
     try {
@@ -180,6 +210,7 @@ export function useHealth(options: UseHealthOptions = {}) {
       setError(e?.message ?? 'Unknown error during setup');
     } finally {
       setIsLoading(false);
+      isSettingUpRef.current = false;
     }
   };
 
@@ -192,7 +223,6 @@ export function useHealth(options: UseHealthOptions = {}) {
         result = await fetchAllHealthKitData();
       } else {
         // Get login timestamp from healthDataStore to filter historical data
-        const { useHealthDataStore } = await import('../store/healthDataStore');
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
       }
@@ -210,6 +240,11 @@ export function useHealth(options: UseHealthOptions = {}) {
 
       setData(result);
       setLastUpdated(new Date());
+
+      // Persist to MMKV store for cache hydration on next launch
+      useHealthDataStore.getState().setData(result);
+      useHealthDataStore.getState().setLastFetchedAt(Date.now());
+      lastFetchedAtRef.current = Date.now();
     } catch (e: any) {
       if (!silent) setError(e?.message ?? 'Failed to load health data');
     } finally {
@@ -217,10 +252,39 @@ export function useHealth(options: UseHealthOptions = {}) {
     }
   };
 
+  // ── Real-time step updates from native sensor ─────────────────────────────
+  // Subscribe to native step events so coins update immediately as the user walks,
+  // without waiting for the 60s full-data poll.
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    (async () => {
+      const { stepService } = await import('../../../services/stepService');
+      if (stepService.getSource() === 'native_sensor') {
+        unsubscribe = stepService.onStepUpdate((newSteps: number) => {
+          setData(prev => {
+            if (prev.steps === newSteps) return prev;
+            return { ...prev, steps: newSteps };
+          });
+          setLastUpdated(new Date());
+        });
+      }
+    })();
+
+    return () => { unsubscribe?.(); };
+  }, []);
+
   // ── Manual refresh ────────────────────────────────────────────────────────
   const refresh = useCallback(
     (silent: boolean = false) => {
       if (!isReadyRef.current) return;
+      // Staleness guard: skip fetch if data is fresh and this is a silent refresh.
+      // Use a shorter threshold (5s) to prevent stale data on app foreground,
+      // while still deduplicating rapid successive calls.
+      const threshold = silent ? 5_000 : 0;
+      if (silent && Date.now() - lastFetchedAtRef.current < threshold) {
+        return;
+      }
       stopAutoRefresh();
       loadData(platformRef.current, silent).then(() => startAutoRefresh());
     },

@@ -1,9 +1,9 @@
-export function calcCoinsFromSteps(steps: number) {
-  // Sweatcoin style:
-  // 1000 steps = 0.95 coin
-  // Max 10 coins/day
-  const coins = (steps / 1000) * 0.95;
-  return Math.round(Math.min(10, Math.max(0, coins)));
+export function calcCoinsFromSteps(steps: number, ratePerHundred: number = 0.095) {
+  // Coins = Math.floor(steps / 100) * rate_per_100_steps
+  // Keeps 2 decimal places for fractional coin display
+  // Max daily earn limit handled by backend (250), but cap locally at a sane max
+  const coins = Math.floor(steps / 100) * ratePerHundred;
+  return parseFloat(Math.min(250, Math.max(0, coins)).toFixed(2));
 }
 
 export function getTrackerMessage(params: {

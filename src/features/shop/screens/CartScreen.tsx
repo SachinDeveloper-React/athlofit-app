@@ -30,6 +30,7 @@ import type { ShopStackParamList } from '../../../types/navigation.types';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import type { AvailableCoupon, SavedAddress, ValidateCouponResult } from '../types/shop.types';
 import { Header, Screen } from '../../../components';
+import { useAuthStore } from '../../auth/store/authStore';
 
 type CartRouteProp = RouteProp<ShopStackParamList, typeof ShopRoutes.CART>;
 const COIN_RATE = 10;
@@ -502,6 +503,23 @@ const CartScreen = () => {
   const coinShortfall  = Math.max(0, finalTotal - coinsBalance);
 
   const handleCheckout = () => {
+    // Require email and phone verification before purchase
+    const user = useAuthStore.getState().user;
+    if (!user?.emailVerified || !user?.phoneVerified) {
+      const missing = [];
+      if (!user?.emailVerified) missing.push('email');
+      if (!user?.phoneVerified) missing.push('phone number');
+      Alert.alert(
+        'Verification Required',
+        `Please verify your ${missing.join(' and ')} before making a purchase.`,
+        [
+          { text: 'Go to Profile', onPress: () => navigation.goBack() },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+
     if (!selectedAddress) {
       Alert.alert('No Address', 'Add a delivery address first.', [
         { text: 'Add Address', onPress: () => navigation.navigate(ShopRoutes.ADDRESSES, { selectMode: true } as any) },
@@ -609,7 +627,7 @@ const CartScreen = () => {
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <AppText variant="caption1" secondary>Your Coin Balance</AppText>
-                <AppText variant="title3" weight="bold" color="#92400E">{coinsBalance.toLocaleString()} coins</AppText>
+                <AppText variant="title3" weight="bold" color="#92400E">{coinsBalance.toFixed(2)} coins</AppText>
               </View>
               {(productSavings > 0 || couponDiscount > 0) && (
                 <View style={[styles.savingsBadge, { backgroundColor: withOpacity('#10B981', 0.12) }]}>
@@ -791,7 +809,7 @@ const CartScreen = () => {
                 <Icon name={hasEnoughCoins ? 'CheckCircle2' : 'AlertCircle'} size={15} color={hasEnoughCoins ? '#10B981' : '#EF4444'} />
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <AppText variant="caption1" weight="semiBold" color={hasEnoughCoins ? '#10B981' : '#EF4444'}>
-                    {hasEnoughCoins ? `Balance: ${coinsBalance.toLocaleString()} coins ✓` : `Need ${coinShortfall.toLocaleString()} more coins`}
+                    {hasEnoughCoins ? `Balance: ${coinsBalance.toFixed(2)} coins ✓` : `Need ${coinShortfall.toFixed(2)} more coins`}
                   </AppText>
                   {!hasEnoughCoins && (
                     <AppText variant="caption2" secondary style={{ marginTop: 2 }}>Complete your daily step goal to earn coins!</AppText>
@@ -810,7 +828,7 @@ const CartScreen = () => {
       >
         <View style={[styles.footerBalance, { backgroundColor: withOpacity('#F5C518', 0.1), borderColor: withOpacity('#F5C518', 0.3) }]}>
           <Icon name="Coins" size={14} color="#B45309" />
-          <AppText variant="caption1" weight="semiBold" color="#92400E" style={{ marginLeft: 6 }}>Balance: {coinsBalance.toLocaleString()}</AppText>
+          <AppText variant="caption1" weight="semiBold" color="#92400E" style={{ marginLeft: 6 }}>Balance: {coinsBalance.toFixed(2)}</AppText>
           <View style={{ flex: 1 }} />
           {couponDiscount > 0 ? (
             <View style={styles.coinRow}>

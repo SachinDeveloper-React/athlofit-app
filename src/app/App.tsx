@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { StatusBar } from 'react-native';
+import { Platform, StatusBar } from 'react-native';
 import BootSplash from 'react-native-bootsplash';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -67,6 +67,7 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 const AppShell: React.FC = () => {
   const { isDark } = useTheme();
   const [isConnectivityReady, setIsConnectivityReady] = useState(false);
+  const [isHealthPreChecked, setIsHealthPreChecked] = useState(false);
   // BUG-043: Stabilise with useCallback so the hydration useEffect dependency
   // array is accurate and the eslint suppression can be removed.
   const checkAndResetIfNewDay = useHydrationStore(
@@ -91,11 +92,54 @@ const AppShell: React.FC = () => {
     };
   }, []);
 
+  // ── Pre-check Health Connect / HealthKit permissions while splash is visible ─
+  // This ensures the permission request dialog appears over the splash screen
+  // rather than flashing a PermissionDeniedScreen after the app is visible.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsHealthPreChecked(true);
+      return;
+    }
+
+    const preCheckHealth = async () => {
+      try {
+        if (Platform.OS === 'android') {
+          const { isHealthConnectAvailable, initializeHealthConnect } =
+            await import('../features/health/service/healthConnect.service');
+          const available = await isHealthConnectAvailable();
+          if (available) {
+            // Prevent native WidgetUpdateWorker from accessing Health Connect
+            // concurrently during init (which crashes the app).
+            const { widgetService } = await import('../services/widgetService');
+            await widgetService.setAppInitialising(true);
+            try {
+              // This will show the permission dialog if not yet granted,
+              // while the splash screen is still visible.
+              await initializeHealthConnect();
+            } finally {
+              await widgetService.setAppInitialising(false);
+            }
+          }
+        } else if (Platform.OS === 'ios') {
+          const { initializeHealthKit } =
+            await import('../features/health/service/healthkit.service');
+          await initializeHealthKit();
+        }
+      } catch {
+        // Non-fatal — useHealth will retry when TrackerScreen mounts
+      } finally {
+        setIsHealthPreChecked(true);
+      }
+    };
+
+    preCheckHealth();
+  }, [isAuthenticated]);
+
   // ── Hide boot splash on mount ─────────────────────────────────────────────
   useEffect(() => {
-    if (!isConnectivityReady) { return; }
+    if (!isConnectivityReady || !isHealthPreChecked) { return; }
     BootSplash.hide({ fade: true }).catch(() => {});
-  }, [isConnectivityReady]);
+  }, [isConnectivityReady, isHealthPreChecked]);
 
   // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
   useNotificationSetup();
@@ -146,9 +190,9 @@ const AppShell: React.FC = () => {
     ).catch(() => { });
   }, [isDark]);
 
-  // Gate rendering until ConnectivityMonitor has set initial state.
-  // This ensures screens mount with the correct offline/online state (Req 1.4, 1.5).
-  if (!isConnectivityReady) {
+  // Gate rendering until ConnectivityMonitor has set initial state and
+  // health permissions are pre-checked (so the user doesn't see PermissionDeniedScreen).
+  if (!isConnectivityReady || !isHealthPreChecked) {
     return null;
   }
 

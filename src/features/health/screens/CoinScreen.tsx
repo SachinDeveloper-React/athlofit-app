@@ -21,6 +21,7 @@ import { Icon } from '../../../components/Icon';
 import { Header } from '../../../components';
 
 import { useCoinTransactions, useClaimReward } from '../hooks/useGamification';
+import { gamificationService } from '../service/gamification.service';
 import { CoinTransaction, ClaimableReward } from '../types/gamification.type';
 import { withOpacity } from '../../../utils/withOpacity';
 import TransactionItem from '../components/coins/TransactionItem';
@@ -82,6 +83,7 @@ const CoinScreen = () => {
 
   const coinsBalance    = useGamificationStore(s => s.coinsBalance);
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
+  const syncWithService = useGamificationStore(s => s.syncWithService);
 
   const {
     data,
@@ -93,10 +95,23 @@ const CoinScreen = () => {
     isRefetching,
   } = useCoinTransactions();
 
-  // Keep Zustand balance in sync with server balance
+  // Fetch the authoritative gamification state (/me endpoint) to ensure
+  // the Zustand store has the correct balance when CoinScreen mounts.
+  useEffect(() => {
+    gamificationService.getGamification().then((res) => {
+      if (res.success && res.data) {
+        syncWithService(res.data);
+      }
+    }).catch(() => {});
+  }, [syncWithService]);
+
+  // Keep Zustand balance in sync with server balance from the coin-transactions
+  // endpoint. Only update if the server reports a HIGHER balance (the /me endpoint
+  // is the authoritative source; /coins/data may lag). This prevents the screen
+  // from briefly flashing 0 while the query is resolving.
   useEffect(() => {
     const serverBalance = data?.balance;
-    if (serverBalance != null && serverBalance !== coinsBalance) {
+    if (serverBalance != null && serverBalance > 0 && serverBalance !== coinsBalance) {
       setCoinsBalance(serverBalance);
     }
   }, [data?.balance]);
@@ -152,7 +167,7 @@ const CoinScreen = () => {
           TOTAL COIN BALANCE
         </AppText>
         <View style={[styles.balanceRow, { marginTop: spacing[2] }]}>
-          <AppText variant="largeTitle" weight="bold">{balance}</AppText>
+          <AppText variant="largeTitle" weight="bold">{balance.toFixed(2)}</AppText>
           <AppText variant="subhead" secondary style={{ marginLeft: spacing[2], marginTop: 8 }}>coins</AppText>
         </View>
         <AppText variant="body" secondary style={{ textAlign: 'center', marginTop: spacing[2], paddingHorizontal: spacing[3] }}>

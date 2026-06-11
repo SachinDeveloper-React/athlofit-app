@@ -36,15 +36,16 @@ export const useHydration = () => {
   } = useHealth();
 
   // ── On mount: load history + sync health platform ──────────────────────────
+  // Only set consumed from Health Connect on the INITIAL load (when hydration
+  // store consumed is 0 and Health Connect has a non-zero value). After that,
+  // the store's optimistic updates from addWater are the source of truth.
   useEffect(() => {
-    const init = async () => {
-      // 1. Fetch today's history from backend
-      //   await fetchHistory();
-
-      if (isReady && !healthLoading) setConsumed(data?.hydration);
-    };
-
-    init();
+    if (!isReady || healthLoading) return;
+    const currentConsumed = useHydrationStore.getState().consumed;
+    // Only sync from Health Connect if the store has no local data yet
+    if (currentConsumed === 0 && data?.hydration > 0) {
+      setConsumed(data.hydration);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, healthLoading]);
 

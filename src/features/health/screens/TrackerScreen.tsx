@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Platform, RefreshControl, ScrollView } from 'react-native';
+import { Platform, RefreshControl, ScrollView, View, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AppView, Header, Loader, Screen, Tabs } from '../../../components';
 import RightTrackerHeader from '../components/tracker/RightTrackerHeader';
@@ -15,14 +15,16 @@ import {
 import PermissionDeniedScreen, {
   type PermissionScenario,
 } from '../components/tracker/PermissionDeniedScreen';
+import SkeletonPlaceholder from '../components/tracker/SkeletonPlaceholder';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useHealth } from '../hooks/useHealth';
-import { WeeklyStepEntry, type HealthData } from '../types/healthTypes';
+import { WeeklyStepEntry, type HealthData, defaultHealthData } from '../types/healthTypes';
 import { TabId, TABS } from '../constants/tracker.constant';
 import { useWeeklySteps } from '../hooks/useWeeklySteps';
 import { useGamification } from '../hooks/useGamification';
 import { useStreak } from '../hooks/useStreak';
 import { useGamificationStore } from '../store/gamificationStore';
+import { useHealthDataStore } from '../store/healthDataStore';
 import { buildMetricRows } from '../service/health.service';
 import type { StreaksResponseData } from '../types/gamification.type';
 import { useSyncHealth } from '../hooks/useSyncHealth';
@@ -35,6 +37,7 @@ import {
 } from '../../../navigation/routes';
 import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
+import PhoneVerifyBanner from '../../../components/PhoneVerifyBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -79,9 +82,11 @@ type TabPanelsProps = {
   data: HealthData;
   weekData: WeeklyStepEntry[];
   isWeekPending: boolean;
+  isWeekSkeleton: boolean;
   metricRows: MetricRow[];
   streakData?: StreaksResponseData | null;
   isStreakPending: boolean;
+  isStreakSkeleton: boolean;
   streakDays: number;
   syncDailyProgress: (coinsEarnedThisDay: number, metGoal: boolean) => void;
   onUpdate?: () => void;
@@ -94,9 +99,11 @@ const TabPanels = memo(
     data,
     weekData,
     isWeekPending,
+    isWeekSkeleton,
     metricRows,
     streakData,
     isStreakPending,
+    isStreakSkeleton,
     streakDays,
     syncDailyProgress,
     onUpdate,
@@ -124,6 +131,18 @@ const TabPanels = memo(
         syncDailyProgress={syncDailyProgress}
         onUpdate={onUpdate}
       />
+      {/* Skeleton for weekly chart section when loading without data */}
+      {isWeekSkeleton && activeTab === TabId.DailyStats && (
+        <View style={skeletonStyles.weeklyChartSkeleton}>
+          <SkeletonPlaceholder width="100%" height={160} borderRadius={12} />
+        </View>
+      )}
+      {/* Skeleton for streaks section when loading without data */}
+      {isStreakSkeleton && activeTab === TabId.DailyStats && (
+        <View style={skeletonStyles.streaksSkeleton}>
+          <SkeletonPlaceholder width="100%" height={80} borderRadius={12} />
+        </View>
+      )}
       <NutritionAndGoalSection hidden={activeTab !== TabId.NutritionGoal} />
     </>
   ),
@@ -135,6 +154,8 @@ const TabPanels = memo(
     prev.streakData === next.streakData &&
     prev.streakDays === next.streakDays &&
     prev.isStreakPending === next.isStreakPending &&
+    prev.isWeekSkeleton === next.isWeekSkeleton &&
+    prev.isStreakSkeleton === next.isStreakSkeleton &&
     prev.syncDailyProgress === next.syncDailyProgress &&
     prev.onUpdate === next.onUpdate,
 );
@@ -218,13 +239,20 @@ const TrackerScreen = memo(() => {
   const { syncHealth } = useSyncHealth();
 
   // ── Unified initial loading ────────────────────────────────────────────────
-  // Show a single full-screen loader until all parallel data sources have
-  // resolved at least once. After that, individual sections handle their own
-  // in-place loading states so the screen never goes blank on refresh.
+  // Only show a full-screen loader if there is NO cached data at all.
+  // If cached data exists (from MMKV persistence), render the screen
+  // immediately with cached values and show skeleton placeholders for
+  // sections that are still loading.
+  const cachedData = useHealthDataStore.getState().data;
+  const hasCachedData =
+    cachedData != null &&
+    JSON.stringify(cachedData) !== JSON.stringify(defaultHealthData);
+
   const isInitialLoad =
-    (isLoading && !isReady) ||
-    (isWeekPending && !weekData) ||
-    (isStreakPending && !streakData);
+    !hasCachedData &&
+    ((isLoading && !isReady) ||
+      (isWeekPending && !weekData) ||
+      (isStreakPending && !streakData));
 
   // Track the last synced user ID to detect account switches
   const lastSyncedUserRef = useRef<string | null>(null);
@@ -282,9 +310,13 @@ const TrackerScreen = memo(() => {
   }, [platform, isReady, error]);
 
   // ── Permission scenario (inline screen) ───────────────────────────────────
+  // Don't show PermissionDeniedScreen while setup is still in progress —
+  // platform starts as 'unavailable' and flips to the real value once setup()
+  // finishes. Showing the permission screen during that window is a false
+  // positive (Bug: permission screen flashes on every app open).
   const permissionScenario = useMemo(
-    () => resolvePermissionScenario(platform, isReady, error),
-    [platform, isReady, error],
+    () => isLoading ? null : resolvePermissionScenario(platform, isReady, error),
+    [platform, isReady, error, isLoading],
   );
 
   // ── Derived data ───────────────────────────────────────────────────────────
@@ -302,10 +334,16 @@ const TrackerScreen = memo(() => {
 
   useFocusEffect(
     useCallback(() => {
-      // On every focus: silently refresh health data from device AND
-      // re-fetch weekly steps from the server so the chart is always current.
-      refresh(true);
-      refreshWeek();
+      // On focus: check staleness before refreshing to deduplicate rapid
+      // focus events (e.g., tab switches within 5s).
+      const lastFetchedAt = useHealthDataStore.getState().lastFetchedAt;
+      const isFresh = lastFetchedAt != null && Date.now() - lastFetchedAt < 5_000;
+
+      if (!isFresh) {
+        // Data is stale or never fetched — silently refresh
+        refresh(true);
+        refreshWeek();
+      }
     }, [refresh, refreshWeek]),
   );
 
@@ -424,6 +462,7 @@ const TrackerScreen = memo(() => {
 
 
         >
+          <PhoneVerifyBanner />
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
@@ -432,9 +471,11 @@ const TrackerScreen = memo(() => {
             data={data}
             weekData={weekData || []}
             isWeekPending={isWeekPending}
+            isWeekSkeleton={isWeekPending && !weekData}
             metricRows={metricRows}
             streakData={streakData}
             isStreakPending={isStreakPending}
+            isStreakSkeleton={isStreakPending && !streakData}
             streakDays={streakDays}
             syncDailyProgress={syncDailyProgress}
             onUpdate={() => refresh(true)}
@@ -454,5 +495,16 @@ const TrackerScreen = memo(() => {
 });
 
 TrackerScreen.displayName = 'TrackerScreen';
+
+const skeletonStyles = StyleSheet.create({
+  weeklyChartSkeleton: {
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  streaksSkeleton: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+});
 
 export default TrackerScreen;

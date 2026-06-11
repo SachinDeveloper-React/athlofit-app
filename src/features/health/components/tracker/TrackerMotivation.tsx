@@ -9,6 +9,7 @@ import {
   calcCoinsFromSteps,
   getTrackerMessage,
 } from '../../utils/streakCalculator';
+import { useStepCoinRate } from '../../../../store/appConfigStore';
 
 type Props = {
   steps: number;
@@ -23,9 +24,10 @@ type Props = {
 export const TrackerMotivation = memo(
   ({ steps, goalSteps, streakDays, onComputed }: Props) => {
     const { colors } = useTheme();
+    const rate = useStepCoinRate();
 
     /* ---------- DERIVED ---------- */
-    const coinsToday = useMemo(() => calcCoinsFromSteps(steps), [steps]);
+    const coinsToday = useMemo(() => calcCoinsFromSteps(steps, rate), [steps, rate]);
     const streakWillContinue = goalSteps > 0 && steps >= goalSteps;
 
     const msg = useMemo(

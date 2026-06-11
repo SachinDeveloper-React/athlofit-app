@@ -85,7 +85,7 @@ export const useHydrationStore = create<HydrationStore>()(
 
       // ── addWater ───────────────────────────────────────────────────────────
       addWater: async amount => {
-        const { history } = get();
+        const { history, consumed } = get();
 
         const optimisticEntry: HistoryEntry = {
           id: `optimistic-${Date.now()}`,
@@ -99,10 +99,11 @@ export const useHydrationStore = create<HydrationStore>()(
         );
         const optimisticHistory = [optimisticEntry, ...filteredHistory];
 
-        // Optimistic update
+        // Optimistic update — add amount to current consumed directly
+        // (sumConsumed from history alone may miss Health Connect baseline)
         set({
           history: optimisticHistory,
-          consumed: sumConsumed(optimisticHistory),
+          consumed: consumed + amount,
           error: null,
         });
 
@@ -137,10 +138,10 @@ export const useHydrationStore = create<HydrationStore>()(
             }
           }
         } catch (err) {
-          // Roll back on failure
+          // Roll back on failure — subtract the amount we optimistically added
           set({
             history,
-            consumed: sumConsumed(history),
+            consumed: Math.max(0, get().consumed - amount),
             error: 'Failed to save water entry. Please try again.',
           });
         }

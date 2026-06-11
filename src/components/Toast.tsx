@@ -54,10 +54,10 @@ const Toast: React.FC<{ item: ToastItem; onDismiss: (id: string) => void }> = ({
     ToastType,
     { icon: string; color: string; bg: string }
   > = {
-    success: { icon: '✓', color: colors.primaryForeground, bg: colors.success },
-    error: { icon: '✕', color: colors.primaryForeground, bg: colors.destructive },
-    warning: { icon: '!', color: colors.primaryForeground, bg: colors.warning },
-    info: { icon: 'i', color: colors.primaryForeground, bg: colors.primary },
+    success: { icon: '✓', color: '#FFFFFF', bg: colors.success },
+    error: { icon: '✕', color: '#FFFFFF', bg: colors.destructive },
+    warning: { icon: '!', color: '#FFFFFF', bg: colors.warning },
+    info: { icon: 'i', color: '#FFFFFF', bg: colors.primary },
   };
 
   const cfg = iconMap[item.type];
@@ -122,7 +122,7 @@ const Toast: React.FC<{ item: ToastItem; onDismiss: (id: string) => void }> = ({
       {/* Message */}
       <AppText
         variant="subhead"
-        color={colors.primaryForeground}
+        color={isDark ? colors.foreground : colors.tierForeground}
         style={styles.msg}
         numberOfLines={2}
       >
@@ -134,7 +134,7 @@ const Toast: React.FC<{ item: ToastItem; onDismiss: (id: string) => void }> = ({
         onPress={dismiss}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <AppText variant="caption1" color={colors.mutedForeground}>
+        <AppText variant="caption1" color={isDark ? colors.mutedForeground : colors.tierForeground}>
           ✕
         </AppText>
       </TouchableOpacity>

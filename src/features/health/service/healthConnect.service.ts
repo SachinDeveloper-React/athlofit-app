@@ -17,6 +17,7 @@ import {
   insertRecords,
   deleteRecordsByTimeRange,
   getSdkStatus,
+  getGrantedPermissions,
   SdkAvailabilityStatus,
   BackgroundAccessPermission,
   Permission,
@@ -88,6 +89,21 @@ const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
 export const isHealthConnectAvailable = async (): Promise<boolean> => {
   const status = await getSdkStatus();
   return status === SdkAvailabilityStatus.SDK_AVAILABLE;
+};
+
+/**
+ * Check if Health Connect permissions are already granted (no UI prompt).
+ * Returns true if at least 80% of required permissions are granted.
+ */
+export const hasHealthConnectPermissions = async (): Promise<boolean> => {
+  try {
+    const initialized = await initialize();
+    if (!initialized) return false;
+    const granted = await getGrantedPermissions();
+    return granted.length >= PERMISSIONS.length * 0.8;
+  } catch {
+    return false;
+  }
 };
 
 /** Small delay after initialize() to let the IPC binding fully settle.

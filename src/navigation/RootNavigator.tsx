@@ -15,6 +15,7 @@ import ShopNavigator from './ShopNavigator';
 import { CartProvider } from '../features/shop/context/CartContext';
 import { useAppConfig } from '../hooks/useAppConfig';
 import { useTheme } from '../hooks/useTheme';
+import { useHealthInitStore } from '../features/health/store/healthInitStore';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -36,6 +37,13 @@ const RootNavigator: React.FC = () => {
     async function bootstrap(): Promise<void> {
       try {
         await setTokensFromStorage();
+
+        // Pre-initialize health SDK during splash so TrackerScreen opens directly
+        // without flashing the permission screen. Only run if user is authenticated.
+        const authState = useAuthStore.getState();
+        if (authState.isAuthenticated && authState.user?.isProfileCompleted) {
+          await useHealthInitStore.getState().initialize();
+        }
       } catch {
         // No stored session — user stays on AuthStack
       } finally {

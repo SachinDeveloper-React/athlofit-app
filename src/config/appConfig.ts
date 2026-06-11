@@ -36,6 +36,17 @@ export const APP_CONFIG_DEFAULTS = {
     email:   'support@athlofit.com',
     website: 'www.athlofit.com/faq',
   },
+  coin_config: {
+    steps: {
+      rate_per_100_steps: 0.5,
+    },
+    rewards: {
+      daily_step_goal_reached: {
+        enabled: true,
+        coin_value: 50,
+      },
+    },
+  },
 } as const;
 
 export type AppConfig = {
@@ -72,12 +83,25 @@ export type AppConfig = {
     email:   string;
     website: string;
   };
+  coin_config: {
+    steps: {
+      rate_per_100_steps: number;
+    };
+    rewards: {
+      daily_step_goal_reached: {
+        enabled: boolean;
+        coin_value: number;
+      };
+    };
+  };
 };
 
 /** Derive coin price from a ₹ amount using the live conversion rate */
 export const toCoinPrice = (rupees: number, rate: number) =>
   Math.round(rupees * rate);
 
-/** Format coin number: 1200 → "1.2k" */
-export const formatCoins = (n: number): string =>
-  n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString();
+/** Format coin number: always show 2 decimal places — 0.10, 0.95, 50.00, 1.2k */
+export const formatCoins = (n: number): string => {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toFixed(2);
+};

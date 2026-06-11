@@ -27,19 +27,18 @@ export const useGamificationStore = create<GamificationStore>()(
       setCoinsBalance: (balance) => set({ coinsBalance: balance }),
       
       syncDailyProgress: (coinsEarnedThisDay, metGoal) => {
-        const { coinsEarnedToday, coinsBalance, lastCoinDate, lastActiveDate, streakDays, bestStreakDays } = get();
+        const { coinsEarnedToday, lastCoinDate, lastActiveDate, streakDays, bestStreakDays } = get();
         const todayStr = getLocalDateString(); // BUG-049: local timezone, not UTC
         const updates: Partial<GamificationStore> = {};
         
-        // Coins logic
+        // Coins logic — only update coinsEarnedToday for display.
+        // coinsBalance is NOT modified here; it comes exclusively from the server
+        // via syncWithService / useGamification to prevent double-counting.
         let currentToday = lastCoinDate === todayStr ? coinsEarnedToday : 0;
-        // The server's cap is 250. We use Math.round to prevent floating point issues.
-        const newToday = Math.round(Math.min(250, coinsEarnedThisDay));
-        const actualAdded = newToday - currentToday;
+        const newToday = parseFloat(Math.min(250, coinsEarnedThisDay).toFixed(2));
 
-        if (actualAdded > 0) {
+        if (newToday > currentToday) {
           updates.coinsEarnedToday = newToday;
-          updates.coinsBalance = Math.round(coinsBalance + actualAdded);
           updates.lastCoinDate = todayStr;
         }
 

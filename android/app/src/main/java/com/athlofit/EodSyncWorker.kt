@@ -13,9 +13,8 @@ import java.time.Instant
  *
  * One-shot CoroutineWorker triggered at 23:59:50 every night by EodSyncScheduler.
  *
- * Syncs TWO records before midnight:
- *  - TODAY    — steps from loginTimestamp (or midnight) → now
- *  - YESTERDAY — full day 00:00 → 23:59:59 (no login filter)
+ * Syncs up to 7 days of health data (from login date to today) to the backend.
+ * On the login day, steps are counted from login time onward only.
  *
  * This guarantees the day's final step count is committed to the database
  * before the date rolls over, even when the app is fully closed.

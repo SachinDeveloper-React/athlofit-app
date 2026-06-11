@@ -104,7 +104,7 @@ const Screen = memo(
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={keyboardOffset}
         >
           {scroll ? (
@@ -132,13 +132,13 @@ const Screen = memo(
                 </View>
               ) : null}
 
-              {/* Main content — padded */}
-              <View style={[pad, contentContainerStyle]}>{children}</View>
+              {/* Main content — padded, with top spacing below header */}
+              <View style={[pad, { paddingTop: header ? spacing[3] : 0 }, contentContainerStyle]}>{children}</View>
             </ScrollView>
           ) : (
             <AppView style={[{ flex: 1 }, contentContainerStyle]}>
               {header ?? null}
-              <AppView style={[{ flex: 1 }, pad]}>
+              <AppView style={[{ flex: 1, paddingTop: header ? spacing[3] : 0 }, pad]}>
                 {children}
               </AppView>
             </AppView>

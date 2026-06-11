@@ -31,6 +31,7 @@ interface PhoneFieldProps {
   error?: string;
   isVerified?: boolean;
   label?: string;
+  onVerifyPress?: () => void;
 }
 
 export const PhoneField: React.FC<PhoneFieldProps> = ({
@@ -40,6 +41,7 @@ export const PhoneField: React.FC<PhoneFieldProps> = ({
   error,
   isVerified,
   label = 'Phone Number',
+  onVerifyPress,
 }) => {
   const { colors } = useTheme();
   const inputRef = useRef<TextInput>(null);
@@ -130,10 +132,20 @@ export const PhoneField: React.FC<PhoneFieldProps> = ({
           autoCapitalize="none"
         />
 
-        {/* Verified badge */}
-        {isVerified && (
+        {/* Verified badge or Verify button */}
+        {isVerified ? (
           <Icon name="CheckCircle2" size={18} color="#10B981" />
-        )}
+        ) : localNumber.replace(/\D/g, '').length === 10 && onVerifyPress ? (
+          <TouchableOpacity
+            onPress={onVerifyPress}
+            activeOpacity={0.7}
+            style={[styles.verifyBtn, { backgroundColor: colors.primary }]}
+          >
+            <AppText variant="caption1" weight="semiBold" style={{ color: '#fff' }}>
+              Verify
+            </AppText>
+          </TouchableOpacity>
+        ) : null}
       </Animated.View>
 
       {/* Hint */}
@@ -179,4 +191,10 @@ const styles = StyleSheet.create({
   },
   hint: { fontSize: 12, marginTop: 4 },
   error: { fontSize: 12, marginTop: 2 },
+  verifyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+  },
 });

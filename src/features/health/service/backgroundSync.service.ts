@@ -8,17 +8,17 @@
  * (WorkManager, every 15 min) + EodSyncWorker (exact alarm at 23:59:50).
  * This JS layer runs as a secondary fallback via react-native-background-fetch.
  *
- * Syncs TWO records per run:
+ * Syncs up to 7 days of health data (from login date to today):
  *
- *  TODAY
- *    - First login day : steps from loginTimestamp → now
- *    - Subsequent days : steps from 00:00 → now  (loginTimestamp < midnight)
+ *  LOGIN DAY
+ *    - Steps from loginTimestamp → end of day (or now if today)
  *
- *  YESTERDAY
- *    - Always full day : 00:00 → 23:59:59  (no login filter)
+ *  SUBSEQUENT DAYS
+ *    - Full day: 00:00 → 23:59:59 (or now if today)
  *
  * Each POST includes an explicit `date` field (YYYY-MM-DD) so the backend
  * upserts the correct day's record regardless of when the task fires.
+ * Days before account creation are rejected server-side as an extra safety net.
  */
 
 import BackgroundFetch from 'react-native-background-fetch';
@@ -174,55 +174,66 @@ async function syncOneDayAndroid(
   }
 }
 
-// ─── Core sync — today + yesterday ───────────────────────────────────────────
+// ─── Core sync — last 7 days from login date ─────────────────────────────────
 
 export async function runHealthSync(): Promise<void> {
   const token = await tokenService.getAccessToken();
   if (!token) return;
 
-  const now       = new Date();
-  const today     = new Date(now);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  const todayStr     = toISODate(today);
-  const yesterdayStr = toISODate(yesterday);
+  const now = new Date();
 
   // ── Read loginTimestamp from persisted store ──────────────────────────────
-  // Dynamic import avoids circular deps and works in headless context.
   const { useHealthDataStore } = await import('../store/healthDataStore');
   const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
 
-  // Effective start for today's step window:
-  //   - If loginTimestamp is within today (after midnight), use it.
-  //   - Otherwise (subsequent days or no timestamp), use midnight.
-  const todayMidnight = startOf(today);
-  const effectiveTodayStart =
-    loginTimestamp && loginTimestamp > todayMidnight.getTime()
-      ? new Date(loginTimestamp)
-      : todayMidnight;
+  // Determine the earliest date to sync: login date or 7 days ago, whichever is later.
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(now.getDate() - 6); // today + 6 previous = 7 days
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  const loginDate = loginTimestamp ? startOf(new Date(loginTimestamp)) : startOf(now);
+  const syncStartDate = loginDate.getTime() > sevenDaysAgo.getTime() ? loginDate : sevenDaysAgo;
+
+  // Build the list of days to sync (from syncStartDate to today)
+  const daysToSync: { dateStr: string; start: Date; end: Date }[] = [];
+  const current = new Date(syncStartDate);
+  while (current <= now) {
+    const dateStr = toISODate(current);
+    const isLoginDay = loginTimestamp && toISODate(new Date(loginTimestamp)) === dateStr;
+    const isToday = dateStr === toISODate(now);
+
+    // Start of the sync window for this day:
+    // - Login day: use login timestamp (not midnight)
+    // - Other days: use midnight
+    let dayStart: Date;
+    if (isLoginDay && loginTimestamp > startOf(current).getTime()) {
+      dayStart = new Date(loginTimestamp);
+    } else {
+      dayStart = startOf(new Date(current));
+    }
+
+    // End of the sync window:
+    // - Today: use now
+    // - Past days: use end of day (23:59:59)
+    const dayEnd = isToday ? new Date(now) : endOf(new Date(current));
+
+    daysToSync.push({ dateStr, start: dayStart, end: dayEnd });
+    current.setDate(current.getDate() + 1);
+  }
 
   // ── iOS — HealthKit ───────────────────────────────────────────────────────
   if (Platform.OS === 'ios') {
     const ready = await initializeHealthKit();
     if (!ready) return;
 
-    // TODAY: from effectiveTodayStart → now
-    await syncOneDayIOS(
-      todayStr,
-      effectiveTodayStart.toISOString(),
-      now.toISOString(),
-      token,
-    );
-
-    // YESTERDAY: full day 00:00 → 23:59:59 (no login filter)
-    await syncOneDayIOS(
-      yesterdayStr,
-      startOf(yesterday).toISOString(),
-      endOf(yesterday).toISOString(),
-      token,
-    );
-
+    for (const day of daysToSync) {
+      await syncOneDayIOS(
+        day.dateStr,
+        day.start.toISOString(),
+        day.end.toISOString(),
+        token,
+      );
+    }
     return;
   }
 
@@ -239,23 +250,15 @@ export async function runHealthSync(): Promise<void> {
   const { useAuthStore } = await import('../../auth/store/authStore');
   const weightKg = useAuthStore.getState().user?.weight ?? 70;
 
-  // TODAY: from effectiveTodayStart → now
-  await syncOneDayAndroid(
-    todayStr,
-    effectiveTodayStart.toISOString(),
-    now.toISOString(),
-    token,
-    weightKg,
-  );
-
-  // YESTERDAY: full day 00:00 → 23:59:59 (no login filter)
-  await syncOneDayAndroid(
-    yesterdayStr,
-    startOf(yesterday).toISOString(),
-    endOf(yesterday).toISOString(),
-    token,
-    weightKg,
-  );
+  for (const day of daysToSync) {
+    await syncOneDayAndroid(
+      day.dateStr,
+      day.start.toISOString(),
+      day.end.toISOString(),
+      token,
+      weightKg,
+    );
+  }
 }
 
 // ─── Register periodic background fetch ──────────────────────────────────────

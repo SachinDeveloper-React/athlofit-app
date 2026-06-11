@@ -59,3 +59,11 @@ export const useFeatureFlags = () =>
 /** Selector: hydration goal in ml */
 export const useHydrationGoalMl = () =>
   useAppConfigStore(s => s.config.rewards?.hydrationGoalMl ?? 2000);
+
+/** Selector: step coin rate per 100 steps */
+export const useStepCoinRate = () =>
+  useAppConfigStore(s => s.config.coin_config?.steps?.rate_per_100_steps ?? 0.5);
+
+/** Selector: daily step goal reward config */
+export const useDailyStepGoalRewardConfig = () =>
+  useAppConfigStore(s => s.config.coin_config?.rewards?.daily_step_goal_reached ?? { enabled: true, coin_value: 50 });

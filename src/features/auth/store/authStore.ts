@@ -230,6 +230,13 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           console.error('[logout] failed to reset healthDataStore:', err);
         }
+
+        try {
+          const { useHealthInitStore } = await import('../../health/store/healthInitStore');
+          useHealthInitStore.getState().reset();
+        } catch (err) {
+          console.error('[logout] failed to reset healthInitStore:', err);
+        }
       },
 
       // ── Partial user update (e.g. after edit profile) ───────────────────────

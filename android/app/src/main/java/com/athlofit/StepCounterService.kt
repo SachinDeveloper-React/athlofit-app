@@ -43,7 +43,7 @@ import java.util.Calendar
  *   dailySteps = (cumulative - baseline) + rebootOffset
  *
  * Reboot detection:
- *   If the cumulative sensor value is <= baseline, a reboot (or sensor reset)
+ *   If the cumulative sensor value is < baseline, a reboot (or sensor reset)
  *   has occurred. The current dailySteps are added to rebootOffset, and the
  *   baseline is reset to the new cumulative value.
  *
@@ -262,16 +262,19 @@ class StepCounterService : Service(), SensorEventListener {
             }
         }
 
-        // Reboot detection: cumulative value reset to a value <= baseline
-        if (cumulative <= baseline && hasReceivedFirstEvent) {
-            Log.d(TAG, "Reboot detected: cumulative=$cumulative <= baseline=$baseline, dailySteps=$dailySteps")
-            rebootOffset += dailySteps
-            baseline = cumulative
-            dailySteps = 0
+        // Delegate reboot detection and step calculation to pure function
+        val state = StepState(baseline, dailySteps, rebootOffset, hasReceivedFirstEvent)
+        val result = calculateSteps(state, cumulative)
+
+        // Log reboot detection if it occurred
+        if (result.rebootOffset != rebootOffset) {
+            Log.d(TAG, "Reboot detected: cumulative=$cumulative < baseline=$baseline, dailySteps=$dailySteps")
         }
 
-        // Calculate daily steps
-        dailySteps = (cumulative - baseline).toInt() + rebootOffset
+        // Apply result
+        baseline = result.baseline
+        dailySteps = result.dailySteps
+        rebootOffset = result.rebootOffset
 
         // Stub calls for subsequent tasks to fill in
         maybePersist()

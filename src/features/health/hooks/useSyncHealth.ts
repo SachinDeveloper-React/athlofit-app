@@ -111,6 +111,13 @@ export function useSyncHealth() {
     onSuccess: (response: any) => {
       const d = response?.data;
 
+      // Always sync the server's coinsBalance to the local store.
+      // The server is the single source of truth for balance — the frontend
+      // only displays it, never independently accumulates.
+      if (d?.coinsBalance !== undefined) {
+        setCoinsBalance(d.coinsBalance);
+      }
+
       // Always invalidate weekly-steps after a sync so the chart reflects
       // the freshly written data immediately — no stale bar for today.
       queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });
@@ -130,12 +137,10 @@ export function useSyncHealth() {
       }
 
       if (d?.goalCoinsAwarded) {
-        if (d.coinsBalance !== undefined) setCoinsBalance(d.coinsBalance);
         showStepGoalNotification(d.stepGoalCoins ?? 50);
       }
 
       if (d?.newlyCompleted?.length) {
-        if (d.coinsBalance !== undefined) setCoinsBalance(d.coinsBalance);
         showChallengeNotifications(d.newlyCompleted);
       }
     },

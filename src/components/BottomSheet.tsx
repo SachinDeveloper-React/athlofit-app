@@ -47,6 +47,8 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   const { height: H } = useWindowDimensions();
   const translateY = useRef(new Animated.Value(H)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  // Internal visibility: keep Modal mounted during close animation
+  const [modalVisible, setModalVisible] = useState(false);
 
   // Track keyboard so we remove bottom safe-area padding while it's open
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -93,11 +95,18 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   };
 
   useEffect(() => {
-    if (visible) springIn();
-    else slideOut();
+    if (visible) {
+      setModalVisible(true);
+      springIn();
+    } else {
+      slideOut(() => setModalVisible(false));
+    }
   }, [visible]);
 
-  const handleClose = () => slideOut(onClose);
+  const handleClose = () => slideOut(() => {
+    setModalVisible(false);
+    onClose();
+  });
 
   // Drag-to-dismiss
   const pan = useRef(
@@ -122,7 +131,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <Modal
       transparent
-      visible={visible}
+      visible={modalVisible}
       animationType="none"
       onRequestClose={handleClose}
       statusBarTranslucent

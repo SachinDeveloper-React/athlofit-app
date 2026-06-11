@@ -48,22 +48,31 @@ object HealthSyncHelper {
         val loginTs   = prefs.getLong("loginTimestamp", 0L)
         val zone      = ZoneId.systemDefault()
         val today     = LocalDate.now()
-        val yesterday = today.minusDays(1)
+
+        // Determine the earliest date to sync — the login date or 7 days ago, whichever is later.
+        val loginDate = if (loginTs > 0L) {
+            Instant.ofEpochMilli(loginTs).atZone(zone).toLocalDate()
+        } else {
+            today
+        }
+        val sevenDaysAgo = today.minusDays(6) // today + 6 previous days = 7 days
+        val startDate = if (loginDate.isAfter(sevenDaysAgo)) loginDate else sevenDaysAgo
 
         var anySuccess = false
 
-        val todayData = readDaySnapshot(client, today, zone, weightKg, loginTs)
-        if (todayData != null && todayData.optInt("steps") > 0) {
-            val ok = postSync(token, todayData)
-            Log.d(TAG, "TODAY sync ${if (ok) "OK" else "FAIL"} — ${todayData.optInt("steps")} steps")
-            if (ok) anySuccess = true
-        }
-
-        val yesterdayData = readDaySnapshot(client, yesterday, zone, weightKg, loginTs = 0L)
-        if (yesterdayData != null && yesterdayData.optInt("steps") > 0) {
-            val ok = postSync(token, yesterdayData)
-            Log.d(TAG, "YESTERDAY sync ${if (ok) "OK" else "FAIL"} — ${yesterdayData.optInt("steps")} steps")
-            if (ok) anySuccess = true
+        // Sync each day from startDate to today
+        var current = startDate
+        while (!current.isAfter(today)) {
+            // For the login date, pass loginTs so steps start from login time.
+            // For all other days, use 0L (full day from midnight).
+            val tsForDay = if (current == loginDate && loginTs > 0L) loginTs else 0L
+            val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay)
+            if (dayData != null && dayData.optInt("steps") > 0) {
+                val ok = postSync(token, dayData)
+                Log.d(TAG, "[$current] sync ${if (ok) "OK" else "FAIL"} — ${dayData.optInt("steps")} steps")
+                if (ok) anySuccess = true
+            }
+            current = current.plusDays(1)
         }
 
         return anySuccess

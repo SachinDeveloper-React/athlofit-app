@@ -25,7 +25,6 @@ interface Props {
 function formatCoins(n: number): string {
   const format = (value: number, suffix: string) => {
     const fixed = parseFloat(value.toFixed(1));
-    // Keep as integer if no decimal needed (e.g. 2000 → "2k" not "2.0k")
     return `${Number.isInteger(fixed) ? fixed : fixed.toFixed(1)}${suffix}`;
   };
 
@@ -33,7 +32,8 @@ function formatCoins(n: number): string {
   if (n >= 100000)   return format(n / 100000,   'L');
   if (n >= 1000)     return format(n / 1000,     'k');
 
-  return n.toString();
+  // Always show 2 decimal places — 0.10, 0.95, 50.00
+  return n.toFixed(2);
 }
 
 export const CoinBadge = memo(({ balance: balanceProp, size = 'md' }: Props) => {
