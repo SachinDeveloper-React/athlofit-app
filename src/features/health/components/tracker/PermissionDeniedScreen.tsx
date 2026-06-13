@@ -18,7 +18,6 @@ import {
   Heart,
   HeartPulse,
   MapPin,
-  Moon,
   RefreshCw,
   ShieldOff,
   Footprints,
@@ -110,24 +109,10 @@ const REQUIRED_PERMISSIONS: PermissionItem[] = [
     access: 'Read & Write',
   },
   {
-    Icon: HeartPulse,
-    iconColor: '#EC4899',
-    label: 'Blood Glucose',
-    reason: 'Monitor blood sugar levels over time',
-    access: 'Read & Write',
-  },
-  {
     Icon: Scale,
     iconColor: '#6366F1',
     label: 'Weight',
     reason: 'Track body weight changes and BMI calculations',
-    access: 'Read & Write',
-  },
-  {
-    Icon: Moon,
-    iconColor: '#7C3AED',
-    label: 'Sleep',
-    reason: 'Analyse sleep duration and quality',
     access: 'Read & Write',
   },
   {

@@ -14,7 +14,6 @@ import {
   Flame,
   Heart,
   MapPin,
-  Moon,
   Scale,
   Timer,
   Zap,
@@ -407,22 +406,6 @@ const StepDetailScreen = memo(({ route }: Props) => {
           value={data.hydration || '—'}
           unit={data.hydration ? 'ml' : ''}
           delay={60}
-        />
-        <MetricTile
-          icon={Moon}
-          iconColor="#8B5CF6"
-          label="Sleep"
-          value={data.sleepHours || '—'}
-          unit={data.sleepHours ? 'hrs' : ''}
-          delay={120}
-        />
-        <MetricTile
-          icon={Activity}
-          iconColor="#EC4899"
-          label="Blood Glucose"
-          value={data.bloodGlucose || '—'}
-          unit={data.bloodGlucose ? 'mmol/L' : ''}
-          delay={180}
         />
       </View>
 

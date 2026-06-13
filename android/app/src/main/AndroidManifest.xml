@@ -62,12 +62,6 @@
   <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
   <uses-permission android:name="android.permission.health.READ_WEIGHT" />
 
-  <uses-permission android:name="android.permission.health.READ_SLEEP" />
-  <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
-
-  <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE" />
-  <uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE" />
-
   <application
     android:enableOnBackInvokedCallback="false"
     android:name=".MainApplication"

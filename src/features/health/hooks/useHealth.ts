@@ -10,10 +10,8 @@ import {
   writeStepsHK,
   writeWeightHK,
   writeHydrationHK,
-  writeHeartRateHK,       // ✅ new
-  writeBloodPressureHK,   // ✅ new
-  writeBloodGlucoseHK,    // ✅ new
-  writeSleepHK,           // ✅ new
+  writeHeartRateHK,
+  writeBloodPressureHK,
 } from '../service/healthkit.service';
 
 import {
@@ -24,8 +22,6 @@ import {
   writeWeightHC,
   writeHeartRateHC,
   writeBloodPressureHC,
-  writeBloodGlucoseHC,
-  writeSleepHC,
   writeHydrationHC,
 } from '../service/healthConnect.service';
 
@@ -328,31 +324,6 @@ export function useHealth(options: UseHealthOptions = {}) {
     [platform],
   );
 
-  const logBloodGlucose = useCallback(
-    async (mmol: number) => {
-      if (platform === 'healthkit') await writeBloodGlucoseHK(mmol); // ✅ iOS
-      else await writeBloodGlucoseHC(mmol);                          // Android
-      setData(prev => ({ ...prev, bloodGlucose: mmol }));
-      setLastUpdated(new Date());
-    },
-    [platform],
-  );
-
-  const logSleep = useCallback(
-    async (bedtime: Date, wakeTime: Date) => {
-      if (platform === 'healthkit')
-        await writeSleepHK(bedtime, wakeTime); // ✅ iOS
-      else await writeSleepHC(bedtime, wakeTime);     // Android
-      const sleepHours =
-        Math.round(
-          ((wakeTime.getTime() - bedtime.getTime()) / 3_600_000) * 10,
-        ) / 10;
-      setData(prev => ({ ...prev, sleepHours }));
-      setLastUpdated(new Date());
-    },
-    [platform],
-  );
-
   // ── Legacy step / weight / hydration write ────────────────────────────────
 
   const writeSteps = useCallback(
@@ -390,8 +361,6 @@ export function useHealth(options: UseHealthOptions = {}) {
     logHeartRate,
     logBloodPressure,
     logWeight,
-    logBloodGlucose,
-    logSleep,
     writeSteps,
     writeWeight,
     writeHydration,

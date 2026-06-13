@@ -66,15 +66,8 @@ const PERMISSIONS: (Permission | BackgroundAccessPermission)[] = [
   { accessType: 'read',  recordType: 'BloodPressure' },
   { accessType: 'write', recordType: 'BloodPressure' },
 
-  { accessType: 'read',  recordType: 'BloodGlucose' },
-  { accessType: 'write', recordType: 'BloodGlucose' },
-
   { accessType: 'read',  recordType: 'Weight' },
   { accessType: 'write', recordType: 'Weight' },
-
-  // ── Sleep ─────────────────────────────────────────────────────────────────
-  { accessType: 'read',  recordType: 'SleepSession' },
-  { accessType: 'write', recordType: 'SleepSession' },
 
   // ── Hydration ─────────────────────────────────────────────────────────────
   { accessType: 'read',  recordType: 'Hydration' },
@@ -320,9 +313,7 @@ export const fetchAllHealthConnectData = async (
       stepsResult,
       hrRecords,
       bpRecords,
-      sleepRecords,
       weightRecords,
-      glucoseRecords,
       hydrationRecord,
     ] = await Promise.all([
       // Steps via readStepsDeduped() — reads individual records and picks the
@@ -346,18 +337,8 @@ export const fetchAllHealthConnectData = async (
         return { records: [] };
       }),
 
-      readWithRetry(() => readRecords('SleepSession', { timeRangeFilter: lastNDays(1) })).catch(e => {
-        console.warn('Sleep read failed:', e);
-        return { records: [] };
-      }),
-
       readWithRetry(() => readRecords('Weight', { timeRangeFilter: lastNDays(30) })).catch(e => {
         console.warn('Weight read failed:', e);
-        return { records: [] };
-      }),
-
-      readWithRetry(() => readRecords('BloodGlucose', { timeRangeFilter: lastNDays(1) })).catch(e => {
-        console.warn('BloodGlucose read failed:', e);
         return { records: [] };
       }),
 
@@ -401,16 +382,8 @@ export const fetchAllHealthConnectData = async (
     // ── Blood pressure ─────────────────────────────────────────────────────
     const latestBP = bpRecords.records.at(-1);
 
-    // ── Sleep ──────────────────────────────────────────────────────────────
-    const sleepMs = sleepRecords.records.reduce(
-      (sum, r) =>
-        sum + (new Date(r.endTime).getTime() - new Date(r.startTime).getTime()),
-      0,
-    );
-
-    // ── Weight & glucose ───────────────────────────────────────────────────
+    // ── Weight ─────────────────────────────────────────────────────────────
     const latestWeight = weightRecords.records.at(-1);
-    const latestGlucose = glucoseRecords.records.at(-1);
 
     // ── Hydration ───────────────────────────────────────────────────
     const hydrationMl = hydrationRecord.records.reduce((sum, r) => {
@@ -433,13 +406,11 @@ export const fetchAllHealthConnectData = async (
       bloodPressureDiastolic: latestBP
         ? Math.round(latestBP.diastolic.inMillimetersOfMercury)
         : 0,
-      sleepHours: Math.round((sleepMs / 3_600_000) * 10) / 10,
+      sleepHours: 0,
       weight: latestWeight
         ? Math.round(latestWeight.weight.inKilograms * 10) / 10
         : 0,
-      bloodGlucose: latestGlucose
-        ? Math.round(latestGlucose.level.inMillimolesPerLiter * 10) / 10
-        : 0,
+      bloodGlucose: 0,
     };
 
     console.log('Health data fetched:', result);
@@ -497,36 +468,6 @@ export const writeBloodPressureHC = async (
       time: new Date().toISOString(),
       bodyPosition: 0, // UNKNOWN
       measurementLocation: 0, // UNKNOWN
-    },
-  ]);
-};
-
-// ─── BloodGlucose enum values ─────────────────────────────────────────────────
-// specimenSource:  0=UNKNOWN 1=INTERSTITIAL_FLUID 2=CAPILLARY_BLOOD 3=PLASMA 4=SERUM 5=TEARS 6=WHOLE_BLOOD
-// mealType:        0=UNKNOWN 1=BREAKFAST 2=LUNCH 3=DINNER 4=SNACK
-// relationToMeal:  0=UNKNOWN 1=GENERAL   2=FASTING 3=BEFORE_MEAL 4=AFTER_MEAL
-export const writeBloodGlucoseHC = async (mmol: number): Promise<void> => {
-  await insertRecords([
-    {
-      recordType: 'BloodGlucose',
-      level: { value: mmol, unit: 'millimolesPerLiter' },
-      time: new Date().toISOString(),
-      specimenSource: 2, // CAPILLARY_BLOOD
-      mealType: 0, // UNKNOWN
-      relationToMeal: 0, // UNKNOWN
-    },
-  ]);
-};
-
-export const writeSleepHC = async (
-  bedtime: Date,
-  wakeTime: Date,
-): Promise<void> => {
-  await insertRecords([
-    {
-      recordType: 'SleepSession',
-      startTime: bedtime.toISOString(),
-      endTime: wakeTime.toISOString(),
     },
   ]);
 };
