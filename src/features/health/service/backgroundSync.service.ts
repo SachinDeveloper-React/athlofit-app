@@ -42,7 +42,7 @@ import { BASE_URL } from '../../../utils/api';
 import { useNetworkStore } from '../../../store/networkStore';
 import { offlineQueue } from '../../../services/offlineQueue';
 
-const TASK_ID = 'com.athlofit.healthsync';
+const TASK_ID = 'com.athlofit.athlofit.healthsync';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 

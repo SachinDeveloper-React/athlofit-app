@@ -72,6 +72,22 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // ─── Logged-out widget state ──────────────────────────────────────────────
+
+    /**
+     * Mark the widget as "logged out" — displays a "You are logged out" message.
+     * Call this on logout.
+     */
+    @ReactMethod
+    fun setLoggedOut(loggedOut: Boolean, promise: Promise) {
+        try {
+            StepsWidgetProvider.setLoggedOut(reactApplicationContext, loggedOut)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("LOGGED_OUT_ERROR", e.message, e)
+        }
+    }
+
     // ─── Access token (for EodSyncWorker) ─────────────────────────────────────
 
     /**

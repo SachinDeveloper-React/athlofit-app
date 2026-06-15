@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "683252194865",
-    "project_id": "athlofit-8cc4b",
-    "storage_bucket": "athlofit-8cc4b.firebasestorage.app"
+    "project_number": "783435607572",
+    "project_id": "athlofit-c7ae7",
+    "storage_bucket": "athlofit-c7ae7.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:683252194865:android:ba1ee1ffbbaa35250f7f10",
+        "mobilesdk_app_id": "1:783435607572:android:37344af4d45c9b5436c101",
         "android_client_info": {
-          "package_name": "com.athlofit"
+          "package_name": "com.athlofit.athlofit"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAX29Td_ZdApv0gUtzBmmSpPiBGprsmqjs"
+          "current_key": "AIzaSyBlEbvCvsqN2s2CKdLAdwW7E0g6ubYQU6E"
         }
       ],
       "services": {

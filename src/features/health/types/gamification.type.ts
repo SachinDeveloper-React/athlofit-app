@@ -53,12 +53,26 @@ export interface GamificationStore extends GamificationState {
 
 export type TransactionType = 'EARNED' | 'SPENT' | 'EXPIRED';
 
+export type TransactionCategory =
+  | 'PASSIVE_STEPS'
+  | 'DAILY_STEP_GOAL'
+  | 'DAILY_STEP_GOAL_AUTO'
+  | 'HYDRATION_GOAL'
+  | 'STREAK_BADGE'
+  | 'ACHIEVEMENT'
+  | 'REFERRAL_BONUS'
+  | 'SHOP_PURCHASE'
+  | 'SHOP_REFUND'
+  | 'MANUAL';
+
 export interface CoinTransaction {
   id: string;
   type: TransactionType;
   amount: number;
   source: string;
   createdAt: string;
+  balanceAfter?: number;
+  category?: TransactionCategory;
 }
 
 export interface ClaimableReward {

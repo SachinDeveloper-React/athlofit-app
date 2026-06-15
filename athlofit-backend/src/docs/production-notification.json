@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "athlofit-c7ae7",
+  "private_key_id": "9854a2e4d6aa9b3e844925543310728c7a1fb723",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCzs34jUwz1K8n+\n/XneoiNc1rF698OIz1cWoOtWpS2d33LOqG9xGmRbg1UGyU/5Xlk2vPfmt68mTN94\nl+Wdkwxv9OKeB/k+S64by0AuwK3GnBPdt88wMQl7Zb5+u3515Gmniixt53MBPI3M\nLpsZmFOqyYsxzwkowMK5vcqMCOEM/xMnxTbksVDtAOOgiH2oo7qrQjwLXLPgNvKV\nDYVEjGNgxA/ekrsvWQ0sp3BTi02BBLgEkH8XmsjHSHw2cuKfDDrKzR3/mf+31w+8\n4AhlQMnFz+9v02ZVQJeOTKzfxdYv/Yz3o+NqAqT3YVhHMz5mGlpYPlji3nRRIrmM\nkIbifQYhAgMBAAECggEACiU0FeJ2dNEIEnFVFBCrVm54jqy2SV8LV6e2IaoprSQU\nYz53LDeFOvVrM3riHP4Ko2B/znLIXK0yYKiSuha3OQrmUG260J2NMtyCvyD5rqDZ\nLkdWVy4tjt3rp1QGi7ldjavrXjkW8RbuGnz3HLbQ4m+GgEVkCvz3AW2JpeZKbmVP\n9sokQ1CVDZ58wSK8xMKu9Xj34Dn4sWkO/cBQLJ64iWVg0y384sRNZDRHMTHYNIVI\nGsaNuQDVmZM8g3fFKgb5dF5oECx9HUaOr4BgKEyttVnDqriolSru0KkojeTEwjwW\nydxc6xB1cGyjYp25OnwoT34Hi3sSffEt9Rq2Yh3vAQKBgQDkufpUngqdKZzzVmig\nbfAkAPVho3ERpTpH6NortqaP/XM4rFbZkobeDu2+SajoH58yIzZU8zCRHJUglmo7\n8wS9mc566WR+5sWxzCm2zTbmYlNXNxdM4/UCzPhwGipZBfEE9qr52SS1BwwVsM47\npKmH/N0YPQqD2/pW3jlqDJRkSQKBgQDJIPw2TywS0LTdOCuiCcDkbE/N3oVyZO7N\nEqYSFiN2Y7yfQLUYooz74Y27n4m8rASdZpCmtqRu2ffZXMMkMfhNonl8tz5FMSAJ\nqe1qu2fYu0FMW06NRvwnMAiZRjUuomEl5aHRhxXOqrkutmvwwIO5eRuTkf9A7HZw\nFYYyXX9jGQKBgELTw7wtYNSCcAT43iDhfiRG02rvof2R1PFlqzjSaN/xIVURpV50\nXUtL+VJ7mwoXEyBHAXzYgPwk6b1XtTpGyr/KzHVE88PQETrdd+KdGsk9OTRmODyS\n7ecflAbM3kqcXcshdtsBAqSRpoo/2kG63n2I9+A5FXVpND9lNkkx27lhAoGAWvaY\nGtfjzv6lTgfBdB+FJcn2rd0d7YbImeb9RODOWRTykfPp86JQsPpp55lX6gTCcY2Z\njky8QYZDGgNiHlSbQEFjQIx/lTuKidRYlBT9+n92INqKxEp+cBrBSND/7H90AHfC\nn8jAjB+acQ3/83qeGJw1ZKB7GRnY1whlERJIMsECgYEA25ef/FiD9TfY5RcbrUds\nE5KhPlCUxcFHgbCv0aOZOih6zSvLzHOOXg44GM4ORSmwCXP3JAWQkP4gmQkfTd/Y\nzVMfIRfUELlwcZ5hWBDtqQN2G1K1PEZL5IOMXBQqmSExhYCxWAZ57vGD2ucSSqSw\nviugEHneYL6+Fa9m9bokdqE=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@athlofit-c7ae7.iam.gserviceaccount.com",
+  "client_id": "112244896299709697444",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40athlofit-c7ae7.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

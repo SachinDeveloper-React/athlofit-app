@@ -8,6 +8,7 @@ const { success, error } = require('../utils/response');
 const User = require('../models/User.model');
 const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
+const { logCoinTransaction } = require('../utils/logCoinTransaction');
 
 // BUG-032: Escape regex special characters to prevent ReDoS
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -346,6 +347,17 @@ const buyWithCoins = async (req, res, next) => {
       session.endSession();
     }
 
+    // Log coin transaction for purchase
+    logCoinTransaction({
+      userId: req.user._id,
+      type: 'SPENT',
+      amount: finalCoinCost,
+      balanceAfter: gamification.coinsBalance,
+      source: 'SHOP_PURCHASE',
+      description: `Shop Purchase — Order #${order._id.toString().slice(-6).toUpperCase()}`,
+      metadata: { orderId: order._id },
+    });
+
     // ── Persist + push: order confirmed ──────────────────────────────────
     createNotification(req.user._id, {
       type:    'PRODUCT',
@@ -430,6 +442,17 @@ const cancelOrder = async (req, res, next) => {
         gam.coinsBalance = Math.round(gam.coinsBalance + order.totalCoins);
         await gam.save();
         refundedCoins = order.totalCoins;
+
+        // Log refund transaction
+        logCoinTransaction({
+          userId: req.user._id,
+          type: 'REFUND',
+          amount: order.totalCoins,
+          balanceAfter: gam.coinsBalance,
+          source: 'SHOP_REFUND',
+          description: `Refund — Order #${order._id.toString().slice(-6).toUpperCase()} cancelled`,
+          metadata: { orderId: order._id },
+        });
       }
     }
 

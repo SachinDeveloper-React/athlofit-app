@@ -19,7 +19,8 @@ class StepsWidgetProvider : AppWidgetProvider() {
         private const val PREF_STEPS = "steps"
         private const val PREF_GOAL = "goal"
         private const val PREF_LAST_UPDATED = "lastUpdated"
-        const val ACTION_REFRESH = "com.athlofit.WIDGET_REFRESH"
+        private const val PREF_LOGGED_OUT = "loggedOut"
+        const val ACTION_REFRESH = "com.athlofit.athlofit.WIDGET_REFRESH"
 
         /**
          * Called from React Native (StepsWidgetModule) and from WidgetUpdateWorker.
@@ -78,6 +79,31 @@ class StepsWidgetProvider : AppWidgetProvider() {
                 .remove("loginTimestamp")
                 .apply()
         }
+
+        /**
+         * Mark the widget as "logged out" — the next render will show a
+         * "You are logged out" message instead of step data.
+         */
+        fun setLoggedOut(context: Context, loggedOut: Boolean) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean(PREF_LOGGED_OUT, loggedOut)
+                .apply()
+
+            // Immediately refresh all widget instances so the UI updates now
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, StepsWidgetProvider::class.java)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
+
+            if (appWidgetIds.isNotEmpty()) {
+                val intent = Intent(context, StepsWidgetProvider::class.java).apply {
+                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+                }
+                context.sendBroadcast(intent)
+                Log.d(TAG, "Widget logged-out state broadcast sent: loggedOut=$loggedOut")
+            }
+        }
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -126,11 +152,42 @@ class StepsWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int
     ) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val isLoggedOut = prefs.getBoolean(PREF_LOGGED_OUT, false)
+        val views = RemoteViews(context.packageName, R.layout.widget_steps)
+
+        if (isLoggedOut) {
+            // ── Logged-out state: show message, hide step data ─────────────────
+            views.setTextViewText(R.id.widget_steps, "—")
+            views.setTextViewText(R.id.widget_goal_text, "You are logged out")
+            views.setProgressBar(R.id.widget_progress, 100, 0, false)
+            views.setTextViewText(R.id.widget_percentage, "")
+            views.setTextViewText(R.id.widget_last_updated, "Tap to sign in")
+
+            // Tap widget → open app (to sign in)
+            val launchIntent = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
+                ?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                }
+
+            if (launchIntent != null) {
+                val openPi = PendingIntent.getActivity(
+                    context,
+                    1,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                views.setOnClickPendingIntent(R.id.widget_root, openPi)
+            }
+
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+            return
+        }
+
+        // ── Normal state: show step data ──────────────────────────────────────
         val steps = prefs.getInt(PREF_STEPS, 0)
         val goal = prefs.getInt(PREF_GOAL, 10000)
         val lastUpdated = prefs.getLong(PREF_LAST_UPDATED, 0)
-
-        val views = RemoteViews(context.packageName, R.layout.widget_steps)
 
         // Steps count
         views.setTextViewText(R.id.widget_steps, formatNumber(steps))

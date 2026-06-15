@@ -7,6 +7,7 @@ const { buildDateRange, toDayLabel, todayISO, isConsecutiveDay } = require('../u
 const { syncChallengeProgress } = require('./challenge.controller');
 const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
+const { logCoinTransaction } = require('../utils/logCoinTransaction');
 
 // ─── GET /health/weekly-steps?from=YYYY-MM-DD&to=YYYY-MM-DD ──────────────────
 const getWeeklySteps = async (req, res, next) => {
@@ -180,6 +181,17 @@ const syncHealthData = async (req, res, next) => {
       goalCoinsAwarded = true;
       await gam.save();
 
+      // Log coin transaction for step goal
+      logCoinTransaction({
+        userId: req.user._id,
+        type: 'EARNED',
+        amount: stepGoalCoins,
+        balanceAfter: gam.coinsBalance,
+        source: 'DAILY_STEP_GOAL_AUTO',
+        description: `Daily Step Goal — ${dailyGoal.toLocaleString()} steps reached`,
+        metadata: { steps: steps ?? 0, date: today, rewardId: 'steps_daily_auto' },
+      });
+
       // ── Persist + push: step goal reached ──────────────────────────────
       createNotification(req.user._id, {
         type:    'GOAL',
@@ -211,6 +223,17 @@ const syncHealthData = async (req, res, next) => {
           gam.coinsBalance = parseFloat((gam.coinsBalance + actualAdded).toFixed(2));
           gam.lastCoinDate = today;
           await gam.save();
+
+          // Log passive step coin transaction
+          logCoinTransaction({
+            userId: req.user._id,
+            type: 'EARNED',
+            amount: actualAdded,
+            balanceAfter: gam.coinsBalance,
+            source: 'PASSIVE_STEPS',
+            description: `Passive Step Coins — ${(steps ?? 0).toLocaleString()} steps`,
+            metadata: { steps: steps ?? 0, date: today },
+          });
         }
       }
     }

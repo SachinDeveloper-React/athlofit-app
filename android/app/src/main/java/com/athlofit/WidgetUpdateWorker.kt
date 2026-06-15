@@ -46,6 +46,12 @@ class WidgetUpdateWorker(
                 return@withContext Result.success()
             }
 
+            // If the user is logged out, skip the update to preserve the logged-out UI
+            if (prefs.getBoolean("loggedOut", false)) {
+                Log.d(TAG, "User is logged out — skipping widget update")
+                return@withContext Result.success()
+            }
+
             val goal  = prefs.getInt("goal", 10000)
             val token = prefs.getString("accessToken", null)
 

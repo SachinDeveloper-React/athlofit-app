@@ -65,6 +65,18 @@ export const gamificationService = {
     };
   },
 
+  getCoinHistory: async (page = 1, limit = 20, category?: string, type?: string) => {
+    let url = `gamification/coins/history?page=${page}&limit=${limit}`;
+    if (category) url += `&category=${category}`;
+    if (type) url += `&type=${type}`;
+    const response = await api.get<any>(url);
+    return {
+      success: response.success,
+      message: response.message,
+      data: response.data,
+    };
+  },
+
   claimReward: async (rewardId: string) => {
     const response = await api.post<ClaimRewardResponse>(
       'gamification/coins/claim',

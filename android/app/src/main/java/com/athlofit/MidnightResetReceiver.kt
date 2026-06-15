@@ -23,7 +23,7 @@ class MidnightResetReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "MidnightResetReceiver"
-        const val EXTRA_MIDNIGHT_RESET = "com.athlofit.EXTRA_MIDNIGHT_RESET"
+        const val EXTRA_MIDNIGHT_RESET = "com.athlofit.athlofit.EXTRA_MIDNIGHT_RESET"
     }
 
     override fun onReceive(context: Context, intent: Intent?) {

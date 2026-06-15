@@ -33,11 +33,10 @@ enableScreens(true);
 
 // ─── Google Sign-In — must be called once before any signIn() call ────────────
 GoogleSignin.configure({
-  webClientId: '248456486264-if00mjj7r7kt7pejjuoh4t5vg3jo6ges.apps.googleusercontent.com',
-  iosClientId:
-    '248456486264-046ntrivtk80o2u60vt8mudj5mme7gnn.apps.googleusercontent.com',
+  webClientId: '221970537561-ipkq0c3l16in5i82g628h00h9jp3ut92.apps.googleusercontent.com',
   offlineAccess: true,
 });
+
 
 // ─── React Query Client ───────────────────────────────────────────────────────
 // BUG-042: QueryClient created inside App component (via useState) so it is

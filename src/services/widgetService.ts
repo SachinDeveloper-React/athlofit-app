@@ -8,6 +8,7 @@ interface StepsWidgetNativeModule {
   stopAutoUpdate: () => Promise<boolean>;
   setLoginTimestamp: (timestamp: number) => Promise<boolean>;
   clearLoginTimestamp: () => Promise<boolean>;
+  setLoggedOut: (loggedOut: boolean) => Promise<boolean>;
   isWidgetAdded: () => Promise<boolean>;
   setAppInitialising: (initialising: boolean) => Promise<boolean>;
   scheduleEodSync: () => Promise<boolean>;
@@ -102,6 +103,22 @@ class WidgetService {
       return true;
     } catch (e) {
       console.warn('[WidgetService] clearLoginTimestamp failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Set the widget to "logged out" state.
+   * Shows "You are logged out" message on the widget.
+   * Call this on logout. Pass false on login to restore normal display.
+   */
+  async setLoggedOut(loggedOut: boolean): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.setLoggedOut(loggedOut);
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] setLoggedOut failed:', e);
       return false;
     }
   }

@@ -45,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Sync login timestamp to native widget + start background auto-update + EOD alarm
         import('../../../services/widgetService').then(({ widgetService }) => {
+          widgetService.setLoggedOut(false);                  // restore normal widget display
           widgetService.setLoginTimestamp(loginTs);
           widgetService.startAutoUpdate();
           widgetService.scheduleEodSync();
@@ -205,6 +206,7 @@ export const useAuthStore = create<AuthState>()(
           widgetService.clearAccessToken();
           widgetService.clearUserWeight();     // remove mirrored weight
           widgetService.stopStepNotification(); // dismiss live step notification
+          widgetService.setLoggedOut(true);     // show "You are logged out" on widget
         });
 
         // Clear user-specific stores to prevent data leakage between accounts

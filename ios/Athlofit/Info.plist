@@ -80,7 +80,7 @@
 				<string>athlofit</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>com.athlofit.app</string>
+			<string>com.athlofit.athlofit.app</string>
 		</dict>
 	</array>
 	<key>UIUserInterfaceStyle</key>
