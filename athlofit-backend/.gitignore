@@ -1,13 +1,5 @@
 node_modules/
 .env
-.env.prod
 *.log
 dist/
 .DS_Store
-
-src/docs/production-notification.json
-*.json
-
-# Firebase service account — never commit this
-src/config/serviceAccountKey.json
-path/to/service-account.json
