@@ -34,8 +34,9 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   checkboxRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
+    justifyContent:"center" as const,
     marginBottom: spacing[4],
-    marginTop: spacing[2],
+    // marginTop: spacing[2],
   },
   checkboxBox: {
     width: 22,
@@ -45,7 +46,7 @@ const useStyles = makeStyles(({ colors, spacing, radius }) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginRight: spacing[2],
-    marginTop: 2,
+    marginTop: -1,
   },
   checkboxLabel: {
     flex: 1,
@@ -64,10 +65,12 @@ const LoginScreen: React.FC<Props> = () => {
   const { mutate: login, isPending } = useLogin();
   const { mutate: googleLogin, isPending: isGooglePending } = useGoogleLogin();
 
-  const { control, handleSubmit, formState: { errors } } = useForm({
+  const { control, handleSubmit, watch, formState: { errors }, setError } = useForm({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '', termsAccepted: false },
   });
+
+  const termsAccepted = watch('termsAccepted');
 
   const onSubmit = (values: LoginFormValues) => {
     login(values, {
@@ -151,6 +154,7 @@ const LoginScreen: React.FC<Props> = () => {
                 >
                   {value && <Icon name="Check" size={14} color="#FFFFFF" strokeWidth={3} />}
                 </AppView>
+
                 <AppView style={styles.checkboxLabel}>
                   <AppText variant="footnote">
                     I agree to the{' '}
@@ -186,9 +190,24 @@ const LoginScreen: React.FC<Props> = () => {
         <Button
           label={isGooglePending ? 'Signing in...' : 'Continue with Google'}
           variant="outline"
-          onPress={() => googleLogin(undefined, {
-            onError: (err: any) => toast.error(err?.message ?? 'Google sign-in failed.'),
-          })}
+          onPress={() => {
+            if (!termsAccepted) {
+              setError('termsAccepted', {
+                message: 'You must accept Terms & Conditions and Privacy Policy',
+              });
+              toast.error('Please accept Terms & Conditions and Privacy Policy to continue.');
+              return;
+            }
+            googleLogin({ termsAccepted: true }, {
+              onError: (err: any) => {
+                if (err?.statusCode === 409 && err?.data?.activeSession) {
+                  toast.error('Your account is already logged in on another device. Please logout from that device first.');
+                  return;
+                }
+                toast.error(err?.message ?? 'Google sign-in failed.');
+              },
+            });
+          }}
           loading={isGooglePending} fullWidth size="lg" />
       </AppView>
 
@@ -203,3 +222,4 @@ const LoginScreen: React.FC<Props> = () => {
 };
 
 export default LoginScreen;
+

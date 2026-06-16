@@ -8,7 +8,9 @@ export function useGoogleLogin() {
   const setAuth = useAuthStore(s => s.setAuth);
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params: { termsAccepted: boolean } | undefined) => {
+      const termsAccepted = params?.termsAccepted ?? false;
+
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       const result = await GoogleSignin.signIn();
@@ -33,6 +35,7 @@ export function useGoogleLogin() {
         photo,
         scopes,
         serverAuthCode,
+        termsAccepted,
       });
 
       if (!response.success) throw new Error(response.message);
