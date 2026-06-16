@@ -14,19 +14,21 @@ import { C } from './onboarding.constant';
 export const SLIDES: SlideConfig[] = [
   {
     key: 'steps',
-    title: 'Move Every Day',
+    title: '🚶 Walk. Earn. Repeat.',
     subtitle:
-      'Track your runs, walks, and every step of your journey to a healthier you.',
+      'Every step counts. Turn your daily movement into ATHLOFIT Coins and start earning rewards.',
     accent: C.teal,
     Scene: StepsScene,
+    button: "Start Walking"
   },
   {
     key: 'coins',
-    title: 'Earn Coins',
+    title: '🪙 Your Steps Have Value',
     subtitle:
-      'Every step counts. Walk, run, and complete goals to earn coins you can spend.',
+      'Walk, run, stay active and earn ATHLOFIT Coins every day. Fitness finally pays back.',
     accent: C.gold,
     Scene: CoinsScene,
+    button:"Earn Coins"
   },
   {
     key: 'hydration',
@@ -35,21 +37,24 @@ export const SLIDES: SlideConfig[] = [
       'Track your water intake and stay hydrated throughout the day for peak performance.',
     accent: C.blue,
     Scene: HydrationScene,
+    button:"Drink Water"
   },
   {
     key: 'heart',
-    title: 'Know Your Heart',
+    title: '❤️ Track Your Health',
     subtitle:
-      'Real-time heart rate and blood pressure monitoring, always at your fingertips.',
+      'Monitor steps, heart rate, BMI and other health insights in one place.',
     accent: C.accent,
     Scene: HeartScene,
+    button:"Stay Healthy"
   },
   {
     key: 'ecom',
-    title: 'Spend Your Coins',
+    title: '🏆 Challenge Yourself',
     subtitle:
-      'Redeem your hard-earned coins for fitness gear, supplements, and exclusive rewards.',
+      'Build streaks, climb leaderboards and compete with friends to stay motivated and shop.',
     accent: C.teal,
     Scene: EcomScene,
+    button:"Get Started"
   },
 ];

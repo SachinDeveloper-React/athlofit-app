@@ -171,6 +171,7 @@ const OnboardingScreen = () => {
 
         <NextButton
           isLast={isLast}
+          buttonTitle={slide.button}
           accent={slide.accent}
           scale={btnScale}
           onPress={goNext}

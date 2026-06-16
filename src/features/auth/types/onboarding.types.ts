@@ -77,6 +77,7 @@ export interface SlideConfig {
   title: string;
   subtitle: string;
   accent: string;
+  button: string;
   Scene: React.FC;
 }
 
@@ -103,6 +104,7 @@ export interface DotsProps {
 export interface NextButtonProps {
   isLast: boolean;
   accent: string;
+  buttonTitle: string;
   scale: import('react-native').Animated.Value;
   onPress: () => void;
 }

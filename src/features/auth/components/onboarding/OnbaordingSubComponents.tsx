@@ -258,6 +258,7 @@ export const NextButton: React.FC<NextButtonProps> = ({
   accent,
   scale,
   onPress,
+  buttonTitle
 }) => {
   const { colors, spacing, radius, fontSize, fontWeight, shadow } = useTheme();
   return (
@@ -280,7 +281,8 @@ export const NextButton: React.FC<NextButtonProps> = ({
             fontWeight: fontWeight.bold,
             letterSpacing: 0.3,
           }}>
-            {isLast ? 'Get Started 🚀' : 'Continue'}
+            {/* {isLast ? 'Get Started 🚀' : 'Continue'} */}
+            {buttonTitle}
           </AppText>
           {!isLast && (
             <Svg
