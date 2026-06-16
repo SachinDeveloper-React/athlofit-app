@@ -193,12 +193,22 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
     // ─── Query Methods ────────────────────────────────────────────────────────
 
     /**
-     * Returns the current daily step count from StepDataStore (SharedPreferences).
+     * Returns the current daily step count.
+     * First tries the live in-memory value from StepCounterService (updated on every sensor event).
+     * Falls back to SharedPreferences if the service is not running.
      * Returns 0 if no data has been recorded for the current day.
      */
     @ReactMethod
     fun getCurrentSteps(promise: Promise) {
         try {
+            // Prefer live in-memory value (updates instantly on every sensor event)
+            val liveSteps = StepCounterService.liveStepCount
+            if (liveSteps >= 0) {
+                promise.resolve(liveSteps)
+                return
+            }
+
+            // Fallback to SharedPreferences (service not running)
             val prefs = reactApplicationContext.getSharedPreferences(
                 PREFS_NAME, Context.MODE_PRIVATE
             )

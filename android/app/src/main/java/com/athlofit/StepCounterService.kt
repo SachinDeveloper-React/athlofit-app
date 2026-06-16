@@ -70,6 +70,15 @@ class StepCounterService : Service(), SensorEventListener {
         private const val HC_WRITE_INTERVAL_MS = 2 * 60 * 1000L
 
         /**
+         * Live in-memory step count accessible from NativeStepModule.getCurrentSteps()
+         * without waiting for the 90-second SharedPreferences persist cycle.
+         * Returns -1 if the service is not running (caller should fall back to SharedPreferences).
+         */
+        @Volatile
+        var liveStepCount: Int = -1
+            private set
+
+        /**
          * Convenience method to start the service from any context.
          */
         fun start(context: Context) {
@@ -81,6 +90,7 @@ class StepCounterService : Service(), SensorEventListener {
          * Convenience method to stop the service from any context.
          */
         fun stop(context: Context) {
+            liveStepCount = -1
             context.stopService(Intent(context, StepCounterService::class.java))
         }
     }
@@ -276,6 +286,10 @@ class StepCounterService : Service(), SensorEventListener {
         dailySteps = result.dailySteps
         rebootOffset = result.rebootOffset
 
+        // Update the live static step count so NativeStepModule.getCurrentSteps()
+        // always returns the freshest value without waiting for SharedPreferences persist.
+        liveStepCount = dailySteps
+
         // Stub calls for subsequent tasks to fill in
         maybePersist()
         maybeSync()
@@ -330,6 +344,9 @@ class StepCounterService : Service(), SensorEventListener {
         storedDate = prefs.getString("storedDate", "") ?: ""
         lastSyncTime = prefs.getLong("lastSyncTime", 0L)
         pendingSyncPayload = prefs.getString("pendingSyncPayload", "") ?: ""
+
+        // Keep live count in sync with persisted state on service start
+        liveStepCount = dailySteps
     }
 
     // ── Sync ─────────────────────────────────────────────────────────────────
@@ -400,7 +417,7 @@ class StepCounterService : Service(), SensorEventListener {
     private fun performSync(payload: String) {
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
         val accessToken = widgetPrefs.getString("accessToken", "") ?: ""
-        val baseUrl = widgetPrefs.getString("baseUrl", "https://athlofit-backend.vercel.app") ?: "https://athlofit-backend.vercel.app"
+        val baseUrl = widgetPrefs.getString("baseUrl", "https://api.athlofit.com") ?: "https://api.athlofit.com"
 
         if (accessToken.isEmpty()) {
             Log.w(TAG, "performSync — no accessToken available, retaining payload for retry")

@@ -34,7 +34,7 @@ import java.time.ZoneId
 object HealthSyncHelper {
 
     private const val TAG = "HealthSyncHelper"
-    private const val BASE_URL = "https://athlofit-backend.vercel.app/"
+    private const val BASE_URL = "https://api.athlofit.com/"
 
     // ─── Public entry point ───────────────────────────────────────────────────
 

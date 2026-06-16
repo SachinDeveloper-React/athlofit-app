@@ -3,12 +3,13 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { Linking, TouchableOpacity } from 'react-native';
 import { AuthStackScreenProps } from '../../../types/navigation.types';
 import { AuthRoutes } from '../../../navigation/routes';
 import { useTheme } from '../../../hooks/useTheme';
 import { makeStyles } from '../../../hooks/makeStyles';
 import {
-  AppText, AppView, Button, Divider, Input, Screen, useToast,
+  AppText, AppView, Button, Divider, Icon, Input, Screen, useToast,
 } from '../../../components';
 import { useLogin } from '../hooks/useLogin';
 import { useGoogleLogin } from '../hooks/useGoogleLogin';
@@ -16,7 +17,10 @@ import { LoginFormValues, loginSchema } from '../utils/authValidation';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.LOGIN>;
 
-const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
+const TERMS_URL = 'https://athlofit.com/terms';
+const PRIVACY_URL = 'https://athlofit.com/privacy-policy';
+
+const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   hero:    { alignItems: 'center' as const },
   logoBox: {
     width: 72,
@@ -27,6 +31,27 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight })
     marginBottom: spacing[6],
   },
   title:   { marginBottom: spacing[2], marginTop: spacing[1] },
+  checkboxRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    marginBottom: spacing[4],
+    marginTop: spacing[2],
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 2,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: spacing[2],
+    marginTop: 2,
+  },
+  checkboxLabel: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+  },
 }));
 
 const LoginScreen: React.FC<Props> = () => {
@@ -39,9 +64,9 @@ const LoginScreen: React.FC<Props> = () => {
   const { mutate: login, isPending } = useLogin();
   const { mutate: googleLogin, isPending: isGooglePending } = useGoogleLogin();
 
-  const { control, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
+  const { control, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: '', password: '', termsAccepted: false },
   });
 
   const onSubmit = (values: LoginFormValues) => {
@@ -54,6 +79,11 @@ const LoginScreen: React.FC<Props> = () => {
             email: err.data.email || values.email,
             flow: 'signup',
           });
+          return;
+        }
+        // If account is already logged in on another device
+        if (err?.statusCode === 409 && err?.data?.activeSession) {
+          toast.error('Your account is already logged in on another device. Please logout from that device first.');
           return;
         }
         toast.error(err?.message ?? 'Login failed. Please try again.');
@@ -90,11 +120,66 @@ const LoginScreen: React.FC<Props> = () => {
               onChangeText={onChange} onBlur={onBlur} value={value} error={errors.password?.message} />
           )} />
 
-        <AppView row justify="flex-end" mb={6} style={{ marginTop: -8 }}>
+        <AppView row justify="flex-end" mb={2} style={{ marginTop: -8 }}>
           <Button label="Forgot password?" variant="ghost" size="sm"
             onPress={() => navigation.navigate(AuthRoutes.FORGOT_PASSWORD)}
             labelStyle={{ color: colors.primary }} />
         </AppView>
+
+        {/* Terms & Conditions Checkbox */}
+        <Controller
+          control={control}
+          name="termsAccepted"
+          render={({ field: { onChange, value } }) => (
+            <AppView>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => onChange(!value)}
+                style={styles.checkboxRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: value === true }}
+                accessibilityLabel="Accept Terms and Conditions and Privacy Policy"
+              >
+                <AppView
+                  style={[
+                    styles.checkboxBox,
+                    {
+                      borderColor: errors.termsAccepted ? colors.destructive : (value ? colors.primary : colors.border),
+                      backgroundColor: value ? colors.primary : 'transparent',
+                    },
+                  ]}
+                >
+                  {value && <Icon name="Check" size={14} color="#FFFFFF" strokeWidth={3} />}
+                </AppView>
+                <AppView style={styles.checkboxLabel}>
+                  <AppText variant="footnote">
+                    I agree to the{' '}
+                  </AppText>
+                  <AppText
+                    variant="footnote"
+                    style={{ color: colors.primary, textDecorationLine: 'underline' }}
+                    onPress={() => Linking.openURL(TERMS_URL)}
+                  >
+                    Terms & Conditions
+                  </AppText>
+                  <AppText variant="footnote"> and </AppText>
+                  <AppText
+                    variant="footnote"
+                    style={{ color: colors.primary, textDecorationLine: 'underline' }}
+                    onPress={() => Linking.openURL(PRIVACY_URL)}
+                  >
+                    Privacy Policy
+                  </AppText>
+                </AppView>
+              </TouchableOpacity>
+              {errors.termsAccepted && (
+                <AppText variant="caption1" style={{ color: colors.destructive, marginTop: -8, marginBottom: 8 }}>
+                  {errors.termsAccepted.message}
+                </AppText>
+              )}
+            </AppView>
+          )}
+        />
 
         <Button label="Sign In" onPress={handleSubmit(onSubmit)} loading={isPending} fullWidth size="lg" />
         <Divider label="or" my={6} />

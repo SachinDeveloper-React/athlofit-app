@@ -22,6 +22,7 @@ import {
   BackgroundAccessPermission,
   Permission,
 } from 'react-native-health-connect';
+import { Platform } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
 // ─── Derivation constants (70 kg, 76 cm stride adult baseline) ────────────────
@@ -263,11 +264,34 @@ export const writeDerivedActivity = async (
 // what the native step counter app and Money Walk do — they read from one
 // authoritative source (the device's hardware pedometer), not the aggregate.
 //
+// On API >= 34 (Android 14+), Health Connect is a platform component and the
+// system handles deduplication natively via priority-based source ranking.
+// We use aggregateRecord() there which returns the correct de-duped total.
+//
+
 export async function readStepsDeduped(
   startTime: string,
   endTime: string,
 ): Promise<number> {
   try {
+    // On API >= 34 (Android 14+), the platform's Health Connect handles
+    // deduplication internally. aggregateRecord returns the correct total
+    // that matches the native step counter app.
+    if (Platform.OS === 'android' && Platform.Version >= 34) {
+      const result = await readWithRetry(() =>
+        aggregateRecord({
+          recordType: 'Steps',
+          timeRangeFilter: { operator: 'between' as const, startTime, endTime },
+        }),
+      );
+      const total = (result as any).COUNT_TOTAL ?? 0;
+      console.log('[HealthConnect] Steps (aggregate, API 34+):', total);
+      return total;
+    }
+
+    // On API < 34, third-party apps may write duplicate step records.
+    // Read individual records, group by dataOrigin, pick the highest
+    // single-source total to avoid inflation.
     const { records } = await readWithRetry(() =>
       readRecords('Steps', {
         timeRangeFilter: { operator: 'between' as const, startTime, endTime },

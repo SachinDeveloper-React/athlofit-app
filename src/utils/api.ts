@@ -18,7 +18,7 @@ import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 //     : 'http://localhost:5001/');
 // export const BASE_URL = 'http://192.168.1.43:5001/'
 
-export const BASE_URL = 'https://athlofit-backend.vercel.app/'
+export const BASE_URL = 'https://api.athlofit.com/'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
