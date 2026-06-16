@@ -38,7 +38,7 @@ export function useBPReadings(platform: HealthPlatform = 'unavailable') {
         return updated;
       });
     },
-    [],
+    [platform],
   );
 
   return { readings, latestReading, addReading };

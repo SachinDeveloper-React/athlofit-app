@@ -69,7 +69,7 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
 
           {!devices.length && !scanning && (
             <AppText variant="footnote" secondary align="center" style={styles.empty}>
-              No blood pressure devices found nearby.
+              No devices found nearby. Make sure your device is in pairing mode and Bluetooth is enabled.
             </AppText>
           )}
 
@@ -79,7 +79,7 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
             renderItem={({ item }) => (
               <Button
                 variant="ghost"
-                label={`${item.name}\n${item.id}`}
+                label={`${item.name || item.localName || 'Unknown Device'}\n${item.id}`}
                 onPress={() => onSelect(item)}
                 fullWidth
                 style={styles.item}

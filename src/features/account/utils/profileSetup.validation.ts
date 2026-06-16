@@ -34,7 +34,7 @@ export const personalSchema = z.object({
         .string()
         .regex(
           /^\+[1-9]\d{6,14}$/,
-          'Enter a valid phone number (e.g. +91 98765 43210)',
+          'Enter a valid 10-digit mobile number',
         ),
     ),
 

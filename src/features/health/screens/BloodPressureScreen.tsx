@@ -1,44 +1,24 @@
 // src/features/health/screens/BloodPressureScreen.tsx
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { AppView, Header, Screen } from '../../../components';
-import { InputMode, ParsedBPMeasurement } from '../types/bloodpressure.types';
 import { useBPReadings } from '../hooks/useBPReadings';
-import { useBluetooth } from '../hooks/useBluetooth';
+import { useHealthInitStore } from '../store/healthInitStore';
 import { LatestReadingCard } from '../components/blood-pressure/LatestReadingCard';
-import { ModeToggle } from '../components/blood-pressure/ModeToggle';
 import { ManualEntryCard } from '../components/blood-pressure/ManualEntryCard';
-import { DeviceCard } from '../components/blood-pressure/DeviceCard';
 import { BPCategoryChart } from '../components/blood-pressure/BPCategoryChart';
 import { ReadingHistory } from '../components/blood-pressure/ReadingHistory';
-import { DevicePickerModal } from '../components/blood-pressure/DevicePickerModal';
+
+// ─── Bluetooth UI is disabled for now ─────────────────────────────────────────
+// import { useState, useCallback } from 'react';
+// import { InputMode, ParsedBPMeasurement } from '../types/bloodpressure.types';
+// import { useBluetooth } from '../hooks/useBluetooth';
+// import { ModeToggle } from '../components/blood-pressure/ModeToggle';
+// import { DeviceCard } from '../components/blood-pressure/DeviceCard';
+// import { DevicePickerModal } from '../components/blood-pressure/DevicePickerModal';
 
 export const BloodPressureScreen: React.FC = () => {
-  const [mode, setMode] = useState<InputMode>('manual');
-
-  const { readings, latestReading, addReading } = useBPReadings();
-
-  const handleMeasurement = useCallback(
-    (data: ParsedBPMeasurement, deviceName: string) => {
-      addReading(data.systolic, data.diastolic, data.pulse, 'device', deviceName);
-    },
-    [addReading],
-  );
-
-  const {
-    bleState,
-    permissionStatus,
-    scanning,
-    connecting,
-    connectedDevice,
-    discoveredDevices,
-    showDeviceModal,
-    waitingForMeasurement,
-    startScan,
-    connectDevice,
-    disconnect,
-    closeModal,
-    requestPermissions,
-  } = useBluetooth({ onMeasurement: handleMeasurement });
+  const platform = useHealthInitStore(s => s.platform);
+  const { readings, latestReading, addReading } = useBPReadings(platform);
 
   return (
     <Screen
@@ -49,39 +29,13 @@ export const BloodPressureScreen: React.FC = () => {
       {latestReading && <LatestReadingCard reading={latestReading} />}
 
       <AppView mt={3}>
-        <ModeToggle value={mode} onChange={setMode} />
-      </AppView>
-
-      {mode === 'manual' && (
         <ManualEntryCard
           onSubmit={(sys, dia, pls) => addReading(sys, dia, pls, 'manual')}
         />
-      )}
-
-      {mode === 'device' && (
-        <DeviceCard
-          bleState={bleState}
-          permissionStatus={permissionStatus}
-          scanning={scanning}
-          connecting={connecting}
-          connectedDevice={connectedDevice}
-          waitingForMeasurement={waitingForMeasurement}
-          onScan={startScan}
-          onDisconnect={disconnect}
-          onRequestPermission={requestPermissions}
-        />
-      )}
+      </AppView>
 
       <BPCategoryChart />
       <ReadingHistory readings={readings} />
-
-      <DevicePickerModal
-        visible={showDeviceModal}
-        scanning={scanning}
-        devices={discoveredDevices}
-        onSelect={connectDevice}
-        onClose={closeModal}
-      />
     </Screen>
   );
 };

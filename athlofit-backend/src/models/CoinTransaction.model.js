@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 
 /**
  * CoinTransaction — persistent log of every coin earn/spend event.
- * This replaces the in-memory assembly of transactions from multiple sources.
  * Each record captures exactly what happened, when, and why.
  */
 const coinTransactionSchema = new mongoose.Schema(
@@ -34,7 +33,7 @@ const coinTransactionSchema = new mongoose.Schema(
       required: true,
       enum: [
         'PASSIVE_STEPS',         // Earned from every 100 steps
-        'DAILY_STEP_GOAL',       // Daily step goal reached
+        'DAILY_STEP_GOAL',       // Daily step goal reached (manual claim)
         'DAILY_STEP_GOAL_AUTO',  // Auto-awarded on health sync
         'HYDRATION_GOAL',        // Daily water goal
         'STREAK_BADGE',          // Streak milestone badge
@@ -52,12 +51,12 @@ const coinTransactionSchema = new mongoose.Schema(
     },
     // Optional metadata for context
     metadata: {
-      steps: Number,          // Steps at time of earning (for PASSIVE_STEPS)
-      orderId: mongoose.Schema.Types.ObjectId,  // For SHOP_PURCHASE/REFUND
-      rewardId: String,       // For claims (e.g. 'steps_daily', 'hydration_daily')
+      steps: Number,
+      orderId: mongoose.Schema.Types.ObjectId,
+      rewardId: String,
       achievementId: mongoose.Schema.Types.ObjectId,
-      badgeKey: String,       // For STREAK_BADGE
-      date: String,           // ISO date the activity relates to
+      badgeKey: String,
+      date: String,
     },
   },
   {
@@ -73,7 +72,6 @@ const coinTransactionSchema = new mongoose.Schema(
 
 // Index for fast paginated queries per user
 coinTransactionSchema.index({ user: 1, createdAt: -1 });
-
 // Index for filtering by source type
 coinTransactionSchema.index({ user: 1, source: 1, createdAt: -1 });
 

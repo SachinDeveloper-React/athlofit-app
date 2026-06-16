@@ -1,42 +1,64 @@
 import { useCallback, useRef } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Easing } from 'react-native';
 
 export function useSlideTransition() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const transition = useCallback(
     (onMidpoint: () => void) => {
+      // Exit: fade out + slide up + scale down
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 250,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
-          toValue: -30,
-          duration: 200,
+          toValue: -20,
+          duration: 250,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 250,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start(() => {
         onMidpoint();
-        slideAnim.setValue(30);
+        // Reset to enter position
+        slideAnim.setValue(20);
+        scaleAnim.setValue(0.95);
+
+        // Enter: fade in + slide to center + scale up with spring feel
         Animated.parallel([
           Animated.timing(fadeAnim, {
             toValue: 1,
-            duration: 280,
+            duration: 400,
+            easing: Easing.out(Easing.quad),
             useNativeDriver: true,
           }),
-          Animated.timing(slideAnim, {
+          Animated.spring(slideAnim, {
             toValue: 0,
-            duration: 280,
+            tension: 50,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 50,
+            friction: 8,
             useNativeDriver: true,
           }),
         ]).start();
       });
     },
-    [fadeAnim, slideAnim],
+    [fadeAnim, slideAnim, scaleAnim],
   );
 
-  return { fadeAnim, slideAnim, transition };
+  return { fadeAnim, slideAnim, scaleAnim, transition };
 }

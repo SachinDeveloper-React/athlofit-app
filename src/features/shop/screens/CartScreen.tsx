@@ -503,15 +503,12 @@ const CartScreen = () => {
   const coinShortfall  = Math.max(0, finalTotal - coinsBalance);
 
   const handleCheckout = () => {
-    // Require email and phone verification before purchase
+    // Require email verification before purchase
     const user = useAuthStore.getState().user;
-    if (!user?.emailVerified || !user?.phoneVerified) {
-      const missing = [];
-      if (!user?.emailVerified) missing.push('email');
-      if (!user?.phoneVerified) missing.push('phone number');
+    if (!user?.emailVerified) {
       Alert.alert(
         'Verification Required',
-        `Please verify your ${missing.join(' and ')} before making a purchase.`,
+        'Please verify your email before making a purchase.',
         [
           { text: 'Go to Profile', onPress: () => navigation.goBack() },
           { text: 'Cancel', style: 'cancel' },

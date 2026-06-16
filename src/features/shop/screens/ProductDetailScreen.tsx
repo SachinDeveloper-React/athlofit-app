@@ -37,7 +37,7 @@ import type { ShopStackParamList } from '../../../types/navigation.types';
 import ReviewSection from '../components/ReviewSection';
 
 const { width: W, height: H } = Dimensions.get('window');
-const HERO_H = H * 0.46;
+const HERO_H = H * 0.52;
 
 type RoutePropT = RouteProp<ShopStackParamList, typeof ShopRoutes.PRODUCT_DETAIL>;
 type NavPropT = NavigationProp<ShopStackParamList, typeof ShopRoutes.PRODUCT_DETAIL>;
@@ -199,13 +199,13 @@ const ProductDetailScreen = () => {
         contentContainerStyle={{ paddingBottom: 140 + insets.bottom + 12 }}
       >
         {/* Hero Gallery */}
-        <View style={[styles.heroWrap, { height: HERO_H, backgroundColor: withOpacity(product.category.color, 0.07) }]}>
+        <View style={[styles.heroWrap,]}>
           <ScrollView
             horizontal pagingEnabled showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={handleGalleryEnd}
           >
             {product.images.map((img: string, i: number) => (
-              <Image key={i} source={{ uri: img }} style={{ width: W, height: HERO_H }} resizeMode="cover" />
+              <Image key={i} source={{ uri: img }} style={{ width: W, height: HERO_H - 70 }} resizeMode="cover" />
             ))}
           </ScrollView>
 
@@ -213,7 +213,7 @@ const ProductDetailScreen = () => {
           {/* Discount badge */}
           {hasDiscount && (
             <View style={[styles.discBadge, { top: insets.top + 64, left: 16, backgroundColor: '#EF4444' }]}>
-              <AppText variant="caption1" weight="bold" color="#fff">SAVE {discountPct}%</AppText>
+              <AppText variant="footnote" weight="bold" color="#fff">SAVE {discountPct}%</AppText>
             </View>
           )}
 
@@ -251,7 +251,7 @@ const ProductDetailScreen = () => {
         {/* Content card */}
         <Animated.View
           entering={FadeInDown.delay(100).duration(400)}
-          style={[styles.contentCard, { backgroundColor: colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -28 }]}
+          style={[styles.contentCard, { backgroundColor: colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 }]}
         >
           {/* Category + Rating */}
           <View style={styles.rowBetween}>
@@ -461,9 +461,9 @@ const styles = StyleSheet.create({
 
   heroWrap: { width: '100%', overflow: 'hidden' },
   discBadge: { position: 'absolute', zIndex: 10, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  dots: { position: 'absolute', bottom: 60, width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  dots: { position: 'absolute', bottom: 68, width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 5 },
   dot: { height: 7, borderRadius: 99 },
-  thumbStrip: { position: 'absolute', bottom: 10 },
+  thumbStrip: { position: 'absolute', bottom: 12 },
   thumb: { width: 48, height: 48, borderWidth: 2, borderRadius: 8 },
 
   contentCard: { paddingHorizontal: 16, paddingTop: 20 },

@@ -31,10 +31,10 @@ import {
 } from '../constants/completeProfile.constant';
 import { PickerSheet } from '../components/complete-profile/PickerSheet';
 import { NumericStepper } from '../components/complete-profile/NumericStepper';
+import { HeightInput } from '../components/complete-profile/HeightInput';
 import AvatarPickerModal from '../components/AvatarPickerModal';
 import { useAvatarUpload } from '../hooks/useAvatarUpload';
 import { ActivityIndicator } from 'react-native';
-import PhoneVerifyModal from '../../../components/PhoneVerifyModal';
 
 const EditProfileScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -46,7 +46,6 @@ const EditProfileScreen: React.FC = () => {
   const { mutate: updateProfile, isPending } = useEditProfile();
   const { mutate: uploadAvatar, isPending: isUploading } = useAvatarUpload();
   const [pickerVisible, setPickerVisible] = React.useState(false);
-  const [phoneVerifyVisible, setPhoneVerifyVisible] = React.useState(false);
 
   const {
     control,
@@ -56,7 +55,9 @@ const EditProfileScreen: React.FC = () => {
     resolver: zodResolver(editProfileSchema),
     defaultValues: {
       name: user?.name || '',
-      phone: user?.phone || '',
+      phone: user?.phone
+        ? (user.phone.startsWith('+') ? user.phone : `+91${user.phone.replace(/^\+?91/, '').replace(/\D/g, '')}`)
+        : '',
       dob: user?.dob || '',
       gender: user?.gender || 'M',
       height: user?.height || 170,
@@ -159,18 +160,9 @@ const EditProfileScreen: React.FC = () => {
                 render={({ field: { onChange, onBlur, value } }) => (
                   <PhoneField
                     value={value || ''}
-                    onChangeText={(v) => {
-                      onChange(v);
-                      // If user changes phone number, reset verified status locally
-                      const currentPhone = user?.phone ? `+91${user.phone.replace(/^\+?91/, '')}` : '';
-                      if (v !== currentPhone && user?.phoneVerified) {
-                        useAuthStore.getState().updateUser({ phoneVerified: false });
-                      }
-                    }}
+                    onChangeText={onChange}
                     onBlur={onBlur}
                     error={errors.phone?.message}
-                    isVerified={user?.phoneVerified}
-                    onVerifyPress={() => setPhoneVerifyVisible(true)}
                   />
                 )}
               />
@@ -312,14 +304,9 @@ const EditProfileScreen: React.FC = () => {
                 control={control}
                 name="height"
                 render={({ field: { value, onChange } }) => (
-                  <NumericStepper
-                    label="Height"
-                    unit="cm"
+                  <HeightInput
                     value={value}
                     onChange={onChange}
-                    min={50}
-                    max={250}
-                    step={1}
                   />
                 )}
               />
@@ -365,11 +352,6 @@ const EditProfileScreen: React.FC = () => {
           fullWidth
         />
       </AppView>
-
-      <PhoneVerifyModal
-        visible={phoneVerifyVisible}
-        onClose={() => setPhoneVerifyVisible(false)}
-      />
     </Screen>
   );
 };

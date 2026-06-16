@@ -18,9 +18,6 @@ import type {
   DotsProps,
   NextButtonProps,
 } from '../../types';
-import { C } from '../../constant';
-
-// ─── StatCard ─────────────────────────────────────────────────────────────
 
 export const StatCard: React.FC<StatCardProps> = ({ stat }) => {
   const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
@@ -227,8 +224,9 @@ export const Dots: React.FC<DotsProps> = ({
     <AppView style={{
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
+      justifyContent: 'center' as const,
       gap: spacing[2],
-      marginBottom: spacing[7],
+      marginBottom: spacing[5],
     }}>
       {slides.map((_, i) => (
         <TouchableOpacity
@@ -242,7 +240,8 @@ export const Dots: React.FC<DotsProps> = ({
               {
                 width: i === activeIndex ? 24 : 8,
                 backgroundColor:
-                  i === activeIndex ? accent : colors.overlayHeavy,
+                  i === activeIndex ? accent : colors.mutedForeground,
+                opacity: i === activeIndex ? 1 : 0.4,
               },
             ]}
           />
@@ -263,7 +262,7 @@ export const NextButton: React.FC<NextButtonProps> = ({
   const { colors, spacing, radius, fontSize, fontWeight, shadow } = useTheme();
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+      <TouchableOpacity onPress={onPress} activeOpacity={1}>
         <AppView
           style={[{
             flexDirection: 'row' as const,
@@ -273,7 +272,7 @@ export const NextButton: React.FC<NextButtonProps> = ({
             borderRadius: radius['3xl'],
             backgroundColor: accent,
             shadowColor: accent,
-          }, shadow.lg]}
+          }]}
         >
           <AppText style={{
             color: colors.primaryForeground,
@@ -306,109 +305,4 @@ export const NextButton: React.FC<NextButtonProps> = ({
   );
 };
 
-// ─── STYLES ───────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  // StatCard
-  statCard: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  statLabel: {
-    color: C.muted,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-
-  // MacroRow
-  macroRow: { marginBottom: 12 },
-  macroHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  macroLabel: { color: C.white, fontSize: 13, fontWeight: '600' },
-  macroVal: { fontSize: 13, fontWeight: '800' },
-
-  // Bar (shared)
-  barTrack: {
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 4,
-  },
-  barFill: { height: 8, borderRadius: 4 },
-
-  // GoalRing
-  ringCenter: { alignItems: 'center', justifyContent: 'center' },
-  ringPct: { fontSize: 13, fontWeight: '900' },
-  ringGoalLabel: {
-    color: C.muted,
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  ringGoalCurr: { color: C.white, fontSize: 11, fontWeight: '700' },
-
-  // BpRow
-  bpRow: { marginBottom: 12 },
-  bpHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  bpLabel: { color: C.muted, fontSize: 12, fontWeight: '600' },
-  bpVal: { fontSize: 14, fontWeight: '800' },
-
-  // ProgressBar
-  progressTrack: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    zIndex: 10,
-  },
-  progressFill: { height: 3, borderRadius: 2 },
-
-  // Dots
-  dots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 28,
-  },
-  dot: { height: 8, borderRadius: 4 },
-
-  // NextButton
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    borderRadius: 28,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  btnText: {
-    color: C.white,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-});

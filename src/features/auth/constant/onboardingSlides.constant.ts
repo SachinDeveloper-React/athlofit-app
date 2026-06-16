@@ -1,9 +1,9 @@
 import {
-  GoalScene,
+  CoinsScene,
+  EcomScene,
   HeartScene,
-  NutritionScene,
-  RunnerScene,
-  SleepScene,
+  HydrationScene,
+  StepsScene,
 } from '../components/onboarding';
 // ─── SLIDES ───────────────────────────────────────────────────────────────
 // Scenes are imported lazily in slides.ts to avoid a circular dependency.
@@ -13,12 +13,28 @@ import { C } from './onboarding.constant';
 
 export const SLIDES: SlideConfig[] = [
   {
-    key: 'run',
+    key: 'steps',
     title: 'Move Every Day',
     subtitle:
       'Track your runs, walks, and every step of your journey to a healthier you.',
-    accent: C.accent,
-    Scene: RunnerScene,
+    accent: C.teal,
+    Scene: StepsScene,
+  },
+  {
+    key: 'coins',
+    title: 'Earn Coins',
+    subtitle:
+      'Every step counts. Walk, run, and complete goals to earn coins you can spend.',
+    accent: C.gold,
+    Scene: CoinsScene,
+  },
+  {
+    key: 'hydration',
+    title: 'Stay Hydrated',
+    subtitle:
+      'Track your water intake and stay hydrated throughout the day for peak performance.',
+    accent: C.blue,
+    Scene: HydrationScene,
   },
   {
     key: 'heart',
@@ -29,27 +45,11 @@ export const SLIDES: SlideConfig[] = [
     Scene: HeartScene,
   },
   {
-    key: 'sleep',
-    title: 'Rest & Recover',
+    key: 'ecom',
+    title: 'Spend Your Coins',
     subtitle:
-      'Quality sleep is the foundation of peak performance. We watch over you at night.',
-    accent: C.gold,
-    Scene: SleepScene,
-  },
-  {
-    key: 'nutrition',
-    title: 'Fuel Your Body',
-    subtitle:
-      'Stay hydrated, hit your macros, and power through every challenge with smart nutrition.',
+      'Redeem your hard-earned coins for fitness gear, supplements, and exclusive rewards.',
     accent: C.teal,
-    Scene: NutritionScene,
-  },
-  {
-    key: 'goals',
-    title: 'Own Your Goals',
-    subtitle:
-      'Set targets, measure progress, celebrate wins. Your healthiest life starts now.',
-    accent: C.teal,
-    Scene: GoalScene,
+    Scene: EcomScene,
   },
 ];

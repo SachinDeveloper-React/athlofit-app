@@ -1,6 +1,6 @@
 // src/features/health/hooks/useBluetooth.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Alert, AppState, AppStateStatus, Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { Device, State } from 'react-native-ble-plx';
 
 import type { ParsedBPMeasurement } from '../types/bloodpressure.types';
@@ -57,21 +57,6 @@ export function useBluetooth({ onMeasurement }: UseBluetoothOptions) {
       serviceRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Reinit on foreground (Android Activity recreation fix) ───────────────
-  useEffect(() => {
-    const handleAppStateChange = (next: AppStateStatus) => {
-      if (next === 'active') {
-        // Reinit destroys the old manager but does NOT eagerly create a new one.
-        // The next BLE operation will lazily create it when the Activity is ready.
-        getService().reinit();
-        // Re-subscribe to state changes with the new (lazy) manager
-        getService().onStateChange(setBleState);
-      }
-    };
-    const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => sub.remove();
-  }, [getService]);
 
   // ── Check permissions on mount (no prompt) ───────────────────────────────
   useEffect(() => {
@@ -156,18 +141,39 @@ export function useBluetooth({ onMeasurement }: UseBluetoothOptions) {
         const connected = await getService().connect(device);
         setConnectedDevice(connected);
 
-        getService().monitorMeasurement(connected, base64 => {
-          const parsed = parseBPMeasurement(base64);
-          if (!parsed) return;
-          setWaitingForMeasurement(false);
-          onMeasurement(parsed, device.name ?? 'BLE Device');
-        });
+        // Discover what services this device actually supports
+        const services = await getService().getAvailableServices(connected);
+        const deviceName = device.name || device.localName || 'BLE Device';
 
-        setWaitingForMeasurement(true);
-        Alert.alert(
-          'Connected!',
-          `${device.name ?? 'Device'} — press the start button on your device to take a measurement.`,
-        );
+        if (services.hasBloodPressure) {
+          // Standard BP monitor — subscribe to BP measurements
+          getService().monitorMeasurement(connected, base64 => {
+            const parsed = parseBPMeasurement(base64);
+            if (!parsed) return;
+            setWaitingForMeasurement(false);
+            onMeasurement(parsed, deviceName);
+          });
+
+          setWaitingForMeasurement(true);
+          Alert.alert(
+            'Connected!',
+            `${deviceName} supports blood pressure monitoring. Start a measurement on your device.`,
+          );
+        } else if (services.hasHeartRate) {
+          // Fitness watch with HR — inform user about limitations
+          setWaitingForMeasurement(false);
+          Alert.alert(
+            'Connected!',
+            `${deviceName} connected successfully.\n\nThis device supports Heart Rate but not direct Blood Pressure readings via Bluetooth.\n\nFor BP data, use the manual entry or sync through Health Connect (your watch app writes to Health Connect → Athlofit reads it automatically).`,
+          );
+        } else {
+          // Proprietary device — no standard health services
+          setWaitingForMeasurement(false);
+          Alert.alert(
+            'Connected!',
+            `${deviceName} connected, but it doesn't expose standard health services via Bluetooth.\n\nFor BP data from this watch, use the manual entry or ensure your watch syncs to Health Connect through its companion app (e.g., NoiseFit app).`,
+          );
+        }
       } catch (e: any) {
         const msg = e?.message ?? 'Could not connect to device.';
         Alert.alert('Connection Failed', msg);

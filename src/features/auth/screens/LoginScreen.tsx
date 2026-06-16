@@ -46,7 +46,18 @@ const LoginScreen: React.FC<Props> = () => {
 
   const onSubmit = (values: LoginFormValues) => {
     login(values, {
-      onError: (err: any) => toast.error(err?.message ?? 'Login failed. Please try again.'),
+      onError: (err: any) => {
+        // If user's email is not verified, navigate to OTP screen
+        if (err?.statusCode === 403 && err?.data?.emailNotVerified) {
+          toast.info('Please verify your email to continue.');
+          navigation.navigate(AuthRoutes.OTP, {
+            email: err.data.email || values.email,
+            flow: 'signup',
+          });
+          return;
+        }
+        toast.error(err?.message ?? 'Login failed. Please try again.');
+      },
     });
   };
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   StatusBar,
   StyleSheet,
   Platform,
@@ -16,7 +17,6 @@ import { useNavigation } from '@react-navigation/native';
 import { SLIDES } from '../constant/onboardingSlides.constant';
 import { useTheme } from '../../../hooks/useTheme';
 import {
-  SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
@@ -26,7 +26,7 @@ const OnboardingScreen = () => {
   const navigation = useNavigation<Props['navigation']>();
   const { bottom, top } = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
-  const { fadeAnim, slideAnim, transition } = useSlideTransition();
+  const { fadeAnim, slideAnim, scaleAnim, transition } = useSlideTransition();
   const { finishOnboarding } = useOnboardingStore();
   const { colors, isDark } = useTheme();
 
@@ -40,7 +40,8 @@ const OnboardingScreen = () => {
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: (activeIndex + 1) / SLIDES.length,
-      duration: 500,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
   }, [activeIndex]);
@@ -50,13 +51,15 @@ const OnboardingScreen = () => {
   const animateBtnPress = useCallback(() => {
     Animated.sequence([
       Animated.timing(btnScale, {
-        toValue: 0.93,
-        duration: 80,
+        toValue: 0.94,
+        duration: 100,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-      Animated.timing(btnScale, {
+      Animated.spring(btnScale, {
         toValue: 1,
-        duration: 80,
+        tension: 200,
+        friction: 10,
         useNativeDriver: true,
       }),
     ]).start();
@@ -94,7 +97,7 @@ const OnboardingScreen = () => {
 
   const contentStyle = {
     opacity: fadeAnim,
-    transform: [{ translateY: slideAnim }],
+    transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
   };
 
   const { Scene } = slide;
@@ -214,7 +217,7 @@ const styles = StyleSheet.create({
 
   bottomArea: {
     paddingHorizontal: 28,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
   },
 
   accentLine: {

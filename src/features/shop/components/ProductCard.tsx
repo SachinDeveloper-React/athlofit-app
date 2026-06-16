@@ -1,6 +1,15 @@
 // src/features/shop/components/ProductCard.tsx
-import React, { memo } from 'react';
-import { Dimensions, Image, Pressable, StyleSheet, View } from 'react-native';
+import React, { memo, useCallback, useRef, useState } from 'react';
+import {
+  Dimensions,
+  Image,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -17,6 +26,7 @@ const { width } = Dimensions.get('window');
 const COLUMN_GAP = 12;
 const H_PADDING = 16;
 export const CARD_WIDTH = (width - H_PADDING * 2 - COLUMN_GAP) / 2;
+const IMAGE_HEIGHT = 145;
 
 interface Props {
   product: Product;
@@ -25,6 +35,66 @@ interface Props {
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// ─── Image Carousel (inside card) ─────────────────────────────────────────────
+
+const CardImageCarousel = memo(({ images, cardWidth, categoryColor, borderRadius }: {
+  images: string[];
+  cardWidth: number;
+  categoryColor: string;
+  borderRadius: number;
+}) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const hasMultiple = images.length > 1;
+
+  const handleScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / cardWidth);
+    setActiveIndex(idx);
+  }, [cardWidth]);
+
+  return (
+    <View style={[styles.imageWrap, { borderTopLeftRadius: borderRadius, borderTopRightRadius: borderRadius, backgroundColor: withOpacity(categoryColor, 0.07) }]}>
+      {hasMultiple ? (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScrollEnd}
+          scrollEventThrottle={16}
+          bounces={false}
+        >
+          {images.map((img, i) => (
+            <Image key={i} source={{ uri: img }} style={{ width: cardWidth, height: IMAGE_HEIGHT }} resizeMode="cover" />
+          ))}
+        </ScrollView>
+      ) : (
+        <Image source={{ uri: images[0] }} style={styles.image} resizeMode="cover" />
+      )}
+
+      {/* Dot indicators */}
+      {hasMultiple && (
+        <View style={styles.dotsRow}>
+          {images.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i === activeIndex ? '#fff' : 'rgba(255,255,255,0.45)',
+                  width: i === activeIndex ? 12 : 5,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
+
+CardImageCarousel.displayName = 'CardImageCarousel';
+
+// ─── Product Card ─────────────────────────────────────────────────────────────
 
 const ProductCard = memo(({ product, index, onPress }: Props) => {
   const { colors, radius } = useTheme();
@@ -44,88 +114,92 @@ const ProductCard = memo(({ product, index, onPress }: Props) => {
   }));
 
   return (
-    // Outer wrapper owns the entrance animation only
     <Animated.View entering={FadeInDown.delay(index * 55).duration(380)} style={{ width: CARD_WIDTH }}>
-      {/* Inner view owns the press-scale transform only */}
       <Animated.View style={animStyle}>
         <AnimatedPressable
-        onPress={() => onPress(product)}
-        onPressIn={() => { scale.value = withSpring(0.96, { damping: 15 }); }}
-        onPressOut={() => { scale.value = withSpring(1, { damping: 15 }); }}
-        disabled={isOutOfStock}
-        style={[
-          styles.card,
-          {
-            borderRadius: radius.xl,
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            opacity: isOutOfStock ? 0.55 : 1,
-          },
-        ]}
-      >
-        {/* Image */}
-        <View
+          onPress={() => onPress(product)}
+          onPressIn={() => { scale.value = withSpring(0.96, { damping: 15 }); }}
+          onPressOut={() => { scale.value = withSpring(1, { damping: 15 }); }}
+          disabled={isOutOfStock}
           style={[
-            styles.imageWrap,
+            styles.card,
             {
-              borderTopLeftRadius: radius.xl,
-              borderTopRightRadius: radius.xl,
-              backgroundColor: withOpacity(product.category.color, 0.07),
+              borderRadius: radius.xl,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              opacity: isOutOfStock ? 0.55 : 1,
             },
           ]}
         >
-          <Image source={{ uri: product.images[0] }} style={styles.image} resizeMode="cover" />
+          {/* Image Carousel */}
+          <View style={{ position: 'relative' }}>
+            <CardImageCarousel
+              images={product.images}
+              cardWidth={CARD_WIDTH}
+              categoryColor={product.category.color}
+              borderRadius={radius.xl}
+            />
 
-          {/* Badges row */}
-          <View style={styles.badgesRow}>
-            {hasDiscount && (
-              <View style={[styles.badge, { backgroundColor: '#EF4444' }]}>
-                <AppText variant="caption2" weight="bold" color="#fff">-{discountPct}%</AppText>
+            {/* Badges row */}
+            <View style={styles.badgesRow}>
+              {hasDiscount && (
+                <View style={[styles.badge, { backgroundColor: '#EF4444' }]}>
+                  <AppText variant="caption2" weight="bold" color="#fff">-{discountPct}%</AppText>
+                </View>
+              )}
+            </View>
+
+            {/* Coins-only pill top-right */}
+            <View style={[styles.coinPill, { backgroundColor: 'rgba(245,197,24,0.92)' }]}>
+              <Icon name="Coins" size={9} color="#92400E" />
+              <AppText variant="caption2" weight="bold" color="#92400E" style={{ marginLeft: 2 }}>Only</AppText>
+            </View>
+
+            {/* Image count indicator */}
+            {product.images.length > 1 && (
+              <View style={styles.countPill}>
+                <Icon name="Images" size={9} color="#fff" />
+                <AppText variant="caption2" weight="bold" color="#fff" style={{ marginLeft: 2 }}>
+                  {product.images.length}
+                </AppText>
+              </View>
+            )}
+
+            {isOutOfStock && (
+              <View style={[styles.outOverlay, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
+                <AppText variant="caption1" weight="bold" color="#fff">Out of Stock</AppText>
               </View>
             )}
           </View>
 
-          {/* Coins-only pill top-right */}
-          <View style={[styles.coinPill, { backgroundColor: 'rgba(245,197,24,0.92)' }]}>
-            <Icon name="Coins" size={9} color="#92400E" />
-            <AppText variant="caption2" weight="bold" color="#92400E" style={{ marginLeft: 2 }}>Only</AppText>
-          </View>
-
-          {isOutOfStock && (
-            <View style={[styles.outOverlay, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]}>
-              <AppText variant="caption1" weight="bold" color="#fff">Out of Stock</AppText>
+          {/* Body */}
+          <View style={styles.body}>
+            <View style={[styles.catTag, { backgroundColor: withOpacity(product.category.color, 0.12), borderRadius: 4 }]}>
+              <AppText variant="caption2" weight="semiBold" color={product.category.color}>{product.category.name}</AppText>
             </View>
-          )}
-        </View>
 
-        {/* Body */}
-        <View style={styles.body}>
-          <View style={[styles.catTag, { backgroundColor: withOpacity(product.category.color, 0.12), borderRadius: 4 }]}>
-            <AppText variant="caption2" weight="semiBold" color={product.category.color}>{product.category.name}</AppText>
-          </View>
-
-          <AppText variant="subhead" weight="semiBold" style={{ marginTop: 5 }} numberOfLines={2}>
-            {product.name}
-          </AppText>
-
-          <View style={styles.ratingRow}>
-            <Icon name="Star" size={11} color="#F59E0B" filled />
-            <AppText variant="caption2" weight="semiBold" style={{ marginLeft: 3 }}>{product.rating.toFixed(1)}</AppText>
-            <AppText variant="caption2" secondary style={{ marginLeft: 3 }}>({product.reviewCount})</AppText>
-          </View>
-
-          <View style={[styles.priceRow, { marginTop: 8, backgroundColor: withOpacity('#F5C518', 0.08), borderRadius: 8, padding: 6 }]}>
-            <Icon name="Coins" size={13} color="#B45309" />
-            <AppText variant="label" weight="bold" color="#92400E" style={{ marginLeft: 4 }}>
-              {coinPrice.toLocaleString()}
+            <AppText variant="subhead" weight="semiBold" style={{ marginTop: 5 }} numberOfLines={2}>
+              {product.name}
             </AppText>
-            {hasDiscount && (
-              <AppText variant="caption2" secondary style={[styles.strike, { marginLeft: 5 }]}>
-                {originalCoinPrice.toLocaleString()}
+
+            <View style={styles.ratingRow}>
+              <Icon name="Star" size={11} color="#F59E0B" filled />
+              <AppText variant="caption2" weight="semiBold" style={{ marginLeft: 3 }}>{product.rating.toFixed(1)}</AppText>
+              <AppText variant="caption2" secondary style={{ marginLeft: 3 }}>({product.reviewCount})</AppText>
+            </View>
+
+            <View style={[styles.priceRow, { marginTop: 8, backgroundColor: withOpacity('#F5C518', 0.08), borderRadius: 8, padding: 6 }]}>
+              <Icon name="Coins" size={13} color="#B45309" />
+              <AppText variant="label" weight="bold" color="#92400E" style={{ marginLeft: 4 }}>
+                {coinPrice.toLocaleString()}
               </AppText>
-            )}
+              {hasDiscount && (
+                <AppText variant="caption2" secondary style={[styles.strike, { marginLeft: 5 }]}>
+                  {originalCoinPrice.toLocaleString()}
+                </AppText>
+              )}
+            </View>
           </View>
-        </View>
         </AnimatedPressable>
       </Animated.View>
     </Animated.View>
@@ -145,7 +219,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  imageWrap: { width: '100%', height: 145, overflow: 'hidden' },
+  imageWrap: { width: '100%', height: IMAGE_HEIGHT, overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
   badgesRow: { position: 'absolute', top: 8, left: 8, flexDirection: 'row', gap: 4 },
   badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
@@ -153,6 +227,20 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 8, right: 8,
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+  },
+  countPill: {
+    position: 'absolute', bottom: 8, right: 8,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  dotsRow: {
+    position: 'absolute', bottom: 8, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: 3,
+  },
+  dot: {
+    height: 5, borderRadius: 3,
   },
   outOverlay: {
     ...StyleSheet.absoluteFillObject,

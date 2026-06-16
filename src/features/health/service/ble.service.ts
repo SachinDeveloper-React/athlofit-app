@@ -1,9 +1,13 @@
 // src/features/health/service/ble.service.ts
 import { Platform, PermissionsAndroid } from 'react-native';
-import { BleManager, Device, State } from 'react-native-ble-plx';
+import { BleManager, Device, State, Service } from 'react-native-ble-plx';
 
 export const BP_SERVICE_UUID    = '1810';
 export const BP_MEASUREMENT_CHAR = '2A35';
+
+// Heart Rate service (most fitness watches support this)
+export const HR_SERVICE_UUID    = '180D';
+export const HR_MEASUREMENT_CHAR = '2A37';
 
 const toFullUUID = (short: string) =>
   `0000${short}-0000-1000-8000-00805f9b34fb`;
@@ -22,26 +26,16 @@ export class BLEService {
     return this._manager;
   }
 
-  // ── Reinit ────────────────────────────────────────────────────────────────
-  // Destroy the old manager and create a fresh one.
-  // Call this when the app returns to the foreground on Android to avoid
-  // stale state after the Activity has been recreated.
-  // NOTE: Do NOT eagerly access this.manager here — let the next operation
-  //       create it lazily so the Activity is definitely alive.
-  reinit(): void {
-    try {
-      this._manager?.destroy();
-    } catch {
-      // ignore destroy errors
-    }
-    this._manager = null;
-  }
-
   // ── State subscription ────────────────────────────────────────────────────
   onStateChange(callback: (state: State) => void): { remove: () => void } {
     try {
       return this.manager.onStateChange(callback, true);
-    } catch (e) {
+    } catch (e: any) {
+      // If manager was destroyed between operations, fail gracefully
+      if (e?.message?.includes('destroyed')) {
+        console.warn('[BLE] Manager destroyed — skipping onStateChange');
+        return { remove: () => {} };
+      }
       console.warn('[BLE] onStateChange failed:', e);
       return { remove: () => {} };
     }
@@ -81,23 +75,33 @@ export class BLEService {
   }
 
   // ── Scan ──────────────────────────────────────────────────────────────────
+  /**
+   * Scan for nearby BLE devices.
+   * @param serviceUUIDs - Optional array of service UUIDs to filter.
+   *   Pass null to scan ALL nearby BLE devices (needed for proprietary devices
+   *   like NoiseFit, Boat, Fire-Boltt that don't advertise standard BP service).
+   */
   startScan(
     onDevice: (device: Device) => void,
     onError: (error: Error) => void,
+    serviceUUIDs: string[] | null = null,
   ): void {
     try {
       this.manager.startDeviceScan(
-        [toFullUUID(BP_SERVICE_UUID)],
+        serviceUUIDs,
         { allowDuplicates: false },
         (error, device) => {
           if (error) {
+            if ((error as any)?.message?.includes('destroyed')) return;
             onError(error);
             return;
           }
-          if (device?.name) onDevice(device);
+          // Show devices that have a name (skip unnamed beacons/peripherals)
+          if (device?.name || device?.localName) onDevice(device);
         },
       );
     } catch (e: any) {
+      if (e?.message?.includes('destroyed')) return;
       onError(e);
     }
   }
@@ -115,24 +119,90 @@ export class BLEService {
 
   // ── Connect ───────────────────────────────────────────────────────────────
   async connect(device: Device): Promise<Device> {
-    const connected = await device.connect({ timeout: 10000 });
-    await connected.discoverAllServicesAndCharacteristics();
-    return connected;
+    try {
+      const connected = await device.connect({ timeout: 10000 });
+      await connected.discoverAllServicesAndCharacteristics();
+      return connected;
+    } catch (e: any) {
+      if (e?.message?.includes('destroyed')) {
+        throw new Error('Bluetooth was reset. Please try again.');
+      }
+      throw e;
+    }
   }
 
-  // ── Monitor ───────────────────────────────────────────────────────────────
+  // ── Monitor BP ─────────────────────────────────────────────────────────────
   monitorMeasurement(
     device: Device,
     onValue: (base64: string) => void,
   ): { remove: () => void } {
-    return device.monitorCharacteristicForService(
-      toFullUUID(BP_SERVICE_UUID),
-      toFullUUID(BP_MEASUREMENT_CHAR),
-      (err, char) => {
-        if (err || !char?.value) return;
-        onValue(char.value);
-      },
-    );
+    try {
+      return device.monitorCharacteristicForService(
+        toFullUUID(BP_SERVICE_UUID),
+        toFullUUID(BP_MEASUREMENT_CHAR),
+        (err, char) => {
+          if (err) {
+            if ((err as any)?.message?.includes('destroyed')) return;
+            console.warn('[BLE] Monitor BP error:', err.message);
+            return;
+          }
+          if (!char?.value) return;
+          onValue(char.value);
+        },
+      );
+    } catch (e: any) {
+      console.warn('[BLE] monitorMeasurement failed:', e?.message);
+      return { remove: () => {} };
+    }
+  }
+
+  // ── Monitor Heart Rate ────────────────────────────────────────────────────
+  monitorHeartRate(
+    device: Device,
+    onValue: (base64: string) => void,
+  ): { remove: () => void } {
+    try {
+      return device.monitorCharacteristicForService(
+        toFullUUID(HR_SERVICE_UUID),
+        toFullUUID(HR_MEASUREMENT_CHAR),
+        (err, char) => {
+          if (err) {
+            if ((err as any)?.message?.includes('destroyed')) return;
+            console.warn('[BLE] Monitor HR error:', err.message);
+            return;
+          }
+          if (!char?.value) return;
+          onValue(char.value);
+        },
+      );
+    } catch (e: any) {
+      console.warn('[BLE] monitorHeartRate failed:', e?.message);
+      return { remove: () => {} };
+    }
+  }
+
+  // ── Discover services ─────────────────────────────────────────────────────
+  /**
+   * Check which standard health services the connected device supports.
+   */
+  async getAvailableServices(device: Device): Promise<{
+    hasBloodPressure: boolean;
+    hasHeartRate: boolean;
+    serviceUUIDs: string[];
+  }> {
+    try {
+      const services = await device.services();
+      const uuids = services.map(s => s.uuid.toLowerCase());
+
+      return {
+        hasBloodPressure: uuids.includes(toFullUUID(BP_SERVICE_UUID)),
+        hasHeartRate: uuids.includes(toFullUUID(HR_SERVICE_UUID)),
+        serviceUUIDs: uuids,
+      };
+    } catch (e: any) {
+      console.warn('[BLE] getAvailableServices failed:', e?.message);
+      return { hasBloodPressure: false, hasHeartRate: false, serviceUUIDs: [] };
+    }
   }
 
   // ── Disconnect ────────────────────────────────────────────────────────────

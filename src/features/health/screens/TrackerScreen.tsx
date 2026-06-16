@@ -37,7 +37,6 @@ import {
 } from '../../../navigation/routes';
 import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
-import PhoneVerifyBanner from '../../../components/PhoneVerifyBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -462,7 +461,6 @@ const TrackerScreen = memo(() => {
 
 
         >
-          <PhoneVerifyBanner />
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels

@@ -15,9 +15,6 @@ import type { HealthStackParamList } from '../types/navigation.types';
 // React.lazy defers the import (and therefore the native init) until the user
 // actually navigates to the screen — by which point the bridge is stable.
 //
-// BloodPressureScreen is also lazy because it imports react-native-ble-plx which
-// creates a BleManager native object at import time.
-//
 const HeartRateScreen    = React.lazy(() => import('../features/health/screens/HeartRateScreen'));
 const BloodPressureScreen = React.lazy(() => import('../features/health/screens/BloodPressureScreen'));
 

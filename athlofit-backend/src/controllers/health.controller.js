@@ -9,6 +9,16 @@ const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
 const { logCoinTransaction } = require('../utils/logCoinTransaction');
 
+// ─── Unverified user daily coin cap ──────────────────────────────────────────
+function getEffectiveDailyCap(user, configMax, unverifiedCap) {
+  const isVerified = user.emailVerified;
+  if (!isVerified) {
+    const cap = unverifiedCap ?? 50;
+    return Math.min(cap, configMax);
+  }
+  return configMax;
+}
+
 // ─── GET /health/weekly-steps?from=YYYY-MM-DD&to=YYYY-MM-DD ──────────────────
 const getWeeklySteps = async (req, res, next) => {
   try {
@@ -161,42 +171,52 @@ const syncHealthData = async (req, res, next) => {
     }
 
     let goalCoinsAwarded = false;
+    let awardedGoalCoins = 0;
 
     if (isGoalMet && gam.stepGoalCoinDate !== today && today === actualToday) {
-      // Award step goal coins automatically
+      // Award step goal coins automatically (subject to daily cap)
       const stepGoalCoins = cfg.rewards.stepGoalCoins ?? 50;
-      gam.coinsBalance = Math.round(gam.coinsBalance + stepGoalCoins);
-      gam.coinsEarnedToday = Math.round((gam.coinsEarnedToday || 0) + stepGoalCoins);
+      const effectiveCap = getEffectiveDailyCap(req.user, cfg.coin.maxDailyRewards ?? 500, cfg.coin.unverifiedDailyCap);
+      const remainingAllowance = effectiveCap - (gam.coinsEarnedToday || 0);
+      const actualStepGoalCoins = Math.round(Math.min(stepGoalCoins, Math.max(0, remainingAllowance)));
+
+      if (actualStepGoalCoins > 0) {
+        gam.coinsBalance = Math.round(gam.coinsBalance + actualStepGoalCoins);
+        gam.coinsEarnedToday = Math.round((gam.coinsEarnedToday || 0) + actualStepGoalCoins);
+      }
       gam.stepGoalCoinDate = today;
 
       if (!gam.claimHistory) gam.claimHistory = [];
       gam.claimHistory.push({
         rewardId: 'steps_daily_auto',
-        amount: stepGoalCoins,
+        amount: actualStepGoalCoins,
         source: 'Daily Step Goal — Auto Reward',
         createdAt: new Date(),
       });
       if (gam.claimHistory.length > 50) gam.claimHistory.shift();
 
-      goalCoinsAwarded = true;
+      goalCoinsAwarded = actualStepGoalCoins > 0;
+      awardedGoalCoins = actualStepGoalCoins;
       await gam.save();
 
-      // Log coin transaction for step goal
-      logCoinTransaction({
-        userId: req.user._id,
-        type: 'EARNED',
-        amount: stepGoalCoins,
-        balanceAfter: gam.coinsBalance,
-        source: 'DAILY_STEP_GOAL_AUTO',
-        description: `Daily Step Goal — ${dailyGoal.toLocaleString()} steps reached`,
-        metadata: { steps: steps ?? 0, date: today, rewardId: 'steps_daily_auto' },
-      });
+      // Log coin transaction
+      if (actualStepGoalCoins > 0) {
+        logCoinTransaction({
+          userId: req.user._id,
+          type: 'EARNED',
+          amount: actualStepGoalCoins,
+          balanceAfter: gam.coinsBalance,
+          source: 'DAILY_STEP_GOAL_AUTO',
+          description: `Daily Step Goal — ${dailyGoal.toLocaleString()} steps reached`,
+          metadata: { steps: steps ?? 0, date: today, rewardId: 'steps_daily_auto' },
+        });
+      }
 
       // ── Persist + push: step goal reached ──────────────────────────────
       createNotification(req.user._id, {
         type:    'GOAL',
         title:   '🎯 Daily Step Goal Reached!',
-        message: `You hit your ${dailyGoal.toLocaleString()} step goal and earned ${cfg.rewards.stepGoalCoins ?? 50} coins!`,
+        message: `You hit your ${dailyGoal.toLocaleString()} step goal and earned ${actualStepGoalCoins} coins!`,
         data:    { screen: 'Steps' },
       });
     } else if (!isGoalMet) {
@@ -212,7 +232,7 @@ const syncHealthData = async (req, res, next) => {
       const isTodaySync = today === actualToday;
 
       if (isTodaySync) {
-        const dailyEarnLimit = cfg.coin.dailyEarnLimit;
+        const dailyEarnLimit = getEffectiveDailyCap(req.user, cfg.coin.dailyEarnLimit, cfg.coin.unverifiedDailyCap);
         const rate = cfg.coin_config?.steps?.rate_per_100_steps ?? 0.5;
         const coinsEarnedToday = parseFloat(Math.min(dailyEarnLimit, Math.max(0, Math.floor((steps ?? 0) / 100) * rate)).toFixed(2));
 
@@ -231,7 +251,7 @@ const syncHealthData = async (req, res, next) => {
             amount: actualAdded,
             balanceAfter: gam.coinsBalance,
             source: 'PASSIVE_STEPS',
-            description: `Passive Step Coins — ${(steps ?? 0).toLocaleString()} steps`,
+            description: `Step Coins — ${(steps ?? 0).toLocaleString()} steps`,
             metadata: { steps: steps ?? 0, date: today },
           });
         }
@@ -249,7 +269,7 @@ const syncHealthData = async (req, res, next) => {
     return success(res, 'Health data synced', {
       goalCoinsAwarded,
       coinsBalance: gam.coinsBalance,
-      stepGoalCoins: goalCoinsAwarded ? (cfg.rewards.stepGoalCoins ?? 50) : 0,
+      stepGoalCoins: awardedGoalCoins,
       newlyCompleted,   // array of { title, emoji, coinReward }
     });
   } catch (err) {

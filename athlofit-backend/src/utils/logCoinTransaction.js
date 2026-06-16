@@ -3,20 +3,19 @@ const CoinTransaction = require('../models/CoinTransaction.model');
 
 /**
  * Log a coin transaction to the persistent CoinTransaction collection.
+ * Non-blocking — errors are caught so this never breaks the main flow.
  *
  * @param {Object} params
- * @param {string|ObjectId} params.userId - The user's ID
+ * @param {string|ObjectId} params.userId
  * @param {string} params.type - 'EARNED' | 'SPENT' | 'REFUND'
  * @param {number} params.amount - Coin amount (always positive)
  * @param {number} params.balanceAfter - Balance after this transaction
- * @param {string} params.source - Source enum value (e.g. 'PASSIVE_STEPS')
+ * @param {string} params.source - Source enum value
  * @param {string} params.description - Human-readable description
  * @param {Object} [params.metadata] - Optional context metadata
- * @returns {Promise<Object>} The created transaction document
  */
 async function logCoinTransaction({ userId, type, amount, balanceAfter, source, description, metadata }) {
   try {
-    // Don't log zero-amount transactions
     if (!amount || amount <= 0) return null;
 
     const transaction = await CoinTransaction.create({
@@ -31,8 +30,7 @@ async function logCoinTransaction({ userId, type, amount, balanceAfter, source, 
 
     return transaction;
   } catch (err) {
-    // Log but don't throw — transaction logging should never break the main flow
-    console.error('[logCoinTransaction] Failed to log transaction:', err.message);
+    console.error('[logCoinTransaction] Failed:', err.message);
     return null;
   }
 }

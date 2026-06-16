@@ -4,14 +4,12 @@ import { tokenService } from '../../auth/service/tokenService';
 import { navigate } from '../../../navigation/navigationRef';
 import { AccountRoutes, RootRoutes } from '../../../navigation/routes';
 import { settingScreenService } from '../service/settingScreenService';
-import { useUnitSystem } from './useUnitSystem';
 import { useAccountDeletion } from './useAccountDeletion';
 
 export const useSettingScreen = () => {
   const profile = useAuthStore(s => s.user);
   const logout = useAuthStore(state => state.logout);
-  const { isMetric, switchUnit } = useUnitSystem();
-  
+
   const {
     deletionStatus,
     requestDeletion,
@@ -72,8 +70,6 @@ export const useSettingScreen = () => {
         onTerms,
         onPrivacy,
         onSignOut,
-        isMetric,
-        onUnitToggle: (v: boolean) => switchUnit(v ? 'metric' : 'imperial'),
         onDeleteAccount,
         onCancelDeletion,
         deletionStatus: deletionStatus?.status,
@@ -88,8 +84,6 @@ export const useSettingScreen = () => {
       onTerms,
       onPrivacy,
       onSignOut,
-      isMetric,
-      switchUnit,
       onDeleteAccount,
       onCancelDeletion,
       deletionStatus?.status,

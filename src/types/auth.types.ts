@@ -46,7 +46,6 @@ export interface User {
   name: string;
   email: string;
   emailVerified: boolean;
-  phoneVerified: boolean;
   isProfileCompleted: boolean;
   dailyStepGoal: number;
   provider: string;

@@ -7,6 +7,7 @@ import { AppView, AppText, Button } from '../../../../components';
 import { Step2Props } from '../../types/completeProfile.types';
 import { Controller, useForm } from 'react-hook-form';
 import { NumericStepper } from './NumericStepper';
+import { HeightInput } from './HeightInput';
 import { PickerSheet } from './PickerSheet';
 import { useState } from 'react';
 import {
@@ -55,15 +56,10 @@ export const Step2Body: React.FC<Step2Props> = ({
         control={control}
         name="height"
         render={({ field: { value, onChange } }) => (
-          <NumericStepper
-            label="Height"
-            unit="cm"
+          <HeightInput
             value={value}
             onChange={onChange}
             error={errors.height?.message}
-            min={50}
-            max={300}
-            step={1}
           />
         )}
       />
