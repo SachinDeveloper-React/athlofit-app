@@ -3,7 +3,6 @@
 // Thin fetch wrapper — attaches Bearer token, handles 401 refresh,
 // and normalises errors. No axios dependency.
 
-import { Platform } from 'react-native';
 import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
