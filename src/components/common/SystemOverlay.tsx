@@ -4,12 +4,14 @@ import { useNetInfo } from '@react-native-community/netinfo';
 import AnimatedRN, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSystemStore } from '../../store/systemStore';
+import { useAppConfigStore } from '../../store/appConfigStore';
 import { useTheme } from '../../hooks/useTheme';
 import { makeStyles } from '../../hooks/makeStyles';
 import AppText from '../AppText';
 import Button from '../Button';
 import { Icon } from '../Icon';
 import { BASE_URL } from '../../utils/api';
+import AppView from '../AppView';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -220,6 +222,7 @@ const SystemOverlay = () => {
   const insets = useSafeAreaInsets();
   const { isMaintenance, setMaintenance, isServerUnreachable, setServerUnreachable } =
     useSystemStore();
+  const maintenanceMessage = useAppConfigStore(s => s.config.maintenance?.message);
   const netInfo = useNetInfo();
   const [polling, setPolling]   = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -233,9 +236,12 @@ const SystemOverlay = () => {
       interval = setInterval(async () => {
         try {
           setPolling(true);
-          const res  = await fetch(BASE_URL);
+          const res  = await fetch(`${BASE_URL}config/app`);
           const data = await res.json();
-          if (data?.success && !data.isMaintenance) setMaintenance(false);
+          // Server returned config — check if maintenance is now disabled
+          if (data?.success && data?.data?.config?.maintenance?.enabled === false) {
+            setMaintenance(false);
+          }
         } catch { /* keep polling */ } finally { setPolling(false); }
       }, 10_000);
     }
@@ -294,15 +300,17 @@ const SystemOverlay = () => {
           <Icon name="Wrench" size={64} color={colors.primary} />
           <AppText variant="title1" style={styles.maintenanceTitle}>We'll be back soon!</AppText>
           <AppText variant="body" secondary style={styles.maintenanceBody}>
-            The system is currently undergoing scheduled maintenance. Please check back in a little while.
+            {maintenanceMessage || 'The system is currently undergoing scheduled maintenance. Please check back in a little while.'}
           </AppText>
+          <AppView style={{alignItems:"center"}}>
           <Button
             label={polling ? 'Checking status…' : 'Try again manually'}
             variant="outline"
             onPress={() => {}}
             disabled={polling}
-            style={{ marginTop: spacing[6], paddingVertical: spacing[3] }}
+            style={{ marginTop: spacing[6], paddingVertical: spacing[3], }}
           />
+          </AppView>
         </View>
       </Modal>
 

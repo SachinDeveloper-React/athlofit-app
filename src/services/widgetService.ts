@@ -9,6 +9,7 @@ interface StepsWidgetNativeModule {
   setLoginTimestamp: (timestamp: number) => Promise<boolean>;
   clearLoginTimestamp: () => Promise<boolean>;
   setLoggedOut: (loggedOut: boolean) => Promise<boolean>;
+  setMaintenance: (enabled: boolean, message: string) => Promise<boolean>;
   isWidgetAdded: () => Promise<boolean>;
   setAppInitialising: (initialising: boolean) => Promise<boolean>;
   scheduleEodSync: () => Promise<boolean>;
@@ -119,6 +120,21 @@ class WidgetService {
       return true;
     } catch (e) {
       console.warn('[WidgetService] setLoggedOut failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Shows maintenance message on the widget when app is under maintenance.
+   * Pass enabled=false to restore normal display when maintenance ends.
+   */
+  async setMaintenance(enabled: boolean, message: string): Promise<boolean> {
+    if (!this.module) return false;
+    try {
+      await this.module.setMaintenance(enabled, message);
+      return true;
+    } catch (e) {
+      console.warn('[WidgetService] setMaintenance failed:', e);
       return false;
     }
   }

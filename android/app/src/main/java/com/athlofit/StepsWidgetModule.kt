@@ -88,6 +88,22 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // ─── Maintenance widget state ─────────────────────────────────────────────
+
+    /**
+     * Mark the widget as "maintenance mode" — displays the maintenance message.
+     * Call this when the app config indicates maintenance is enabled.
+     */
+    @ReactMethod
+    fun setMaintenance(enabled: Boolean, message: String, promise: Promise) {
+        try {
+            StepsWidgetProvider.setMaintenance(reactApplicationContext, enabled, message)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("MAINTENANCE_ERROR", e.message, e)
+        }
+    }
+
     // ─── Access token (for EodSyncWorker) ─────────────────────────────────────
 
     /**

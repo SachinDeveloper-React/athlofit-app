@@ -104,6 +104,32 @@ class StepsWidgetProvider : AppWidgetProvider() {
                 Log.d(TAG, "Widget logged-out state broadcast sent: loggedOut=$loggedOut")
             }
         }
+
+        /**
+         * Mark the widget as "maintenance mode" — the next render will show
+         * the maintenance message instead of step data.
+         */
+        fun setMaintenance(context: Context, enabled: Boolean, message: String?) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean("maintenance", enabled)
+                .putString("maintenanceMessage", message ?: "Under maintenance. Back soon!")
+                .apply()
+
+            // Immediately refresh all widget instances
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, StepsWidgetProvider::class.java)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
+
+            if (appWidgetIds.isNotEmpty()) {
+                val intent = Intent(context, StepsWidgetProvider::class.java).apply {
+                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+                }
+                context.sendBroadcast(intent)
+                Log.d(TAG, "Widget maintenance state broadcast sent: enabled=$enabled")
+            }
+        }
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -153,7 +179,38 @@ class StepsWidgetProvider : AppWidgetProvider() {
     ) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val isLoggedOut = prefs.getBoolean(PREF_LOGGED_OUT, false)
+        val isMaintenance = prefs.getBoolean("maintenance", false)
         val views = RemoteViews(context.packageName, R.layout.widget_steps)
+
+        if (isMaintenance) {
+            // ── Maintenance state: show maintenance message ───────────────────
+            val message = prefs.getString("maintenanceMessage", "Under maintenance. Back soon!") ?: "Under maintenance. Back soon!"
+            views.setTextViewText(R.id.widget_steps, "🔧")
+            views.setTextViewText(R.id.widget_goal_text, message)
+            views.setProgressBar(R.id.widget_progress, 100, 0, false)
+            views.setTextViewText(R.id.widget_percentage, "")
+            views.setTextViewText(R.id.widget_last_updated, "We'll be back soon")
+
+            // Tap widget → open app
+            val launchIntent = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
+                ?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                }
+
+            if (launchIntent != null) {
+                val openPi = PendingIntent.getActivity(
+                    context,
+                    1,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                views.setOnClickPendingIntent(R.id.widget_root, openPi)
+            }
+
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+            return
+        }
 
         if (isLoggedOut) {
             // ── Logged-out state: show message, hide step data ─────────────────

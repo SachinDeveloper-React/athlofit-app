@@ -60,6 +60,7 @@ export type TransactionCategory =
   | 'HYDRATION_GOAL'
   | 'STREAK_BADGE'
   | 'ACHIEVEMENT'
+  | 'CHALLENGE'
   | 'REFERRAL_BONUS'
   | 'SHOP_PURCHASE'
   | 'SHOP_REFUND'

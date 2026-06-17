@@ -49,6 +49,8 @@ const getCategoryIcon = (category?: TransactionCategory, type?: string): string 
         return 'Flame';
       case 'ACHIEVEMENT':
         return 'Trophy';
+      case 'CHALLENGE':
+        return 'Swords';
       case 'REFERRAL_BONUS':
         return 'UserPlus';
       case 'SHOP_PURCHASE':
