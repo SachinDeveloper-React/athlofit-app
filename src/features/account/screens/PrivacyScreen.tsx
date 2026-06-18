@@ -1,12 +1,16 @@
 import React from 'react';
-import { StyleSheet, ActivityIndicator } from 'react-native';
+import { StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
+import RenderHtml from 'react-native-render-html';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { useLegalContent } from '../hooks/useLegalContent';
 
 const PrivacyScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const { data, isLoading, error } = useLegalContent('privacy');
+
+  const htmlContent = data?.data?.content || '';
 
   return (
     <Screen
@@ -26,14 +30,26 @@ const PrivacyScreen: React.FC = () => {
               Failed to load privacy policy.
             </AppText>
           </AppView>
+        ) : htmlContent ? (
+          <AppView style={styles.htmlContainer}>
+            <RenderHtml
+              contentWidth={width - 32}
+              source={{ html: htmlContent }}
+              baseStyle={{ color: colors.foreground, fontSize: 15, lineHeight: 24 }}
+              tagsStyles={{
+                h1: { fontSize: 22, fontWeight: 'bold', marginBottom: 12, color: colors.foreground },
+                h2: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: colors.foreground },
+                h3: { fontSize: 16, fontWeight: '600', marginBottom: 6, color: colors.foreground },
+                p: { marginBottom: 10, color: colors.foreground },
+                li: { marginBottom: 4, color: colors.foreground },
+                a: { color: colors.primary },
+              }}
+            />
+          </AppView>
         ) : (
-          <AppView
-            style={[
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <AppText style={[styles.content, { color: colors.foreground }]}>
-              {data?.data?.content || 'No content available.'}
+          <AppView center style={styles.center}>
+            <AppText style={{ color: colors.foreground }}>
+              No content available.
             </AppText>
           </AppView>
         )}
@@ -45,28 +61,13 @@ const PrivacyScreen: React.FC = () => {
 export default PrivacyScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    // paddingTop: 20,
-  },
-  center: {
-    // marginTop: 100,
-  },
+  container: {},
+  center: {},
   loadingText: {
     marginTop: 12,
     opacity: 0.6,
   },
-  card: {
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  content: {
-    fontSize: 15,
-    lineHeight: 24,
+  htmlContainer: {
+    paddingHorizontal: 16,
   },
 });
