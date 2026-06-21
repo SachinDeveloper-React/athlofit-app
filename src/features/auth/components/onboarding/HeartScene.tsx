@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
-import { StyleSheet, Dimensions } from 'react-native';
+import React from 'react';
+import { StyleSheet, Animated } from 'react-native';
 import { AppView, AppText } from '../../../../components';
-import { Animated } from 'react-native';
 import Svg, {
   Path,
   Ellipse,
@@ -14,27 +13,23 @@ import { useHeartbeat, useLoopAnim, usePulseRing } from '../../hooks';
 import { BpItem } from '../../types';
 import { C } from '../../constant';
 import { BpRow } from './OnbaordingSubComponents';
-
-const { width } = Dimensions.get('window');
+import { s, vs, ms, wp, hp, SCREEN_WIDTH } from '../../../../utils/responsive';
 
 export const HeartScene: React.FC = () => {
   const heartScale = useHeartbeat();
 
-  // ECG sweep
   const ecgX = useLoopAnim({
     initialValue: 0,
     steps: [{ toValue: 1, duration: 1800 }],
   });
   const ecgTranslate = ecgX.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, width * 0.6],
+    outputRange: [0, wp(60)],
   });
 
-  // Pulse rings
   const ring1 = usePulseRing(1200, 0, 2.8);
   const ring2 = usePulseRing(1200, 600, 2.4);
 
-  // BP bar (JS thread — animates layout width)
   const bpAnim = useLoopAnim({
     initialValue: 0,
     useNativeDriver: false,
@@ -45,18 +40,21 @@ export const HeartScene: React.FC = () => {
   });
   const bpWidth = bpAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [30, 140],
+    outputRange: [s(30), s(120)],
   });
 
   const bpItems: BpItem[] = [
     { label: 'SYS', val: '120', color: C.accent, animatedWidth: bpWidth },
-    { label: 'DIA', val: '80', color: C.blue, animatedWidth: 100 as any },
+    { label: 'DIA', val: '80', color: C.blue, animatedWidth: s(80) as any },
   ];
 
   const rings = [
     { scale: ring1.scale, opacity: ring1.opacity },
     { scale: ring2.scale, opacity: ring2.opacity },
   ];
+
+  const heartSize = hp(12);
+  const ecgH = hp(7);
 
   return (
     <AppView style={styles.root}>
@@ -69,10 +67,8 @@ export const HeartScene: React.FC = () => {
       ))}
 
       {/* Heart */}
-      <Animated.View
-        style={{ transform: [{ scale: heartScale }], marginTop: -height(8) }}
-      >
-        <Svg width={130} height={120} viewBox="0 0 130 120">
+      <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+        <Svg width={heartSize} height={heartSize * 0.92} viewBox="0 0 130 120">
           <Defs>
             <LinearGradient id="hg" x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0" stopColor="#FF6B9D" />
@@ -83,25 +79,16 @@ export const HeartScene: React.FC = () => {
             d="M65 105 C30 80 5 60 5 35 C5 18 18 5 35 5 C47 5 58 12 65 22 C72 12 83 5 95 5 C112 5 125 18 125 35 C125 60 100 80 65 105Z"
             fill="url(#hg)"
           />
-          <Ellipse
-            cx={47}
-            cy={30}
-            rx={12}
-            ry={8}
-            fill="rgba(255,255,255,0.25)"
-          />
+          <Ellipse cx={47} cy={30} rx={12} ry={8} fill="rgba(255,255,255,0.25)" />
         </Svg>
       </Animated.View>
 
       {/* ECG strip */}
-      <AppView style={styles.ecgStrip}>
+      <AppView style={[styles.ecgStrip, { height: ecgH }]}>
         <Animated.View
-          style={[
-            styles.ecgInner,
-            { transform: [{ translateX: ecgTranslate }] },
-          ]}
+          style={[styles.ecgInner, { transform: [{ translateX: ecgTranslate }] }]}
         >
-          <Svg width={width * 1.4} height={70}>
+          <Svg width={SCREEN_WIDTH * 1.4} height={ecgH}>
             <Polyline
               points="0,35 30,35 40,10 50,58 60,20 70,35 90,35 100,35 110,10 120,58 130,20 140,35 160,35 170,35 180,10 190,58 200,20 210,35 230,35"
               fill="none"
@@ -126,30 +113,30 @@ export const HeartScene: React.FC = () => {
   );
 };
 
-// Dimensions helper for percentage-based layout
-const { height: screenHeight } = Dimensions.get('window');
-const height = (pct: number) => (screenHeight * pct) / 100;
-
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  root: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: s(20),
+  },
 
   pulseRing: {
     position: 'absolute',
-    top: screenHeight * 0.08,
+    top: hp(6),
     alignSelf: 'center',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: s(80),
+    height: s(80),
+    borderRadius: s(40),
     borderWidth: 2,
     borderColor: C.accent,
   },
 
   ecgStrip: {
-    marginTop: 20,
-    width: width * 0.8,
-    height: 70,
+    marginTop: vs(12),
+    width: wp(78),
     backgroundColor: 'rgba(0,229,195,0.07)',
-    borderRadius: 14,
+    borderRadius: s(10),
     borderWidth: 1,
     borderColor: 'rgba(0,229,195,0.25)',
     overflow: 'hidden',
@@ -157,24 +144,24 @@ const styles = StyleSheet.create({
   ecgInner: {
     position: 'absolute',
     top: 0,
-    left: -(width * 0.6),
+    left: -wp(60),
   },
   bpmLabel: {
     position: 'absolute',
-    bottom: 6,
-    right: 12,
+    bottom: vs(4),
+    right: s(10),
     color: C.teal,
-    fontSize: 11,
+    fontSize: ms(9),
     fontWeight: '700',
     letterSpacing: 1,
   },
 
-  bpSection: { marginTop: 20, width: width * 0.8 },
+  bpSection: { marginTop: vs(12), width: wp(78) },
   sectionTitle: {
     color: C.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: ms(10),
+    fontWeight: '700',
     letterSpacing: 1.5,
-    marginBottom: 10,
+    marginBottom: vs(8),
   },
 });

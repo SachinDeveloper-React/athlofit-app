@@ -19,12 +19,13 @@ import { useTheme } from '../../../hooks/useTheme';
 import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import { s, vs, ms, hp } from '../../../utils/responsive';
 
 // ─── OnboardingScreen ─────────────────────────────────────────────────────
 type Props = AuthStackScreenProps<typeof AuthRoutes.ONBOARDING>;
 const OnboardingScreen = () => {
   const navigation = useNavigation<Props['navigation']>();
-  const { bottom, top } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
   const { fadeAnim, slideAnim, scaleAnim, transition } = useSlideTransition();
   const { finishOnboarding } = useOnboardingStore();
@@ -107,8 +108,7 @@ const OnboardingScreen = () => {
       style={[
         styles.root,
         {
-          paddingBottom: bottom,
-          paddingTop: top,
+          paddingBottom: bottom + vs(8),
           backgroundColor: bgColor,
         },
       ]}
@@ -120,15 +120,15 @@ const OnboardingScreen = () => {
         <AppView
           style={[
             styles.bgOrb,
-            { top: -80, right: -80, backgroundColor: slide.accent },
+            { top: vs(-80), right: s(-80), backgroundColor: slide.accent },
           ]}
         />
         <AppView
           style={[
             styles.bgOrb,
             {
-              bottom: -60,
-              left: -60,
+              bottom: vs(-60),
+              left: s(-60),
               backgroundColor: C.blue,
               opacity: 0.06,
             },
@@ -151,16 +151,16 @@ const OnboardingScreen = () => {
         />
       )}
 
-      {/* Scene */}
+      {/* Scene — takes 55% of screen height */}
       <Animated.View style={[styles.sceneWrap, contentStyle]}>
         <Scene />
       </Animated.View>
 
-      {/* Bottom controls */}
+      {/* Bottom controls — takes remaining space */}
       <Animated.View style={[styles.bottomArea, contentStyle]}>
         <AppView style={[styles.accentLine, { backgroundColor: slide.accent }]} />
-        <AppText style={[styles.title, { color: textColor }]}>{slide.title}</AppText>
-        <AppText style={[styles.subtitle, { color: mutedColor }]}>{slide.subtitle}</AppText>
+        <AppText style={[styles.title, { color: textColor }]} numberOfLines={2}>{slide.title}</AppText>
+        <AppText style={[styles.subtitle, { color: mutedColor }]} numberOfLines={3}>{slide.subtitle}</AppText>
 
         <Dots
           slides={SLIDES}
@@ -192,54 +192,56 @@ const styles = StyleSheet.create({
 
   bgOrb: {
     position: 'absolute',
-    width: 280,
-    height: 280,
+    width: s(280),
+    height: s(280),
     borderRadius: 999,
     opacity: 0.07,
   },
 
   skipBtn: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 20,
-    right: 24,
+    top: Platform.OS === 'ios' ? vs(56) : (StatusBar?.currentHeight ?? 24) + vs(8),
+    right: s(24),
     zIndex: 10,
-    padding: 8,
+    padding: s(8),
   },
   skipText: {
     color: C.muted,
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: '600',
   },
 
   sceneWrap: {
-    flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    height: hp(52),
+    overflow: 'hidden',
+    paddingTop: Platform.OS === 'ios' ? vs(50) : vs(36),
   },
 
   bottomArea: {
-    paddingHorizontal: 28,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: s(24),
   },
 
   accentLine: {
-    width: 40,
-    height: 4,
+    width: s(36),
+    height: 3,
     borderRadius: 2,
-    marginBottom: 16,
+    marginBottom: vs(10),
   },
 
   title: {
     color: C.white,
-    fontSize: 30,
+    fontSize: ms(24),
     fontWeight: '900',
     letterSpacing: -0.5,
-    marginBottom: 10,
+    marginBottom: vs(6),
   },
 
   subtitle: {
     color: C.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 28,
+    fontSize: ms(13),
+    lineHeight: ms(20),
+    marginBottom: vs(16),
   },
 });

@@ -76,6 +76,18 @@ export const authService = {
     );
   },
 
+  logoutWithToken: (token: string | null) => {
+    // Called with a pre-fetched token (before keychain is cleared)
+    const { BASE_URL } = require('../../../utils/api');
+    return fetch(`${BASE_URL}auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).catch(() => {}); // fully silent — network errors are fine
+  },
+
   me: async () => {
     const response = await api.get<ApiResponse<User>>('user/profile');
 

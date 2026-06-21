@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Linking, TouchableOpacity } from 'react-native';
+import { Alert, Linking, TouchableOpacity } from 'react-native';
 import { AuthStackScreenProps } from '../../../types/navigation.types';
 import { AuthRoutes } from '../../../navigation/routes';
 import { useTheme } from '../../../hooks/useTheme';
@@ -17,8 +17,8 @@ import { LoginFormValues, loginSchema } from '../utils/authValidation';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.LOGIN>;
 
-const TERMS_URL = 'https://athlofit.com/terms';
-const PRIVACY_URL = 'https://athlofit.com/privacy-policy';
+const TERMS_URL = 'https://athlofit.com/legal/terms';
+const PRIVACY_URL = 'https://athlofit.com/legal/privacy';
 
 const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   hero:    { alignItems: 'center' as const },
@@ -86,7 +86,24 @@ const LoginScreen: React.FC<Props> = () => {
         }
         // If account is already logged in on another device
         if (err?.statusCode === 409 && err?.data?.activeSession) {
-          toast.error('Your account is already logged in on another device. Please logout from that device first.');
+          Alert.alert(
+            'Already Logged In',
+            'Your account is active on another device. Do you want to log out from that device and continue here?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Continue Here',
+                style: 'destructive',
+                onPress: () => {
+                  login({ ...values, forceLogin: true }, {
+                    onError: (retryErr: any) => {
+                      toast.error(retryErr?.message ?? 'Login failed. Please try again.');
+                    },
+                  });
+                },
+              },
+            ],
+          );
           return;
         }
         toast.error(err?.message ?? 'Login failed. Please try again.');

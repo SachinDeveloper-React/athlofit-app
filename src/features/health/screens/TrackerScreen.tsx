@@ -214,7 +214,7 @@ const TrackerScreen = memo(() => {
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const userId = useAuthStore(state => state.user?._id);
 
-  const { platform, isReady, isLoading, data, error, refresh, lastUpdated } =
+  const { platform, isReady, isLoading, data, error, refresh, retrySetup, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) || 70 });
 
   const {
@@ -416,7 +416,7 @@ const TrackerScreen = memo(() => {
           errorMessage={error ?? undefined}
           onPermissionGranted={() => {
             setGateReason(null);
-            handleRefresh();
+            retrySetup();
           }}
         />
       </Screen>

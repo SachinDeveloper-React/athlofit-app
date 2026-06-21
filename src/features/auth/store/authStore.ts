@@ -178,6 +178,9 @@ export const useAuthStore = create<AuthState>()(
         setIsLoggingOut(true);
 
         try {
+          // Grab the access token BEFORE clearing so we can still call the backend
+          const currentToken = await tokenService.getAccessToken();
+
           // Clear local state first so navigation redirects to sign-in immediately
           set(state => {
             state.user = null;
@@ -192,7 +195,7 @@ export const useAuthStore = create<AuthState>()(
           // Best-effort server-side cleanup — both use raw fetch (not api.post)
           // so they can never trigger the refresh → logout cycle
           try { await clearFcmToken(); } catch { /* silent */ }
-          try { await authService.logout(); } catch { /* silent */ }
+          try { await authService.logoutWithToken(currentToken); } catch { /* silent */ }
 
         } finally {
           setIsLoggingOut(false);

@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../auth/store/authStore';
-import { tokenService } from '../../auth/service/tokenService';
 import { navigate } from '../../../navigation/navigationRef';
 import { AccountRoutes, RootRoutes } from '../../../navigation/routes';
 import { settingScreenService } from '../service/settingScreenService';
@@ -49,7 +48,6 @@ export const useSettingScreen = () => {
   }, []);
 
   const onSignOut = useCallback(() => {
-    tokenService.clear();
     logout();
   }, [logout]);
 

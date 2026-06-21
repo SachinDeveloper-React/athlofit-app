@@ -287,6 +287,15 @@ export function useHealth(options: UseHealthOptions = {}) {
     [refreshInterval],
   );
 
+  // ── Retry setup (after permissions granted from PermissionDeniedScreen) ───
+  const retrySetup = useCallback(() => {
+    // Reset the guard so setup() can run again
+    isSettingUpRef.current = false;
+    // Also reset healthInitStore so it doesn't short-circuit
+    useHealthInitStore.getState().reset();
+    setup();
+  }, []);
+
   // ── Manual log methods — routed by platform ───────────────────────────────
 
   const logHeartRate = useCallback(
@@ -358,6 +367,7 @@ export function useHealth(options: UseHealthOptions = {}) {
     error,
     lastUpdated,
     refresh,
+    retrySetup,
     logHeartRate,
     logBloodPressure,
     logWeight,

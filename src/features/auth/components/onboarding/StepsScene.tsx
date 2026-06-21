@@ -1,9 +1,8 @@
 import React from 'react';
-import { Animated, Dimensions, StyleSheet } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Path,
-  Rect,
   Defs,
   LinearGradient,
   Stop,
@@ -11,11 +10,9 @@ import Svg, {
 import { AppView, AppText } from '../../../../components';
 import { C } from '../../constant';
 import { useLoopAnim, useEnterAnim } from '../../hooks';
-
-const { width } = Dimensions.get('window');
+import { s, vs, ms, wp, hp } from '../../../../utils/responsive';
 
 export const StepsScene: React.FC = () => {
-  // Ring progress animation
   const progressAnim = useLoopAnim({
     initialValue: 0.6,
     steps: [
@@ -24,7 +21,6 @@ export const StepsScene: React.FC = () => {
     ],
   });
 
-  // Step count pulse
   const pulseAnim = useLoopAnim({
     initialValue: 1,
     steps: [
@@ -33,21 +29,22 @@ export const StepsScene: React.FC = () => {
     ],
   });
 
-  // Bar chart entry
   const barEnter = useEnterAnim({
     toValue: 1,
     duration: 1200,
     useNativeDriver: false,
   });
 
-  const R = 60;
+  const ringSize = hp(16);
+  const R = ringSize * 0.375;
   const circ = 2 * Math.PI * R;
+  const center = ringSize / 2;
   const steps = 8430;
   const goal = 10000;
   const pct = steps / goal;
   const dash = circ * pct;
+  const strokeW = ringSize * 0.075;
 
-  // Weekly bar data
   const BARS = [
     { day: 'M', pct: 0.7 },
     { day: 'T', pct: 0.9 },
@@ -61,54 +58,39 @@ export const StepsScene: React.FC = () => {
   return (
     <AppView style={styles.root}>
       {/* Steps ring */}
-      <Animated.View style={[styles.ringWrap, { opacity: progressAnim }]}>
-        <Svg width={160} height={160} viewBox="0 0 160 160">
+      <Animated.View style={{ opacity: progressAnim }}>
+        <Svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
           <Defs>
             <LinearGradient id="stepGrad" x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0" stopColor={C.teal} />
               <Stop offset="1" stopColor={C.blue} />
             </LinearGradient>
           </Defs>
-          {/* Track */}
           <Circle
-            cx={80}
-            cy={80}
+            cx={center}
+            cy={center}
             r={R}
             fill="none"
             stroke="rgba(255,255,255,0.07)"
-            strokeWidth={12}
+            strokeWidth={strokeW}
           />
-          {/* Progress */}
           <Circle
-            cx={80}
-            cy={80}
+            cx={center}
+            cy={center}
             r={R}
             fill="none"
             stroke="url(#stepGrad)"
-            strokeWidth={12}
+            strokeWidth={strokeW}
             strokeDasharray={`${dash} ${circ}`}
             strokeLinecap="round"
             rotation="-90"
-            origin="80,80"
-          />
-          {/* Shoe icon in center */}
-          <Path
-            d="M65 85 Q65 78 72 76 L88 76 Q95 78 95 85 L93 90 Q90 93 80 93 Q70 93 67 90 Z"
-            fill={C.teal}
-            opacity={0.8}
-          />
-          <Path
-            d="M70 76 L70 72 Q72 68 80 68 Q88 68 90 72 L90 76"
-            fill="none"
-            stroke={C.teal}
-            strokeWidth={2}
-            strokeLinecap="round"
+            origin={`${center},${center}`}
           />
         </Svg>
       </Animated.View>
 
       {/* Step count */}
-      <Animated.View style={{ transform: [{ scale: pulseAnim }], marginTop: 12 }}>
+      <Animated.View style={[styles.countWrap, { transform: [{ scale: pulseAnim }] }]}>
         <AppText style={styles.stepCount}>{steps.toLocaleString()}</AppText>
         <AppText style={styles.stepGoal}>of {goal.toLocaleString()} steps</AppText>
       </Animated.View>
@@ -143,28 +125,33 @@ export const StepsScene: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  ringWrap: { marginTop: -20 },
-  stepCount: { color: '#fff', fontSize: 34, fontWeight: '900', textAlign: 'center' },
-  stepGoal: { color: C.muted, fontSize: 13, textAlign: 'center', marginTop: 2 },
-  barChart: { width: width * 0.8, marginTop: 24 },
+  root: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: s(20),
+  },
+  countWrap: { marginTop: vs(8) },
+  stepCount: { color: '#fff', fontSize: ms(28), fontWeight: '900', textAlign: 'center' },
+  stepGoal: { color: C.muted, fontSize: ms(11), textAlign: 'center', marginTop: vs(2) },
+  barChart: { width: wp(78), marginTop: vs(14) },
   sectionTitle: {
     color: C.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: ms(10),
+    fontWeight: '700',
     letterSpacing: 1.5,
-    marginBottom: 12,
+    marginBottom: vs(8),
   },
   barsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   barCol: { alignItems: 'center', flex: 1 },
   barTrack: {
-    width: 14,
-    height: 60,
+    width: s(12),
+    height: hp(6),
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 7,
+    borderRadius: s(6),
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
-  barFill: { width: '100%', borderRadius: 7 },
-  barLabel: { color: C.muted, fontSize: 10, fontWeight: '600', marginTop: 6 },
+  barFill: { width: '100%', borderRadius: s(6) },
+  barLabel: { color: C.muted, fontSize: ms(9), fontWeight: '600', marginTop: vs(4) },
 });

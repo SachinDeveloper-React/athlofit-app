@@ -1,23 +1,19 @@
 import React from 'react';
-import { Animated, Dimensions, StyleSheet } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Path,
-  Rect,
   Ellipse,
   Defs,
   LinearGradient,
   Stop,
-  Text as SvgText,
 } from 'react-native-svg';
 import { AppView, AppText } from '../../../../components';
 import { C } from '../../constant';
 import { useLoopAnim, useEnterAnim } from '../../hooks';
-
-const { width } = Dimensions.get('window');
+import { s, vs, ms, wp, hp } from '../../../../utils/responsive';
 
 export const CoinsScene: React.FC = () => {
-  // Coin spin / float animation
   const floatAnim = useLoopAnim({
     initialValue: 0,
     steps: [
@@ -27,10 +23,9 @@ export const CoinsScene: React.FC = () => {
   });
   const floatY = floatAnim.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0, -12, 0],
+    outputRange: [0, -8, 0],
   });
 
-  // Shimmer glow
   const glowAnim = useLoopAnim({
     initialValue: 0.5,
     steps: [
@@ -39,19 +34,20 @@ export const CoinsScene: React.FC = () => {
     ],
   });
 
-  // Counter entry
   const counterScale = useEnterAnim({
     toValue: 1,
     duration: 800,
     useNativeDriver: true,
   });
 
+  const coinSize = hp(14);
+
   return (
     <AppView style={styles.root}>
       {/* Floating coin */}
-      <Animated.View style={[styles.coinWrap, { transform: [{ translateY: floatY }] }]}>
+      <Animated.View style={{ transform: [{ translateY: floatY }] }}>
         <Animated.View style={{ opacity: glowAnim }}>
-          <Svg width={140} height={140} viewBox="0 0 140 140">
+          <Svg width={coinSize} height={coinSize} viewBox="0 0 140 140">
             <Defs>
               <LinearGradient id="coinGrad" x1="0" y1="0" x2="1" y2="1">
                 <Stop offset="0" stopColor="#FFD700" />
@@ -63,12 +59,9 @@ export const CoinsScene: React.FC = () => {
                 <Stop offset="1" stopColor="rgba(255,255,255,0)" />
               </LinearGradient>
             </Defs>
-            {/* Coin shadow */}
             <Ellipse cx={70} cy={130} rx={35} ry={6} fill="rgba(0,0,0,0.3)" />
-            {/* Coin body */}
             <Circle cx={70} cy={65} r={52} fill="url(#coinGrad)" />
             <Circle cx={70} cy={65} r={44} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} />
-            {/* A logo */}
             <Path
               d="M57 90 L70 40 L83 90 M61 75 L79 75"
               fill="none"
@@ -77,7 +70,6 @@ export const CoinsScene: React.FC = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            {/* Shine */}
             <Circle cx={70} cy={65} r={52} fill="url(#coinShine)" />
           </Svg>
         </Animated.View>
@@ -111,31 +103,36 @@ export const CoinsScene: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  coinWrap: { marginTop: -30 },
-  balanceWrap: { alignItems: 'center', marginTop: 16 },
-  balanceAmount: { color: C.gold, fontSize: 36, fontWeight: '900' },
-  balanceLabel: { color: C.muted, fontSize: 13, marginTop: 2 },
-  earnSection: { width: width * 0.8, marginTop: 24 },
+  root: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: s(20),
+  },
+  balanceWrap: { alignItems: 'center', marginTop: vs(8) },
+  balanceAmount: { color: C.gold, fontSize: ms(30), fontWeight: '900' },
+  balanceLabel: { color: C.muted, fontSize: ms(11), marginTop: vs(2) },
+  earnSection: { width: wp(78), marginTop: vs(12) },
   sectionTitle: {
     color: C.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: ms(10),
+    fontWeight: '700',
     letterSpacing: 1.5,
-    marginBottom: 12,
+    marginBottom: vs(8),
   },
   earnRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: s(10),
+    paddingVertical: vs(8),
+    paddingHorizontal: s(12),
+    marginBottom: vs(6),
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.15)',
   },
-  earnIcon: { fontSize: 22, marginRight: 12 },
+  earnIcon: { fontSize: ms(18), marginRight: s(10) },
   earnInfo: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  earnLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  earnCoins: { color: C.gold, fontSize: 14, fontWeight: '700' },
+  earnLabel: { color: '#fff', fontSize: ms(12), fontWeight: '600' },
+  earnCoins: { color: C.gold, fontSize: ms(12), fontWeight: '700' },
 });
