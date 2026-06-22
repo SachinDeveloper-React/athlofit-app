@@ -218,7 +218,24 @@ const LoginScreen: React.FC<Props> = () => {
             googleLogin({ termsAccepted: true }, {
               onError: (err: any) => {
                 if (err?.statusCode === 409 && err?.data?.activeSession) {
-                  toast.error('Your account is already logged in on another device. Please logout from that device first.');
+                  Alert.alert(
+                    'Already Logged In',
+                    'Your account is active on another device. Do you want to log out from that device and continue here?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Continue Here',
+                        style: 'destructive',
+                        onPress: () => {
+                          googleLogin({ termsAccepted: true, forceLogin: true }, {
+                            onError: (retryErr: any) => {
+                              toast.error(retryErr?.message ?? 'Google sign-in failed. Please try again.');
+                            },
+                          });
+                        },
+                      },
+                    ],
+                  );
                   return;
                 }
                 toast.error(err?.message ?? 'Google sign-in failed.');

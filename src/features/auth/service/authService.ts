@@ -105,6 +105,7 @@ export const authService = {
     scopes?: string[];
     serverAuthCode?: string | null;
     termsAccepted?: boolean;
+    forceLogin?: boolean;
   }) => {
     const response = await api.post<AuthResponse>('auth/google', {
       idToken,
@@ -114,6 +115,7 @@ export const authService = {
       scopes:         extra?.scopes         ?? [],
       serverAuthCode: extra?.serverAuthCode ?? null,
       termsAccepted:  extra?.termsAccepted  ?? false,
+      forceLogin:     extra?.forceLogin     ?? false,
     }, { auth: false });
     return {
       success: !!(response?.data?.accessToken && response?.data?.refreshToken && response?.data?.user),

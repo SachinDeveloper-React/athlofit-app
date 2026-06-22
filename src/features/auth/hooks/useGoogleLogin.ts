@@ -4,12 +4,18 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authService } from '../service/authService';
 import { useAuthStore } from '../store/authStore';
 
+interface GoogleLoginParams {
+  termsAccepted: boolean;
+  forceLogin?: boolean;
+}
+
 export function useGoogleLogin() {
   const setAuth = useAuthStore(s => s.setAuth);
 
   return useMutation({
-    mutationFn: async (params: { termsAccepted: boolean } | undefined) => {
+    mutationFn: async (params: GoogleLoginParams | undefined) => {
       const termsAccepted = params?.termsAccepted ?? false;
+      const forceLogin = params?.forceLogin ?? false;
 
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
@@ -36,6 +42,7 @@ export function useGoogleLogin() {
         scopes,
         serverAuthCode,
         termsAccepted,
+        forceLogin,
       });
 
       if (!response.success) throw new Error(response.message);
