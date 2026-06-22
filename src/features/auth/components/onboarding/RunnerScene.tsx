@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet, Dimensions } from 'react-native';
-import { AppView, AppText } from '../../../../components';
+import { Dimensions } from 'react-native';
+import { AppView } from '../../../../components';
 
 import { Animated as RNAnimated } from 'react-native';
 import Svg, {
@@ -8,24 +8,18 @@ import Svg, {
   Path,
   Rect,
   Ellipse,
-  Line,
   Defs,
   LinearGradient,
   Stop,
 } from 'react-native-svg';
 
 import { StatItem } from '../../types';
-import { C, POSES, SHADOW_SCALES } from '../../constant';
+import { POSES, SHADOW_SCALES } from '../../constant';
+import { useTheme } from '../../../../hooks/useTheme';
 import { StatCard } from './OnbaordingSubComponents';
 import { useLoopAnim, useRunnerFrame } from '../../hooks';
 
 const { width } = Dimensions.get('window');
-
-const STATS: StatItem[] = [
-  { label: 'PACE', value: '5\'42"', color: C.teal },
-  { label: 'DIST', value: '3.4 km', color: C.gold },
-  { label: 'CALS', value: '312', color: C.accent },
-];
 
 // Stroke attribute helper
 const limb = (color: string, w = 7) =>
@@ -38,11 +32,19 @@ const limb = (color: string, w = 7) =>
   } as const);
 
 export const RunnerScene: React.FC = () => {
+  const { colors, spacing } = useTheme();
+
+  const STATS: StatItem[] = [
+    { label: 'PACE', value: '5\'42"', color: colors.success },
+    { label: 'DIST', value: '3.4 km', color: colors.gold },
+    { label: 'CALS', value: '312', color: colors.destructiveForeground },
+  ];
+
   const frame = useRunnerFrame();
   const pose = POSES[frame];
   const { legF, legB, armF, armB, hipL, hipR, shoulderL, shoulderR } = pose;
 
-  // Horizontal sweep — native driver ✓
+  // Horizontal sweep — native driver
   const runX = useLoopAnim({
     initialValue: -80,
     steps: [
@@ -54,16 +56,16 @@ export const RunnerScene: React.FC = () => {
   const shadowScale = SHADOW_SCALES[frame];
 
   return (
-    <AppView style={styles.root}>
+    <AppView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
       {/* Track */}
-      <AppView style={styles.trackWrap}>
+      <AppView style={{ position: 'absolute', bottom: '28%', left: 0, right: 0 }}>
         <Svg width={width} height={32}>
           <Defs>
             <LinearGradient id="trackGrad" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={C.teal} stopOpacity="0" />
-              <Stop offset="0.3" stopColor={C.teal} stopOpacity="0.5" />
-              <Stop offset="0.7" stopColor={C.teal} stopOpacity="0.5" />
-              <Stop offset="1" stopColor={C.teal} stopOpacity="0" />
+              <Stop offset="0" stopColor={colors.success} stopOpacity="0" />
+              <Stop offset="0.3" stopColor={colors.success} stopOpacity="0.5" />
+              <Stop offset="0.7" stopColor={colors.success} stopOpacity="0.5" />
+              <Stop offset="1" stopColor={colors.success} stopOpacity="0" />
             </LinearGradient>
           </Defs>
           <Rect
@@ -80,7 +82,7 @@ export const RunnerScene: React.FC = () => {
             width={width}
             height={1}
             rx={0.5}
-            fill={C.teal}
+            fill={colors.success}
             opacity={0.15}
           />
         </Svg>
@@ -88,7 +90,7 @@ export const RunnerScene: React.FC = () => {
 
       {/* Shadow */}
       <RNAnimated.View
-        style={[styles.shadowWrap, { transform: [{ translateX: runX }] }]}
+        style={{ position: 'absolute', bottom: '27%', transform: [{ translateX: runX }] }}
       >
         <Svg width={90} height={14}>
           <Ellipse
@@ -103,7 +105,7 @@ export const RunnerScene: React.FC = () => {
 
       {/* Speed trails */}
       <RNAnimated.View
-        style={[styles.trailWrap, { transform: [{ translateX: runX }] }]}
+        style={{ position: 'absolute', bottom: '30%', left: -110, transform: [{ translateX: runX }] }}
         pointerEvents="none"
       >
         <Svg width={100} height={60}>
@@ -115,7 +117,7 @@ export const RunnerScene: React.FC = () => {
               width={80 - i * 14}
               height={2.5}
               rx={1.2}
-              fill={C.accent}
+              fill={colors.destructiveForeground}
               opacity={0.55 - i * 0.09}
             />
           ))}
@@ -124,7 +126,7 @@ export const RunnerScene: React.FC = () => {
 
       {/* Runner */}
       <RNAnimated.View
-        style={[styles.runnerWrap, { transform: [{ translateX: runX }] }]}
+        style={{ position: 'absolute', bottom: '26%', transform: [{ translateX: runX }] }}
       >
         <Svg width={100} height={160} viewBox="0 0 100 160">
           {/* Back leg */}
@@ -165,7 +167,7 @@ export const RunnerScene: React.FC = () => {
             width={34}
             height={7}
             rx={3}
-            fill={C.teal}
+            fill={colors.success}
             opacity={0.8}
           />
           <Rect
@@ -226,7 +228,7 @@ export const RunnerScene: React.FC = () => {
           />
           <Path
             d="M34,12 Q50,6 66,12"
-            stroke={C.accent}
+            stroke={colors.destructiveForeground}
             strokeWidth={3}
             fill="none"
             strokeLinecap="round"
@@ -248,7 +250,7 @@ export const RunnerScene: React.FC = () => {
             width={8}
             height={8}
             rx={2}
-            fill={C.teal}
+            fill={colors.success}
             opacity={0.9}
           />
 
@@ -267,7 +269,7 @@ export const RunnerScene: React.FC = () => {
             cy={legF.toeY}
             rx={9}
             ry={5.5}
-            fill={C.accent}
+            fill={colors.destructiveForeground}
           />
           <Ellipse
             cx={legF.toeX - 1}
@@ -288,7 +290,14 @@ export const RunnerScene: React.FC = () => {
       </RNAnimated.View>
 
       {/* Stats HUD */}
-      <AppView style={styles.hud}>
+      <AppView style={{
+        position: 'absolute',
+        bottom: '10%',
+        left: spacing[7],
+        right: spacing[7],
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+      }}>
         {STATS.map(s => (
           <StatCard key={s.label} stat={s} />
         ))}
@@ -296,19 +305,3 @@ export const RunnerScene: React.FC = () => {
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  trackWrap: { position: 'absolute', bottom: '28%', left: 0, right: 0 },
-  shadowWrap: { position: 'absolute', bottom: '27%' },
-  trailWrap: { position: 'absolute', bottom: '30%', left: -110 },
-  runnerWrap: { position: 'absolute', bottom: '26%' },
-  hud: {
-    position: 'absolute',
-    bottom: '10%',
-    left: 28,
-    right: 28,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-});

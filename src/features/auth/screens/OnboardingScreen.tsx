@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
 
   sceneWrap: {
     height: hp(52),
-    overflow: 'hidden',
+    // overflow: 'hidden',
     paddingTop: Platform.OS === 'ios' ? vs(50) : vs(36),
   },
 

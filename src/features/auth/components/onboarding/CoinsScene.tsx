@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated } from 'react-native';
 import Svg, {
   Circle,
   Path,
@@ -7,13 +7,17 @@ import Svg, {
   Defs,
   LinearGradient,
   Stop,
+  ClipPath,
 } from 'react-native-svg';
 import { AppView, AppText } from '../../../../components';
-import { C } from '../../constant';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { useLoopAnim, useEnterAnim } from '../../hooks';
-import { s, vs, ms, wp, hp } from '../../../../utils/responsive';
+import { wp, hp } from '../../../../utils/responsive';
 
 export const CoinsScene: React.FC = () => {
+  const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
+
   const floatAnim = useLoopAnim({
     initialValue: 0,
     steps: [
@@ -43,57 +47,185 @@ export const CoinsScene: React.FC = () => {
   const coinSize = hp(14);
 
   return (
-    <AppView style={styles.root}>
+    <AppView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[5] }}>
       {/* Floating coin */}
-      <Animated.View style={{ transform: [{ translateY: floatY }] }}>
-        <Animated.View style={{ opacity: glowAnim }}>
-          <Svg width={coinSize} height={coinSize} viewBox="0 0 140 140">
-            <Defs>
-              <LinearGradient id="coinGrad" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#FFD700" />
-                <Stop offset="0.5" stopColor="#FFA500" />
-                <Stop offset="1" stopColor="#FFD700" />
-              </LinearGradient>
-              <LinearGradient id="coinShine" x1="0" y1="0" x2="0.5" y2="0.5">
-                <Stop offset="0" stopColor="rgba(255,255,255,0.5)" />
-                <Stop offset="1" stopColor="rgba(255,255,255,0)" />
-              </LinearGradient>
-            </Defs>
-            <Ellipse cx={70} cy={130} rx={35} ry={6} fill="rgba(0,0,0,0.3)" />
-            <Circle cx={70} cy={65} r={52} fill="url(#coinGrad)" />
-            <Circle cx={70} cy={65} r={44} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} />
-            <Path
-              d="M57 90 L70 40 L83 90 M61 75 L79 75"
-              fill="none"
-              stroke="rgba(255,255,255,0.9)"
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <Circle cx={70} cy={65} r={52} fill="url(#coinShine)" />
-          </Svg>
+      <Animated.View style={{ alignItems: 'center', transform: [{ translateY: floatY }] }}>
+        <Animated.View style={{ width: coinSize, height: coinSize, opacity: glowAnim }}>
+          <Svg width="100%" height="100%" viewBox="0 0 140 140">
+          <Defs>
+            <LinearGradient id="coinGrad" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0%" stopColor="#FFF4A3" />
+              <Stop offset="25%" stopColor="#FFD700" />
+              <Stop offset="60%" stopColor="#F5A623" />
+              <Stop offset="100%" stopColor="#FFD700" />
+            </LinearGradient>
+
+            <LinearGradient id="shineGrad" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0%" stopColor="rgba(255,255,255,0)" />
+              <Stop offset="50%" stopColor="rgba(255,255,255,0.6)" />
+              <Stop offset="100%" stopColor="rgba(255,255,255,0)" />
+            </LinearGradient>
+
+            <ClipPath id="coinClip">
+              <Circle cx="70" cy="65" r="52" />
+            </ClipPath>
+          </Defs>
+
+          {/* Shadow */}
+          <Ellipse
+            cx="70"
+            cy="128"
+            rx="35"
+            ry="7"
+            fill="rgba(0,0,0,0.25)"
+          />
+
+          {/* Outer Coin */}
+          <Circle
+            cx="70"
+            cy="65"
+            r="52"
+            fill="url(#coinGrad)"
+          />
+
+          {/* Outer Ring */}
+          <Circle
+            cx="70"
+            cy="65"
+            r="48"
+            fill="none"
+            stroke="#FFE17A"
+            strokeWidth="2"
+          />
+
+          {/* Inner Ring */}
+          <Circle
+            cx="70"
+            cy="65"
+            r="40"
+            fill="none"
+            stroke="rgba(255,255,255,0.35)"
+            strokeWidth="2"
+          />
+
+          {/* Reflection Highlight */}
+          <Ellipse
+            cx="52"
+            cy="42"
+            rx="24"
+            ry="12"
+            fill="rgba(255,255,255,0.35)"
+            transform="rotate(-25 52 42)"
+          />
+
+          {/* Bright Spot */}
+          <Circle
+            cx="45"
+            cy="35"
+            r="5"
+            fill="rgba(255,255,255,0.65)"
+          />
+
+          {/* ₹ Symbol */}
+          <Path
+            d="
+              M56 45
+              H84
+              M56 56
+              H82
+              M62 45
+              C77 45 82 50 82 57
+              C82 65 76 70 66 71
+              L85 90
+            "
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Shine Sweep */}
+          {/* <AnimatedRect
+            x={shineAnim}
+            y={10}
+            width={22}
+            height={110}
+            fill="url(#shineGrad)"
+            clipPath="url(#coinClip)"
+            transform="rotate(25 70 65)"
+          /> */}
+        </Svg>
         </Animated.View>
       </Animated.View>
 
       {/* Coin balance */}
-      <Animated.View style={[styles.balanceWrap, { transform: [{ scale: counterScale }] }]}>
-        <AppText style={styles.balanceAmount}>1,250</AppText>
-        <AppText style={styles.balanceLabel}>Coins Earned</AppText>
+      <Animated.View style={{ alignItems: 'center', marginTop: spacing[2], transform: [{ scale: counterScale }] }}>
+        <AppText style={{
+          color: colors.gold,
+          fontSize: fontSize['5xl'],
+          fontWeight: fontWeight.bold,
+        }}>
+          1,250
+        </AppText>
+        <AppText style={{
+          color: colors.mutedForeground,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.semiBold,
+          marginTop: spacing[0.5],
+        }}>
+          Coins Earned
+        </AppText>
       </Animated.View>
 
       {/* Earn methods */}
-      <AppView style={styles.earnSection}>
-        <AppText style={styles.sectionTitle}>EARN BY</AppText>
+      <AppView style={{ width: wp(78), marginTop: spacing[3] }}>
+        <AppText style={{
+          color: colors.mutedForeground,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.bold,
+          letterSpacing: 1.5,
+          marginBottom: spacing[2],
+        }}>
+          EARN BY
+        </AppText>
         {[
           { icon: '👟', label: 'Walking & Running', coins: '+10/km' },
           { icon: '🎯', label: 'Completing Goals', coins: '+50' },
           { icon: '🔥', label: 'Daily Streak', coins: '+25' },
         ].map((item, i) => (
-          <AppView key={i} style={styles.earnRow}>
-            <AppText style={styles.earnIcon}>{item.icon}</AppText>
-            <AppView style={styles.earnInfo}>
-              <AppText style={styles.earnLabel}>{item.label}</AppText>
-              <AppText style={styles.earnCoins}>{item.coins}</AppText>
+          <AppView
+            key={i}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: withOpacity(colors.foreground, 0.05),
+              borderRadius: radius.lg,
+              paddingVertical: spacing[2],
+              paddingHorizontal: spacing[3],
+              marginBottom: spacing[1.5],
+              borderWidth: 1,
+              borderColor: withOpacity(colors.gold, 0.15),
+            }}
+          >
+            <AppText style={{ fontSize: fontSize.lg, marginRight: spacing[2.5] }}>
+              {item.icon}
+            </AppText>
+            <AppView style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <AppText style={{
+                color: colors.foreground,
+                fontSize: fontSize.sm,
+                fontWeight: fontWeight.semiBold,
+              }}>
+                {item.label}
+              </AppText>
+              <AppText style={{
+                color: colors.gold,
+                fontSize: fontSize.sm,
+                fontWeight: fontWeight.bold,
+              }}>
+                {item.coins}
+              </AppText>
             </AppView>
           </AppView>
         ))}
@@ -101,38 +233,3 @@ export const CoinsScene: React.FC = () => {
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: s(20),
-  },
-  balanceWrap: { alignItems: 'center', marginTop: vs(8) },
-  balanceAmount: { color: C.gold, fontSize: ms(30), fontWeight: '900' },
-  balanceLabel: { color: C.muted, fontSize: ms(11), marginTop: vs(2) },
-  earnSection: { width: wp(78), marginTop: vs(12) },
-  sectionTitle: {
-    color: C.muted,
-    fontSize: ms(10),
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: vs(8),
-  },
-  earnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: s(10),
-    paddingVertical: vs(8),
-    paddingHorizontal: s(12),
-    marginBottom: vs(6),
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.15)',
-  },
-  earnIcon: { fontSize: ms(18), marginRight: s(10) },
-  earnInfo: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  earnLabel: { color: '#fff', fontSize: ms(12), fontWeight: '600' },
-  earnCoins: { color: C.gold, fontSize: ms(12), fontWeight: '700' },
-});

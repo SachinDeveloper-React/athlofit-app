@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Animated } from 'react-native';
+import { Animated } from 'react-native';
 import { AppView, AppText } from '../../../../components';
 import Svg, {
   Path,
@@ -11,11 +11,14 @@ import Svg, {
 } from 'react-native-svg';
 import { useHeartbeat, useLoopAnim, usePulseRing } from '../../hooks';
 import { BpItem } from '../../types';
-import { C } from '../../constant';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { BpRow } from './OnbaordingSubComponents';
-import { s, vs, ms, wp, hp, SCREEN_WIDTH } from '../../../../utils/responsive';
+import { wp, hp, SCREEN_WIDTH } from '../../../../utils/responsive';
 
 export const HeartScene: React.FC = () => {
+  const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
+
   const heartScale = useHeartbeat();
 
   const ecgX = useLoopAnim({
@@ -30,22 +33,35 @@ export const HeartScene: React.FC = () => {
   const ring1 = usePulseRing(1200, 0, 2.8);
   const ring2 = usePulseRing(1200, 600, 2.4);
 
-  const bpAnim = useLoopAnim({
+  const sysAnim = useLoopAnim({
     initialValue: 0,
     useNativeDriver: false,
     steps: [
       { toValue: 1, duration: 2000 },
-      { toValue: 0.6, duration: 1500 },
+      { toValue: 0.4, duration: 1500 },
     ],
   });
-  const bpWidth = bpAnim.interpolate({
+  const sysWidth = sysAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [s(30), s(120)],
+    outputRange: [wp(8), wp(55)],
+  });
+
+  const diaAnim = useLoopAnim({
+    initialValue: 0,
+    useNativeDriver: false,
+    steps: [
+      { toValue: 1, duration: 1800 },
+      { toValue: 0.5, duration: 1400 },
+    ],
+  });
+  const diaWidth = diaAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [wp(6), wp(40)],
   });
 
   const bpItems: BpItem[] = [
-    { label: 'SYS', val: '120', color: C.accent, animatedWidth: bpWidth },
-    { label: 'DIA', val: '80', color: C.blue, animatedWidth: s(80) as any },
+    { label: 'SYS', val: '120', color: colors.destructive, animatedWidth: sysWidth },
+    { label: 'DIA', val: '80', color: colors.primary, animatedWidth: diaWidth },
   ];
 
   const rings = [
@@ -57,12 +73,23 @@ export const HeartScene: React.FC = () => {
   const ecgH = hp(7);
 
   return (
-    <AppView style={styles.root}>
+    <AppView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[5] }}>
       {/* Pulse rings */}
       {rings.map(({ scale, opacity }, i) => (
         <Animated.View
           key={i}
-          style={[styles.pulseRing, { opacity, transform: [{ scale }] }]}
+          style={{
+            position: 'absolute',
+            top: hp(6),
+            alignSelf: 'center',
+            width: spacing[20],
+            height: spacing[20],
+            borderRadius: spacing[10],
+            borderWidth: 2,
+            borderColor: colors.destructiveForeground,
+            opacity,
+            transform: [{ scale }],
+          }}
         />
       ))}
 
@@ -84,27 +111,52 @@ export const HeartScene: React.FC = () => {
       </Animated.View>
 
       {/* ECG strip */}
-      <AppView style={[styles.ecgStrip, { height: ecgH }]}>
-        <Animated.View
-          style={[styles.ecgInner, { transform: [{ translateX: ecgTranslate }] }]}
-        >
+      <AppView style={{
+        marginTop: spacing[3],
+        width: wp(78),
+        height: ecgH,
+        backgroundColor: withOpacity(colors.success, 0.07),
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: withOpacity(colors.success, 0.25),
+        overflow: 'hidden',
+      }}>
+        <Animated.View style={{ position: 'absolute', top: 0, left: -wp(60), transform: [{ translateX: ecgTranslate }] }}>
           <Svg width={SCREEN_WIDTH * 1.4} height={ecgH}>
             <Polyline
               points="0,35 30,35 40,10 50,58 60,20 70,35 90,35 100,35 110,10 120,58 130,20 140,35 160,35 170,35 180,10 190,58 200,20 210,35 230,35"
               fill="none"
-              stroke={C.teal}
+              stroke={colors.success}
               strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </Svg>
         </Animated.View>
-        <AppText style={styles.bpmLabel}>72 BPM</AppText>
+        <AppText style={{
+          position: 'absolute',
+          bottom: spacing[1],
+          right: spacing[2.5],
+          color: colors.success,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.bold,
+          letterSpacing: 1,
+        }}>
+          72 BPM
+        </AppText>
       </AppView>
 
       {/* Blood Pressure */}
-      <AppView style={styles.bpSection}>
-        <AppText style={styles.sectionTitle}>BLOOD PRESSURE</AppText>
+      <AppView style={{ marginTop: spacing[12], width: wp(78) }}>
+        <AppText style={{
+          color: colors.mutedForeground,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.bold,
+          letterSpacing: 1.5,
+          marginBottom: spacing[2],
+        }}>
+          BLOOD PRESSURE
+        </AppText>
         {bpItems.map(item => (
           <BpRow key={item.label} item={item} />
         ))}
@@ -112,56 +164,3 @@ export const HeartScene: React.FC = () => {
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: s(20),
-  },
-
-  pulseRing: {
-    position: 'absolute',
-    top: hp(6),
-    alignSelf: 'center',
-    width: s(80),
-    height: s(80),
-    borderRadius: s(40),
-    borderWidth: 2,
-    borderColor: C.accent,
-  },
-
-  ecgStrip: {
-    marginTop: vs(12),
-    width: wp(78),
-    backgroundColor: 'rgba(0,229,195,0.07)',
-    borderRadius: s(10),
-    borderWidth: 1,
-    borderColor: 'rgba(0,229,195,0.25)',
-    overflow: 'hidden',
-  },
-  ecgInner: {
-    position: 'absolute',
-    top: 0,
-    left: -wp(60),
-  },
-  bpmLabel: {
-    position: 'absolute',
-    bottom: vs(4),
-    right: s(10),
-    color: C.teal,
-    fontSize: ms(9),
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-
-  bpSection: { marginTop: vs(12), width: wp(78) },
-  sectionTitle: {
-    color: C.muted,
-    fontSize: ms(10),
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: vs(8),
-  },
-});

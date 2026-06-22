@@ -1,18 +1,20 @@
 import React from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated } from 'react-native';
 import Svg, {
   Circle,
-  Path,
   Defs,
   LinearGradient,
   Stop,
 } from 'react-native-svg';
 import { AppView, AppText } from '../../../../components';
-import { C } from '../../constant';
+import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { useLoopAnim, useEnterAnim } from '../../hooks';
-import { s, vs, ms, wp, hp } from '../../../../utils/responsive';
+import { wp, hp } from '../../../../utils/responsive';
 
 export const StepsScene: React.FC = () => {
+  const { colors, spacing, radius, fontSize, fontWeight } = useTheme();
+
   const progressAnim = useLoopAnim({
     initialValue: 0.6,
     steps: [
@@ -56,14 +58,14 @@ export const StepsScene: React.FC = () => {
   ];
 
   return (
-    <AppView style={styles.root}>
+    <AppView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[5] }}>
       {/* Steps ring */}
       <Animated.View style={{ opacity: progressAnim }}>
         <Svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
           <Defs>
             <LinearGradient id="stepGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={C.teal} />
-              <Stop offset="1" stopColor={C.blue} />
+              <Stop offset="0" stopColor={colors.success} />
+              <Stop offset="1" stopColor={colors.primary} />
             </LinearGradient>
           </Defs>
           <Circle
@@ -71,7 +73,7 @@ export const StepsScene: React.FC = () => {
             cy={center}
             r={R}
             fill="none"
-            stroke="rgba(255,255,255,0.07)"
+            stroke={withOpacity(colors.foreground, 0.07)}
             strokeWidth={strokeW}
           />
           <Circle
@@ -90,32 +92,68 @@ export const StepsScene: React.FC = () => {
       </Animated.View>
 
       {/* Step count */}
-      <Animated.View style={[styles.countWrap, { transform: [{ scale: pulseAnim }] }]}>
-        <AppText style={styles.stepCount}>{steps.toLocaleString()}</AppText>
-        <AppText style={styles.stepGoal}>of {goal.toLocaleString()} steps</AppText>
+      <Animated.View style={{ marginTop: spacing[2], transform: [{ scale: pulseAnim }] }}>
+        <AppText style={{
+          fontSize: fontSize['4xl'],
+          fontWeight: fontWeight.bold,
+          textAlign: 'center',
+          color: colors.foreground,
+        }}>
+          {steps.toLocaleString()}
+        </AppText>
+        <AppText style={{
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.semiBold,
+          textAlign: 'center',
+          marginTop: spacing[0.5],
+          color: colors.success,
+        }}>
+          of {goal.toLocaleString()} steps
+        </AppText>
       </Animated.View>
 
       {/* Weekly bar chart */}
-      <AppView style={styles.barChart}>
-        <AppText style={styles.sectionTitle}>THIS WEEK</AppText>
-        <AppView style={styles.barsRow}>
+      <AppView style={{ width: wp(78), marginTop: spacing[4] }}>
+        <AppText style={{
+          color: colors.primary,
+          fontSize: fontSize.xs,
+          fontWeight: fontWeight.bold,
+          letterSpacing: 1.5,
+          marginBottom: spacing[2],
+        }}>
+          THIS WEEK
+        </AppText>
+        <AppView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           {BARS.map((bar, i) => (
-            <AppView key={i} style={styles.barCol}>
-              <AppView style={styles.barTrack}>
+            <AppView key={i} style={{ alignItems: 'center', flex: 1 }}>
+              <AppView style={{
+                width: spacing[3],
+                height: hp(6),
+                backgroundColor: withOpacity(colors.foreground, 0.06),
+                borderRadius: radius.sm,
+                overflow: 'hidden',
+                justifyContent: 'flex-end',
+              }}>
                 <Animated.View
-                  style={[
-                    styles.barFill,
-                    {
-                      height: barEnter.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0%', `${bar.pct * 100}%`],
-                      }),
-                      backgroundColor: bar.pct >= 0.8 ? C.teal : C.blue,
-                    },
-                  ]}
+                  style={{
+                    width: '100%',
+                    borderRadius: radius.sm,
+                    height: barEnter.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', `${bar.pct * 100}%`],
+                    }),
+                    backgroundColor: bar.pct >= 0.8 ? colors.success : colors.primary,
+                  }}
                 />
               </AppView>
-              <AppText style={styles.barLabel}>{bar.day}</AppText>
+              <AppText style={{
+                color: colors.mutedForeground,
+                fontSize: fontSize.xs,
+                fontWeight: fontWeight.semiBold,
+                marginTop: spacing[1],
+              }}>
+                {bar.day}
+              </AppText>
             </AppView>
           ))}
         </AppView>
@@ -123,35 +161,3 @@ export const StepsScene: React.FC = () => {
     </AppView>
   );
 };
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: s(20),
-  },
-  countWrap: { marginTop: vs(8) },
-  stepCount: { color: '#fff', fontSize: ms(28), fontWeight: '900', textAlign: 'center' },
-  stepGoal: { color: C.muted, fontSize: ms(11), textAlign: 'center', marginTop: vs(2) },
-  barChart: { width: wp(78), marginTop: vs(14) },
-  sectionTitle: {
-    color: C.muted,
-    fontSize: ms(10),
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: vs(8),
-  },
-  barsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  barCol: { alignItems: 'center', flex: 1 },
-  barTrack: {
-    width: s(12),
-    height: hp(6),
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: s(6),
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  barFill: { width: '100%', borderRadius: s(6) },
-  barLabel: { color: C.muted, fontSize: ms(9), fontWeight: '600', marginTop: vs(4) },
-});
