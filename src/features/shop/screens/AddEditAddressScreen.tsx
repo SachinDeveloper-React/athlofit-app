@@ -23,6 +23,7 @@ import { useAddAddress, useUpdateAddress, useAddresses } from '../hooks/useShop'
 import type { ShopStackParamList } from '../../../types/navigation.types';
 import { ShopRoutes } from '../../../navigation/routes';
 import type { SavedAddress } from '../types/shop.types';
+import { PhoneField } from '../../account/components/complete-profile/PhoneField';
 
 type RoutePropT = RouteProp<ShopStackParamList, typeof ShopRoutes.ADD_EDIT_ADDRESS>;
 
@@ -258,7 +259,12 @@ const AddEditAddressScreen = () => {
             CONTACT DETAILS
           </AppText>
           <FormInput label="Full Name"     value={fullName}  onChangeText={setFullName}  required colors={colors} radius={radius} placeholder="e.g. Rahul Sharma" />
-          <FormInput label="Phone Number"  value={phone}     onChangeText={setPhone}     colors={colors} radius={radius} keyboardType="phone-pad" autoCapitalize="none" placeholder="+91 98765 43210" />
+          <PhoneField
+            value={phone}
+            onChangeText={setPhone}
+            onBlur={() => {}}
+            label="Phone Number"
+          />
         </Animated.View>
 
         {/* ── Address ── */}

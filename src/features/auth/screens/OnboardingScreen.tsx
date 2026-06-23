@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'ios' ? vs(56) : (StatusBar?.currentHeight ?? 24) + vs(8),
     right: s(24),
     zIndex: 10,
-    padding: s(8),
+    // padding: s(8),
   },
   skipText: {
     color: C.muted,

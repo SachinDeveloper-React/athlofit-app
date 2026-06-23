@@ -74,46 +74,22 @@ const AppShell: React.FC = () => {
   );
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
 
-  // ── Initialize ConnectivityMonitor before navigation renders ──────────────
-  // Sets initial offline/online state and wires SyncEngine Zustand subscription
-  // so that offline→online transitions trigger queue drain.
+  // ── Initialize ConnectivityMonitor + Health pre-check in parallel ───────────
+  // Both run concurrently while splash is visible to minimize cold-start time.
   useEffect(() => {
-    connectivityMonitor.initialize().then(() => {
-      setIsConnectivityReady(true);
-    }).catch(() => {
-      // Fail-safe: allow app to render even if initialization fails.
-      // ConnectivityMonitor defaults to offline on error.
-      setIsConnectivityReady(true);
-    });
-
-    return () => {
-      connectivityMonitor.destroy();
-    };
-  }, []);
-
-  // ── Pre-check Health Connect / HealthKit permissions while splash is visible ─
-  // This ensures the permission request dialog appears over the splash screen
-  // rather than flashing a PermissionDeniedScreen after the app is visible.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setIsHealthPreChecked(true);
-      return;
-    }
+    const initConnectivity = connectivityMonitor.initialize().catch(() => {});
 
     const preCheckHealth = async () => {
+      if (!isAuthenticated) return;
       try {
         if (Platform.OS === 'android') {
           const { isHealthConnectAvailable, initializeHealthConnect } =
             await import('../features/health/service/healthConnect.service');
           const available = await isHealthConnectAvailable();
           if (available) {
-            // Prevent native WidgetUpdateWorker from accessing Health Connect
-            // concurrently during init (which crashes the app).
             const { widgetService } = await import('../services/widgetService');
             await widgetService.setAppInitialising(true);
             try {
-              // This will show the permission dialog if not yet granted,
-              // while the splash screen is still visible.
               await initializeHealthConnect();
             } finally {
               await widgetService.setAppInitialising(false);
@@ -126,12 +102,17 @@ const AppShell: React.FC = () => {
         }
       } catch {
         // Non-fatal — useHealth will retry when TrackerScreen mounts
-      } finally {
-        setIsHealthPreChecked(true);
       }
     };
 
-    preCheckHealth();
+    Promise.all([initConnectivity, preCheckHealth()]).finally(() => {
+      setIsConnectivityReady(true);
+      setIsHealthPreChecked(true);
+    });
+
+    return () => {
+      connectivityMonitor.destroy();
+    };
   }, [isAuthenticated]);
 
   // ── Hide boot splash on mount ─────────────────────────────────────────────

@@ -120,6 +120,7 @@ const CoinScreen = () => {
   const transactions     = data?.transactions ?? [];
   const claimable        = data?.claimable    ?? [];
   const totalTransactions = data?.totalTransactions ?? 0;
+  const claimedCount     = claimable.filter(r => r.isClaimed).length;
 
   // ── Load more when user reaches the end of the transactions list ──────────
   const handleEndReached = useCallback(() => {
@@ -132,8 +133,8 @@ const CoinScreen = () => {
   const stats = useMemo(() => [
     { id: 'balance', label: 'Available',  value: formatCoins(balance),          icon: 'Wallet'          },
     { id: 'history', label: 'History',    value: `${totalTransactions}`,         icon: 'History'         },
-    { id: 'rewards', label: 'Rewards',    value: `${claimable.length}`,          icon: 'BadgeDollarSign' },
-  ], [balance, totalTransactions, claimable.length]);
+    { id: 'rewards', label: 'Claimed',    value: `${claimedCount}`,             icon: 'BadgeDollarSign' },
+  ], [balance, totalTransactions, claimedCount]);
 
   // ── List data — switch between tabs ──────────────────────────────────────
   const listData: (CoinTransaction | ClaimableReward)[] = useMemo(

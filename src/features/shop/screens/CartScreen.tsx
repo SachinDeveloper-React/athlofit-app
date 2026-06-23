@@ -1,4 +1,4 @@
-// src/features/shop/screens/CartScreen.tsx — Advanced Redesign
+
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import Animated, { FadeInDown, FadeInUp, Layout } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp, Layout, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../../hooks/useTheme';
@@ -617,20 +617,21 @@ const CartScreen = () => {
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListHeaderComponent={
           <Animated.View entering={FadeInDown.duration(300)}>
-            {/* Coin balance banner */}
-            <View style={[styles.balanceBanner, { backgroundColor: withOpacity('#F5C518', 0.1), borderColor: withOpacity('#F5C518', 0.3), marginBottom: 16 }]}>
-              <View style={[styles.balanceIconWrap, { backgroundColor: withOpacity('#F5C518', 0.2) }]}>
-                <Icon name="Coins" size={20} color="#B45309" />
+            {/* Compact coin balance bar */}
+            <View style={[styles.balanceBar, { backgroundColor: withOpacity('#F5C518', 0.08), borderColor: withOpacity('#F5C518', 0.25) }]}>
+              <View style={[styles.balanceBarIcon, { backgroundColor: withOpacity('#F5C518', 0.18) }]}>
+                <Icon name="Coins" size={14} color="#B45309" />
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <AppText variant="caption1" secondary>Your Coin Balance</AppText>
-                <AppText variant="title3" weight="bold" color="#92400E">{coinsBalance.toFixed(2)} coins</AppText>
-              </View>
+              <AppText variant="caption1" weight="bold" color="#92400E" style={{ marginLeft: 8 }}>
+                {coinsBalance.toFixed(2)}
+              </AppText>
+              <AppText variant="caption2" color="#B45309" style={{ marginLeft: 3 }}>coins</AppText>
+              <View style={{ flex: 1 }} />
               {(productSavings > 0 || couponDiscount > 0) && (
-                <View style={[styles.savingsBadge, { backgroundColor: withOpacity('#10B981', 0.12) }]}>
-                  <Icon name="BadgePercent" size={13} color="#10B981" />
-                  <AppText variant="caption2" weight="bold" color="#10B981" style={{ marginLeft: 4 }}>
-                    Saved {(productSavings + couponDiscount).toLocaleString()}
+                <View style={[styles.balanceBarSavings, { backgroundColor: withOpacity('#10B981', 0.1) }]}>
+                  <Icon name="TrendingDown" size={11} color="#10B981" />
+                  <AppText variant="caption2" weight="bold" color="#10B981" style={{ marginLeft: 3 }}>
+                    -{(productSavings + couponDiscount).toLocaleString()}
                   </AppText>
                 </View>
               )}
@@ -646,7 +647,7 @@ const CartScreen = () => {
 
           return (
             <Animated.View
-              layout={Layout.springify()}
+              layout={LinearTransition.springify()}
               style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 16 }]}
             >
               <Animated.View
@@ -875,9 +876,9 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 96, height: 96, borderRadius: 48, justifyContent: 'center', alignItems: 'center' },
   shopNowBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 15 },
 
-  balanceBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1, padding: 14 },
-  balanceIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  savingsBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  balanceBar: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
+  balanceBarIcon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  balanceBarSavings: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
 
   itemCard: { borderWidth: StyleSheet.hairlineWidth, padding: 12 },
   itemImg: { width: 90, height: 90 },

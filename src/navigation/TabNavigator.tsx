@@ -1,22 +1,45 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, lazy, Suspense } from 'react';
 import {
   BottomTabNavigationOptions,
   createBottomTabNavigator,
 } from '@react-navigation/bottom-tabs';
-import { Platform, ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TabRoutes } from './routes';
 import type { TabParamList } from '../types/navigation.types';
 import TrackerScreen from '../features/health/screens/TrackerScreen';
-import ShopScreen from '../features/shop/screens/ShopScreen';
-import AccountScreen from '../features/account/screens/AccountScreen';
 import { useTheme } from '../hooks/useTheme';
 import { withOpacity } from '../utils/withOpacity';
 import { SCREEN_WIDTH } from '../utils/measure';
 import { Icon } from '../components';
 
+// Lazy-load non-initial tab screens to reduce startup bundle parse time
+const ShopScreen = lazy(() => import('../features/shop/screens/ShopScreen'));
+const AccountScreen = lazy(() => import('../features/account/screens/AccountScreen'));
+
 const Tab = createBottomTabNavigator<TabParamList>();
+
+const LazyFallback: React.FC = () => {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+      <ActivityIndicator color={colors.primary} />
+    </View>
+  );
+};
+
+const LazyShopScreen = () => (
+  <Suspense fallback={<LazyFallback />}>
+    <ShopScreen />
+  </Suspense>
+);
+
+const LazyAccountScreen = () => (
+  <Suspense fallback={<LazyFallback />}>
+    <AccountScreen />
+  </Suspense>
+);
 
 const TabNavigator: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
@@ -81,7 +104,7 @@ const TabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name={TabRoutes.SHOP}
-        component={ShopScreen}
+        component={LazyShopScreen}
         options={{
           tabBarLabel: 'Shop',
           tabBarIcon: ({ color, size }) => (
@@ -91,7 +114,7 @@ const TabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name={TabRoutes.ACCOUNT}
-        component={AccountScreen}
+        component={LazyAccountScreen}
         options={{
           tabBarLabel: 'Account',
           tabBarIcon: ({ color, size }) => (

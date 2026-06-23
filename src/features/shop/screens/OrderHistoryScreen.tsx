@@ -243,16 +243,16 @@ const OrderHistoryScreen = () => {
             <Animated.View entering={FadeInDown.duration(300)}>
               <View style={[styles.statsGrid, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 16 }]}>
                 {[
-                  { label: 'Total',      value: stats.total,      icon: 'Package',     color: colors.primary },
-                  { label: 'Coin Orders',value: stats.coinOrders, icon: 'Coins',       color: '#B45309'      },
-                  { label: 'Delivered',  value: stats.delivered,  icon: 'PackageCheck',color: '#7C3AED'      },
-                  { label: 'Active',     value: stats.pending,    icon: 'Clock',       color: '#D97706'      },
+                  { label: 'Total',       value: stats.total,      icon: 'Package',      color: colors.primary },
+                  { label: 'Coin Orders', value: stats.coinOrders, icon: 'Coins',        color: '#B45309'      },
+                  { label: 'Delivered',   value: stats.delivered,  icon: 'PackageCheck', color: '#7C3AED'      },
+                  { label: 'Active',      value: stats.pending,    icon: 'Clock',        color: '#D97706'      },
                 ].map((s, i) => (
                   <View key={s.label} style={[styles.statItem, i < 3 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border }]}>
-                    <View style={[styles.statIcon, { backgroundColor: withOpacity(s.color, 0.1) }]}>
-                      <Icon name={s.icon as any} size={14} color={s.color} />
+                    <View style={[styles.statIcon, { backgroundColor: withOpacity(s.color, 0.12) }]}>
+                      <Icon name={s.icon as any} size={15} color={s.color} />
                     </View>
-                    <AppText variant="title3" weight="bold" style={{ marginTop: 6 }}>{s.value}</AppText>
+                    <AppText variant="subhead" weight="bold" style={{ marginTop: 6 }}>{s.value}</AppText>
                     <AppText variant="caption2" secondary style={{ marginTop: 2 }}>{s.label}</AppText>
                   </View>
                 ))}
@@ -288,8 +288,8 @@ const styles = StyleSheet.create({
   shopBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 15 },
 
   statsGrid: {
-    flexDirection: 'row', borderRadius: 18, borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 16,
+    flexDirection: 'row', borderRadius: 14, borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 14,
   },
   statItem: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
   statIcon: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

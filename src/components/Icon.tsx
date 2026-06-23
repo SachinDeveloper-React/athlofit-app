@@ -1,19 +1,177 @@
 import React, { memo, useMemo } from 'react';
-import * as Icons from 'lucide-react-native';
 import type { ViewStyle } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 
+// ─── Curated icon imports (tree-shakeable) ────────────────────────────────────
+// Only icons actually used in the app are imported. This reduces the JS bundle
+// by ~300KB+ compared to `import * as Icons from 'lucide-react-native'`.
+import {
+  Activity,
+  ArrowLeft,
+  Award,
+  BadgeDollarSign,
+  BadgePercent,
+  BarChart2,
+  Bell,
+  BellOff,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  Camera,
+  Check,
+  CheckCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Clock,
+  Coins,
+  Copy,
+  Droplet,
+  Droplets,
+  FileText,
+  Flame,
+  Footprints,
+  Gift,
+  Globe,
+  HandCoins,
+  Heart,
+  HeartPulse,
+  History,
+  Home,
+  Image,
+  Images,
+  IndianRupee,
+  LifeBuoy,
+  LogOut,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Minus,
+  Package,
+  PackageCheck,
+  PenLine,
+  Pencil,
+  PersonStanding,
+  Phone,
+  Plus,
+  PlusCircle,
+  RefreshCw,
+  Search,
+  SearchX,
+  ServerCrash,
+  Settings,
+  Share2,
+  Shield,
+  ShieldCheck,
+  ShoppingBag,
+  ShoppingCart,
+  Smartphone,
+  Star,
+  Swords,
+  Target,
+  Ticket,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  Truck,
+  User,
+  Wallet,
+  WifiOff,
+  Wrench,
+  X,
+  XCircle,
+  Zap,
+} from 'lucide-react-native';
+
+// ─── Icon Registry ────────────────────────────────────────────────────────────
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Activity,
+  ArrowLeft,
+  Award,
+  BadgeDollarSign,
+  BadgePercent,
+  BarChart2,
+  Bell,
+  BellOff,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  Camera,
+  Check,
+  CheckCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Clock,
+  Coins,
+  Copy,
+  Droplet,
+  Droplets,
+  FileText,
+  Flame,
+  Footprints,
+  Gift,
+  Globe,
+  HandCoins,
+  Heart,
+  HeartPulse,
+  History,
+  Home,
+  Image,
+  Images,
+  IndianRupee,
+  LifeBuoy,
+  LogOut,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Minus,
+  Package,
+  PackageCheck,
+  PenLine,
+  Pencil,
+  PersonStanding,
+  Phone,
+  Plus,
+  PlusCircle,
+  RefreshCw,
+  Search,
+  SearchX,
+  ServerCrash,
+  Settings,
+  Share2,
+  Shield,
+  ShieldCheck,
+  ShoppingBag,
+  ShoppingCart,
+  Smartphone,
+  Star,
+  Swords,
+  Target,
+  Ticket,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  Truck,
+  User,
+  Wallet,
+  WifiOff,
+  Wrench,
+  X,
+  XCircle,
+  Zap,
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/**
- * Only valid renderable Lucide icon keys (strips out non-component exports
- * like `createLucideIcon`, `default`, version strings, etc.)
- */
-export type LucideName = {
-  [K in keyof typeof Icons]: (typeof Icons)[K] extends React.ComponentType<any>
-    ? K
-    : never;
-}[keyof typeof Icons];
+export type LucideName = keyof typeof ICON_MAP;
 
 type ColorToken =
   | 'foreground'
@@ -25,44 +183,19 @@ type ColorToken =
 
 type Props = {
   name: LucideName;
-
   size?: number;
-
   /**
    * Pass a raw hex/rgb string OR a theme color token.
    * Token → resolved from theme.colors at render time.
-   * @example color="primary"  color="#FF0000"
    */
   color?: ColorToken | (string & {});
-
   strokeWidth?: number;
-
   /** Filled variant — sets fill to the resolved color and strokeWidth to 0 */
   filled?: boolean;
-
   style?: ViewStyle;
-
   /** Accessibility label for screen readers */
   accessibilityLabel?: string;
 };
-
-// ─── Cache ────────────────────────────────────────────────────────────────────
-
-/**
- * Module-level icon lookup cache so we don't re-index the Icons namespace
- * on every render (Icons has ~300 entries).
- */
-const iconCache = new Map<string, React.ComponentType<any>>();
-
-function getIcon(name: string): React.ComponentType<any> | null {
-  if (iconCache.has(name)) return iconCache.get(name)!;
-
-  const Icon = (Icons as Record<string, unknown>)[name];
-  if (typeof Icon !== 'function' && typeof Icon !== 'object') return null;
-
-  iconCache.set(name, Icon as React.ComponentType<any>);
-  return Icon as React.ComponentType<any>;
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -91,20 +224,20 @@ export const Icon: React.FC<Props> = memo(
   }) => {
     const { colors } = useTheme();
 
-    const Icon = getIcon(name);
+    const IconComponent = ICON_MAP[name];
 
     const resolvedColor = useMemo(() => {
       if (!color) return colors.foreground;
       return isColorToken(color) ? colors[color] : color;
     }, [color, colors]);
 
-    if (!Icon) {
-      if (__DEV__) console.warn(`[AppIcon] Unknown icon: "${name}"`);
+    if (!IconComponent) {
+      if (__DEV__) console.warn(`[Icon] Unknown icon: "${name}". Add it to ICON_MAP in Icon.tsx`);
       return null;
     }
 
     return (
-      <Icon
+      <IconComponent
         size={size}
         color={resolvedColor}
         strokeWidth={filled ? 0 : strokeWidth}

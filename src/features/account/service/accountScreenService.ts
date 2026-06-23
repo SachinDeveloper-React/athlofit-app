@@ -100,7 +100,7 @@ export const accountScreenService = {
       key: 'challenges',
       title: 'CHALLENGES',
       icon: Trophy,
-      tint: 'orange',
+      tint: 'gold',
       onPress: () => {
         navigate(RootRoutes.HEALTH_NAVIGATOR, {
           screen: HealthRoutes.CHALLENGES,
