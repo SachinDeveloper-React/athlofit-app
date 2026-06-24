@@ -34,7 +34,7 @@ export const APP_CONFIG_DEFAULTS = {
   },
   support: {
     email:   'support@athlofit.com',
-    website: 'www.athlofit.com/faq',
+    website: 'athlofit.com/faq',
   },
   coin_config: {
     steps: {

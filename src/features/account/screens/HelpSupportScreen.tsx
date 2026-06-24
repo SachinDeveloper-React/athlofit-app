@@ -8,6 +8,7 @@ import {
   LayoutAnimation,
   UIManager,
   Platform,
+  Linking,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -363,6 +364,7 @@ const HelpSupportScreen: React.FC = () => {
             OTHER WAYS TO REACH US
           </AppText>
           <TouchableOpacity
+            onPress={() => Linking.openURL(`mailto:${supportContact.email}`)}
             style={[
               styles.infoRow,
               { backgroundColor: colors.card, borderColor: colors.border },
@@ -371,7 +373,13 @@ const HelpSupportScreen: React.FC = () => {
             <Icon name="Mail" size={20} color={colors.primary} />
             <AppText style={styles.infoLink}>{supportContact.email}</AppText>
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* <TouchableOpacity
+            onPress={() => {
+              const url = supportContact.website.startsWith('http')
+                ? supportContact.website
+                : `https://${supportContact.website}`;
+              Linking.openURL(url);
+            }}
             style={[
               styles.infoRow,
               { backgroundColor: colors.card, borderColor: colors.border },
@@ -379,7 +387,7 @@ const HelpSupportScreen: React.FC = () => {
           >
             <Icon name="Globe" size={20} color={colors.primary} />
             <AppText style={styles.infoLink}>{supportContact.website}</AppText>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </AppView>
 
         <AppView style={{ height: 40 }} />

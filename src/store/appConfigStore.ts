@@ -50,7 +50,7 @@ export const useRefereeBonus = () =>
 
 /** Selector: support contact info */
 export const useSupportContact = () =>
-  useAppConfigStore(s => s.config.support ?? { email: 'support@athlofit.com', website: 'www.athlofit.com/faq' });
+  useAppConfigStore(s => s.config.support ?? { email: 'support@athlofit.com', website: 'athlofit.com/faq' });
 
 /** Selector: feature flags */
 export const useFeatureFlags = () =>
