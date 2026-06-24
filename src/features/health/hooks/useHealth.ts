@@ -123,6 +123,25 @@ export function useHealth(options: UseHealthOptions = {}) {
     return () => sub.remove();
   }, [pauseInBackground, refreshInterval]);
 
+  // ── Midnight reset: force-refresh health data when the day changes ────────
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setDate(midnight.getDate() + 1);
+    midnight.setHours(0, 0, 1, 0); // 1 second past midnight
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+
+    const timer = setTimeout(() => {
+      if (isReadyRef.current) {
+        // Force a fresh fetch — bypass staleness guard so new day's data loads
+        lastFetchedAtRef.current = 0;
+        loadData(platformRef.current);
+      }
+    }, msUntilMidnight);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   // ── Auto-refresh timer ────────────────────────────────────────────────────
   const startAutoRefresh = useCallback(() => {
     if (refreshInterval <= 0) return;

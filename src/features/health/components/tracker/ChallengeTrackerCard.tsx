@@ -6,8 +6,7 @@ import { AppText, AppView } from '../../../../components';
 import { Icon } from '../../../../components/Icon';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
-import { useQuery } from '@tanstack/react-query';
-import { challengeService } from '../../service/challenge.service';
+import { useChallenges } from '../../hooks/useChallenges';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
 import type { Challenge } from '../../types/challenge.types';
@@ -66,13 +65,7 @@ const ChallengeTrackerCard = memo(() => {
   const { colors } = useTheme();
   const styles = useStyles();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['challenges'],
-    queryFn:  () => challengeService.getAll(),
-    select:   r  => r.data ?? [],
-    staleTime: 5 * 60_000, // 5 min — share cache with ChallengesScreen
-    retry: 1,
-  });
+  const { data, isLoading } = useChallenges();
 
   const fitnessChallenges = (data ?? [])
     .filter(c => c.type === 'daily' && FITNESS_CRITERIA.has(c.criteriaType))

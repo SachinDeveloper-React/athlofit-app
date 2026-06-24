@@ -18,9 +18,14 @@ export const getHRZone = (bpm: number) => {
   return { label: 'High', color: '#A32D2D', bg: '#FCEBEB' };
 };
 
-/** Returns an ISO date string (YYYY-MM-DD) for a given Date. */
+/** Returns an ISO date string (YYYY-MM-DD) for a given Date in local timezone.
+ * Uses local date components (not UTC) so the day boundary matches the user's clock.
+ */
 export function toISODate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**

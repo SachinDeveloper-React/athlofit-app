@@ -127,13 +127,16 @@ export function useSyncHealth() {
       // claimed today). Keeping this stale would show the wrong streak count.
       queryClient.invalidateQueries({ queryKey: ['streaks'] });
 
-      // Only invalidate gamification queries when the server actually awarded
+      // Always invalidate challenges after a sync — the period key may have
+      // changed (e.g. after midnight) and progress needs to reflect the new day.
+      queryClient.invalidateQueries({ queryKey: ['challenges'] });
+
+      // Only invalidate gamification/coin queries when the server actually awarded
       // something — avoids unnecessary refetches on every 5-min sync.
       const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
       if (awardedCoins) {
         queryClient.invalidateQueries({ queryKey: ['coin-data'] });
         queryClient.invalidateQueries({ queryKey: ['gamification'] });
-        queryClient.invalidateQueries({ queryKey: ['challenges'] });
       }
 
       if (d?.goalCoinsAwarded) {

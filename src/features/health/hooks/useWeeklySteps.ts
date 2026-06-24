@@ -6,9 +6,14 @@ import { healthService } from '../service/health.service';
 
 /**
  * Returns today's date as "YYYY-MM-DD" in local time.
+ * Uses local date components (not UTC) so the day boundary matches the user's clock.
  */
 function getTodayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function useWeeklySteps() {
@@ -19,23 +24,36 @@ export function useWeeklySteps() {
   const [todayISO, setTodayISO] = useState(getTodayISO);
   const lastKnownDateRef = useRef(todayISO);
 
-  // ── AppState listener: detect day change on foreground resume ──────────────
+  // ── Day-change detection: AppState foreground + midnight timer ──────────────
   useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        const currentDate = getTodayISO();
-        if (currentDate !== lastKnownDateRef.current) {
-          lastKnownDateRef.current = currentDate;
-          setTodayISO(currentDate);
-          // Invalidate the cache so React Query doesn't serve stale data
-          // while the new query key's fetch is in flight.
-          queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });
-        }
+    const checkDateChange = () => {
+      const currentDate = getTodayISO();
+      if (currentDate !== lastKnownDateRef.current) {
+        lastKnownDateRef.current = currentDate;
+        setTodayISO(currentDate);
+        queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });
       }
     };
 
+    // Detect day change when app comes back to foreground
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active') checkDateChange();
+    };
+
+    // Schedule a timer for midnight so data refreshes while the app is open
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setDate(midnight.getDate() + 1);
+    midnight.setHours(0, 0, 1, 0); // 1 second past midnight
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+
+    const midnightTimer = setTimeout(checkDateChange, msUntilMidnight);
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
+
+    return () => {
+      clearTimeout(midnightTimer);
+      subscription.remove();
+    };
   }, [queryClient]);
 
   // Recompute the 7-day range based on the (possibly updated) todayISO.
