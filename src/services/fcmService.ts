@@ -29,7 +29,15 @@ export async function registerFcmToken(): Promise<string | null> {
     if (Platform.OS === 'ios') {
       const isRegistered = isDeviceRegisteredForRemoteMessages(messaging);
       if (!isRegistered) {
-        await registerDeviceForRemoteMessages(messaging);
+        try {
+          await registerDeviceForRemoteMessages(messaging);
+        } catch (regErr: any) {
+          // Simulator doesn't support APNs — silently skip
+          if (__DEV__) {
+            console.log('[FCM] registerDeviceForRemoteMessages skipped (simulator?):', regErr?.message);
+          }
+          return null;
+        }
       }
     }
 

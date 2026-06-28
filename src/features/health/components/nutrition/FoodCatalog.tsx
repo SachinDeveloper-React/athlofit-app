@@ -4,12 +4,12 @@
 
 import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   View,
   ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -167,7 +167,7 @@ export const FoodCatalog = memo(() => {
           ))}
         </AppView>
       ) : (
-        <FlatList
+        <FlashList
           horizontal
           showsHorizontalScrollIndicator={false}
           data={filterChips}
@@ -193,7 +193,7 @@ export const FoodCatalog = memo(() => {
       ) : displayedFoods.length === 0 ? (
         <EmptyState />
       ) : (
-        <FlatList
+        <FlashList
           horizontal
           showsHorizontalScrollIndicator={false}
           data={displayedFoods.slice(0, 8)}

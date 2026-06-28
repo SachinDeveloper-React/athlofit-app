@@ -14,16 +14,9 @@ import {
   writeBloodPressureHK,
 } from '../service/healthkit.service';
 
-import {
-  isHealthConnectAvailable,
-  initializeHealthConnect,
-  fetchAllHealthConnectData,
-  writeStepsHC,
-  writeWeightHC,
-  writeHeartRateHC,
-  writeBloodPressureHC,
-  writeHydrationHC,
-} from '../service/healthConnect.service';
+// Health Connect is Android-only — lazy-import to avoid crashing on iOS.
+const getHealthConnectService = () =>
+  require('../service/healthConnect.service') as typeof import('../service/healthConnect.service');
 
 export type HealthPlatform = 'healthkit' | 'healthconnect' | 'unavailable';
 
@@ -59,7 +52,7 @@ export function useHealth(options: UseHealthOptions = {}) {
   const [isLoading, setIsLoading] = useState(!preInitialized && !hasCachedData);
   const [data, setData] = useState<HealthData>(cachedData ?? defaultHealthData);
   const [error, setError] = useState<string | null>(
-    initState.isInitialized ? initState.error : null
+    initState.isInitialized && initState.isReady ? initState.error : null
   );
   const [lastUpdated, setLastUpdated] = useState<Date | null>(cachedLastUpdated);
 
@@ -178,6 +171,7 @@ export function useHealth(options: UseHealthOptions = {}) {
           startAutoRefresh();
         }
       } else if (Platform.OS === 'android') {
+        const { isHealthConnectAvailable, initializeHealthConnect } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
           setPlatform('unavailable');
@@ -239,6 +233,7 @@ export function useHealth(options: UseHealthOptions = {}) {
       } else {
         // Get login timestamp from healthDataStore to filter historical data
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+        const { fetchAllHealthConnectData } = getHealthConnectService();
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
       }
 
@@ -319,8 +314,11 @@ export function useHealth(options: UseHealthOptions = {}) {
 
   const logHeartRate = useCallback(
     async (bpm: number) => {
-      if (platform === 'healthkit') await writeHeartRateHK(bpm); // ✅ iOS
-      else await writeHeartRateHC(bpm);                          // Android
+      if (platform === 'healthkit') await writeHeartRateHK(bpm);
+      else {
+        const { writeHeartRateHC } = getHealthConnectService();
+        await writeHeartRateHC(bpm);
+      }
       setData(prev => ({ ...prev, heartRate: bpm }));
       setLastUpdated(new Date());
     },
@@ -330,8 +328,11 @@ export function useHealth(options: UseHealthOptions = {}) {
   const logBloodPressure = useCallback(
     async (systolic: number, diastolic: number) => {
       if (platform === 'healthkit')
-        await writeBloodPressureHK(systolic, diastolic); // ✅ iOS
-      else await writeBloodPressureHC(systolic, diastolic);      // Android
+        await writeBloodPressureHK(systolic, diastolic);
+      else {
+        const { writeBloodPressureHC } = getHealthConnectService();
+        await writeBloodPressureHC(systolic, diastolic);
+      }
       setData(prev => ({
         ...prev,
         bloodPressureSystolic: systolic,
@@ -345,7 +346,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   const logWeight = useCallback(
     async (kg: number) => {
       if (platform === 'healthkit') await writeWeightHK(kg, new Date());
-      else await writeWeightHC(kg, new Date());
+      else {
+        const { writeWeightHC } = getHealthConnectService();
+        await writeWeightHC(kg, new Date());
+      }
       setData(prev => ({ ...prev, weight: kg }));
       setLastUpdated(new Date());
     },
@@ -357,7 +361,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeSteps = useCallback(
     async (count: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeStepsHK(count, start);
-      else await writeStepsHC(count, start, end);
+      else {
+        const { writeStepsHC } = getHealthConnectService();
+        await writeStepsHC(count, start, end);
+      }
     },
     [platform],
   );
@@ -365,7 +372,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeWeight = useCallback(
     async (kg: number, date: Date) => {
       if (platform === 'healthkit') await writeWeightHK(kg, date);
-      else await writeWeightHC(kg, date);
+      else {
+        const { writeWeightHC } = getHealthConnectService();
+        await writeWeightHC(kg, date);
+      }
     },
     [platform],
   );
@@ -373,7 +383,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeHydration = useCallback(
     async (ml: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeHydrationHK(ml, start);
-      else await writeHydrationHC(ml, start, end);
+      else {
+        const { writeHydrationHC } = getHealthConnectService();
+        await writeHydrationHC(ml, start, end);
+      }
     },
     [platform],
   );

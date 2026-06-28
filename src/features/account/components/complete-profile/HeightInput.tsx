@@ -3,7 +3,8 @@
 // cm mode: text input. ft mode: dropdown selectors for feet & inches.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { Modal, Pressable, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { AppView, AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { cmToFeet, cmToInches, ftInToCm } from '../../../../utils/unitConverter';
@@ -170,7 +171,7 @@ export const HeightInput: React.FC<HeightInputProps> = ({
             <AppText style={[styles.sheetTitle, { color: colors.foreground }]}>
               {pickerOpen === 'ft' ? 'Select Feet' : 'Select Inches'}
             </AppText>
-            <FlatList
+            <FlashList
               data={pickerOpen === 'ft' ? FEET_OPTIONS : INCH_OPTIONS}
               keyExtractor={item => item.toString()}
               showsVerticalScrollIndicator={false}

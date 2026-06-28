@@ -303,12 +303,12 @@ const ProductDetailScreen = () => {
                 </View>
               )}
             </View>
-            <View style={[styles.rupeeRow, { borderTopColor: withOpacity('#F5C518', 0.3), marginTop: 10 }]}>
+            {/* <View style={[styles.rupeeRow, { borderTopColor: withOpacity('#F5C518', 0.3), marginTop: 10 }]}>
               <Icon name="IndianRupee" size={12} color={colors.mutedForeground} />
               <AppText variant="caption1" secondary style={{ marginLeft: 3 }}>
                 Equivalent ₹{displayPrice.toLocaleString()} · 10 coins = ₹1
               </AppText>
-            </View>
+            </View> */}
           </View>
 
           {/* Highlights */}

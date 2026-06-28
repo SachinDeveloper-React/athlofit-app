@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 import { Screen, AppText, Header, Icon } from '../../../components';
@@ -221,7 +221,7 @@ const AchievementsScreen = () => {
 
   return (
     <Screen safeArea={false} header={<Header title="Achievements" showBack bordered backLabel="" />} padded={false}>
-      <FlatList
+      <FlashList
         data={sortedAchievements}
         keyExtractor={item => item.id}
         renderItem={({ item, index }) => (

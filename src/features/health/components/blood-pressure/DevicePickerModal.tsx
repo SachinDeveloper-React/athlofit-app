@@ -1,5 +1,6 @@
 import React from 'react';
-import { FlatList, Modal } from 'react-native';
+import { Modal } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Device } from 'react-native-ble-plx';
 import { AppText, AppView, Button, Loader } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
@@ -73,7 +74,7 @@ export const DevicePickerModal: React.FC<DevicePickerModalProps> = ({
             </AppText>
           )}
 
-          <FlatList
+          <FlashList
             data={devices}
             keyExtractor={d => d.id}
             renderItem={({ item }) => (

@@ -1,11 +1,11 @@
 import { memo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   TextInput,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../../../../components/KeyboardAvoidingView';
 import { AppText, AppView, Button } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { makeStyles } from '../../../../hooks/makeStyles';

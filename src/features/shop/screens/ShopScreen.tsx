@@ -3,13 +3,13 @@ import React, { memo, useCallback, useEffect } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -141,7 +141,7 @@ const StaticHeader = memo(({
               <Icon name="ChevronRight" size={13} color={colors.primary} />
             </Pressable>
           </View>
-          <FlatList
+          <FlashList
             data={featuredProducts}
             keyExtractor={item => item._id}
             renderItem={({ item, index }) => (
@@ -289,7 +289,7 @@ const ShopScreen = () => {
           <AppText variant="body" secondary style={{ marginTop: 12 }}>Loading shop…</AppText>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={isProductsPending ? [] : rows}
           keyExtractor={(_, i) => `row-${i}`}
           showsVerticalScrollIndicator={false}

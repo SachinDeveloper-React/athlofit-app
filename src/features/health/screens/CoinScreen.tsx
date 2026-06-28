@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
-  ListRenderItem,
   Pressable,
   RefreshControl,
   View,
 } from 'react-native';
+import { FlashList, ListRenderItem } from '@shopify/flash-list';
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -305,7 +304,7 @@ const CoinScreen = () => {
       <AppView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header title="Coins" showBack backLabel="" />
 
-        <FlatList
+        <FlashList
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
@@ -335,10 +334,6 @@ const CoinScreen = () => {
           ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
           ListEmptyComponent={renderEmpty}
           contentInsetAdjustmentBehavior="never"
-          removeClippedSubviews
-          initialNumToRender={PAGE_SIZE}
-          maxToRenderPerBatch={10}
-          windowSize={10}
         />
       </AppView>
     </Screen>

@@ -1,4 +1,4 @@
-import { FlatList } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import React, { useCallback } from 'react';
 import { AppText, AppView, Card, Icon, Screen, NotificationBell } from '../../../components';
 import {
@@ -38,7 +38,7 @@ const AccountScreen = (props: Props) => {
 
   return (
     <Screen scroll={false}>
-      <FlatList
+      <FlashList
         data={menu}
         keyExtractor={keyExtractor}
         renderItem={renderRow}
@@ -92,11 +92,6 @@ const AccountScreen = (props: Props) => {
           },
         ]}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews
-        initialNumToRender={8}
-        windowSize={10}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={16}
         ItemSeparatorComponent={() => <AppView style={s.sep} />}
         ListFooterComponent={<AppView style={{ height: 24 }} />}
       />

@@ -28,11 +28,15 @@ import {
 import { AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
-import {
-  initializeHealthConnect,
-  isHealthConnectAvailable,
-} from '../../service/healthConnect.service';
 import { initializeHealthKit } from '../../service/healthkit.service';
+
+// Health Connect is Android-only — lazy-import to avoid crashing on iOS
+// where the native module proxy throws on property access.
+const getHealthConnectService = () =>
+  require('../../service/healthConnect.service') as {
+    initializeHealthConnect: () => Promise<boolean>;
+    isHealthConnectAvailable: () => Promise<boolean>;
+  };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -164,9 +168,9 @@ const CONFIGS: Record<PermissionScenario, ScenarioConfig> = {
     iconBg: '#E6F1FB',
     title: 'Health Access Denied',
     description:
-      'Athlofit needs the following Health permissions. Please enable them in your iPhone Settings.',
-    primaryLabel: 'Open Settings',
-    secondaryLabel: 'Try Again',
+      'Athlofit needs the following Health permissions to track your fitness data.',
+    primaryLabel: 'Allow Permission',
+    secondaryLabel: 'Open Settings',
   },
   'error': {
     HeaderIcon: RefreshCw,
@@ -242,6 +246,7 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
       if (scenario === 'android-missing') {
         await Linking.openURL(HEALTH_CONNECT_STORE_URL);
       } else if (scenario === 'android-denied') {
+        const { isHealthConnectAvailable, initializeHealthConnect } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
           await Linking.openURL(HEALTH_CONNECT_STORE_URL);
@@ -250,7 +255,15 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
         const granted = await initializeHealthConnect();
         if (granted) onPermissionGranted();
       } else if (scenario === 'ios-denied') {
-        await Linking.openURL(IOS_SETTINGS_URL);
+        // Re-request HealthKit permissions — iOS shows the permission dialog
+        // again only if the user hasn't permanently denied it yet.
+        const granted = await initializeHealthKit();
+        if (granted) {
+          onPermissionGranted();
+        } else {
+          // User has permanently denied — open Health app settings
+          await Linking.openURL(IOS_SETTINGS_URL);
+        }
       } else {
         onPermissionGranted();
       }
@@ -267,6 +280,7 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
     try {
       if (scenario === 'android-missing') {
         // "Try Again" after installing
+        const { initializeHealthConnect } = getHealthConnectService();
         const granted = await initializeHealthConnect();
         if (granted) onPermissionGranted();
       } else if (scenario === 'android-denied') {
@@ -275,9 +289,8 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
           Linking.openURL(HEALTH_CONNECT_STORE_URL),
         );
       } else if (scenario === 'ios-denied') {
-        // "Try Again" — re-request HealthKit
-        const granted = await initializeHealthKit();
-        if (granted) onPermissionGranted();
+        // "Open Settings" → iOS Health app settings
+        await Linking.openURL(IOS_SETTINGS_URL);
       }
     } catch {
       // silent
@@ -475,7 +488,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingHorizontal: 20,
+    // paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 120,
     gap: 20,

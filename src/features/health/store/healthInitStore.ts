@@ -6,12 +6,16 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import type { HealthPlatform } from '../hooks/useHealth';
 
-import {
-  isHealthConnectAvailable,
-  initializeHealthConnect,
-  hasHealthConnectPermissions,
-} from '../service/healthConnect.service';
 import { initializeHealthKit } from '../service/healthkit.service';
+
+// Health Connect is Android-only — lazy-import to avoid crashing on iOS
+// where the native module doesn't exist.
+const getHealthConnectService = () =>
+  require('../service/healthConnect.service') as {
+    isHealthConnectAvailable: () => Promise<boolean>;
+    initializeHealthConnect: () => Promise<boolean>;
+    hasHealthConnectPermissions: () => Promise<boolean>;
+  };
 
 interface HealthInitState {
   /** Whether pre-initialization has been performed this session */
@@ -51,6 +55,7 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
           error: ok ? null : 'HealthKit permission denied',
         });
       } else if (Platform.OS === 'android') {
+        const { isHealthConnectAvailable, initializeHealthConnect, hasHealthConnectPermissions } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
           // Health Connect not installed — check native step service as fallback

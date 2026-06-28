@@ -1,9 +1,9 @@
 import {
-  FlatList,
   Modal,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { AppView, AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { PickerSheetProps } from '../../types/completeProfile.types';
@@ -38,7 +38,7 @@ export const PickerSheet: React.FC<PickerSheetProps> = ({
       >
         <AppView style={pk.handle} />
         <AppText style={[pk.title, { color: colors.foreground }]}>{title}</AppText>
-        <FlatList
+        <FlashList
           data={options}
           keyExtractor={i => i}
           renderItem={({ item }) => (

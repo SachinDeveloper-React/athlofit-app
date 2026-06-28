@@ -1,6 +1,5 @@
 import React, { memo, useMemo } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   RefreshControlProps,
   ScrollView,
@@ -8,6 +7,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import AppView from './AppView';
@@ -62,7 +62,7 @@ const Screen = memo(
     style,
     contentContainerStyle,
     header,
-    keyboardGap = 16,
+    keyboardGap = 0,
     bounces = true,
     withBottomInset = true,
     refreshControl,
@@ -104,8 +104,8 @@ const Screen = memo(
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={keyboardOffset}
+          behavior={Platform.OS === 'ios' ? 'padding' : "height"}
+          keyboardVerticalOffset={keyboardOffset}          
         >
           {scroll ? (
             <ScrollView

@@ -22,6 +22,25 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.athlofit.athlofit.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>athlofit</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.221970537561-t2gh4srl4rjcrj5v1r24s0eifcp18n2e</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -33,20 +52,30 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Read and understand health data.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Share workout data with other apps.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Athlofit needs location access to discover nearby Bluetooth blood pressure monitors.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>$(PRODUCT_NAME) needs access to your Camera.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>$(PRODUCT_NAME) needs access to your Bluetooth.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>$(PRODUCT_NAME) needs access to your Bluetooth.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>$(PRODUCT_NAME) needs access to your Camera to take profile photos and scan items.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Athlofit reads your health data including steps, heart rate, blood pressure, sleep, weight, blood glucose, hydration, workouts, active calories, and distance to show your daily fitness progress.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Athlofit writes workout data, steps, hydration, heart rate, blood pressure, weight, blood glucose, and sleep data to keep your health records up to date.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Athlofit needs location access to discover nearby Bluetooth blood pressure monitors.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Athlofit uses motion data to count your steps and track physical activity throughout the day.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Athlofit needs access to your photo library to select profile pictures and share achievements.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>BootSplash</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -64,26 +93,9 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>processing</string>
-		<string>remote-notification</string>
-	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>athlofit</string>
-			</array>
-			<key>CFBundleURLName</key>
-			<string>com.athlofit.athlofit.app</string>
-		</dict>
-	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 </dict>
 </plist>

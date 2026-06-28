@@ -1,10 +1,30 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, StatusBar } from 'react-native';
+import { Platform, StatusBar, View } from 'react-native';
 import BootSplash from 'react-native-bootsplash';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import SystemNavigationBar from 'react-native-system-navigation-bar';
+// Only import on Android — the module has no iOS native implementation and
+// instantiating its NativeEventEmitter on iOS throws an Invariant Violation.
+const SystemNavigationBar =
+  Platform.OS === 'android'
+    ? require('react-native-system-navigation-bar').default
+    : null;
+
+/**
+ * On Android, wrap the app in KeyboardProvider for react-native-keyboard-controller.
+ * On iOS, skip the provider — the native module can conflict with static frameworks
+ * and iOS's native keyboard avoidance via KeyboardAvoidingView works without it.
+ */
+const KeyboardWrapper: React.FC<{ children: React.ReactNode }> =
+  Platform.OS === 'android'
+    ? ({ children }) => (
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+          {children}
+        </KeyboardProvider>
+      )
+    : ({ children }) => <>{children}</>;
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import notifee, { AuthorizationStatus, EventType } from '@notifee/react-native';
 import { navigationRef } from '../navigation/navigationRef';
@@ -34,6 +54,7 @@ enableScreens(true);
 // ─── Google Sign-In — must be called once before any signIn() call ────────────
 GoogleSignin.configure({
   webClientId: '221970537561-ipkq0c3l16in5i82g628h00h9jp3ut92.apps.googleusercontent.com',
+  iosClientId: "221970537561-t2gh4srl4rjcrj5v1r24s0eifcp18n2e.apps.googleusercontent.com",
   offlineAccess: true,
 });
 
@@ -159,8 +180,9 @@ const AppShell: React.FC = () => {
     };
   }, [checkAndResetIfNewDay]);
 
-  // ── System navigation bar theming ─────────────────────────────────────────
+  // ── System navigation bar theming (Android only) ───────────────────────────
   useEffect(() => {
+    if (Platform.OS !== 'android' || !SystemNavigationBar) { return; }
     SystemNavigationBar.setNavigationColor(
       isDark ? '#000000' : '#ffffff',
     ).catch(() => { });
@@ -178,16 +200,18 @@ const AppShell: React.FC = () => {
 
   return (
     <SafeAreaProvider>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor="transparent"
-      />
-      <NavigationContainer ref={navigationRef} linking={linking}>
-        <ToastProvider>
-          <RootNavigator />
-          <SystemOverlay />
-        </ToastProvider>
-      </NavigationContainer>
+      <KeyboardWrapper>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor="transparent"
+        />
+        <NavigationContainer ref={navigationRef} linking={linking}>
+          <ToastProvider>
+            <RootNavigator />
+            <SystemOverlay />
+          </ToastProvider>
+        </NavigationContainer>
+      </KeyboardWrapper>
     </SafeAreaProvider>
   );
 };

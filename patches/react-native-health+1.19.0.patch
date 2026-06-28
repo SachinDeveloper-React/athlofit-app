@@ -1,8 +1,41 @@
 diff --git a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
-index e8ddce1..69ab4de 100644
+index e8ddce1..2d9d4de 100644
 --- a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
 +++ b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
-@@ -841,7 +841,7 @@ RCT_EXPORT_METHOD(getClinicalRecords:(NSDictionary *)input callback:(RCTResponse
+@@ -34,6 +34,12 @@ bool hasListeners;
+ 
+ RCT_EXPORT_MODULE();
+ 
++// ── New Architecture fix: run methods on main queue so callbacks from async
++// APIs (like requestAuthorization) are not dropped by the interop layer. ──
++- (dispatch_queue_t)methodQueue
++{
++    return dispatch_get_main_queue();
++}
+ 
+ + (id)allocWithZone:(NSZone *)zone {
+     static RCTAppleHealthKit *sharedInstance = nil;
+@@ -60,7 +66,7 @@ RCT_EXPORT_MODULE();
+ 
+ + (BOOL)requiresMainQueueSetup
+ {
+-    return NO;
++    return YES;
+ }
+ 
+ RCT_EXPORT_METHOD(isAvailable:(RCTResponseSenderBlock)callback)
+@@ -663,9 +669,7 @@ RCT_EXPORT_METHOD(getClinicalRecords:(NSDictionary *)input callback:(RCTResponse
+                 callback(@[RCTMakeError(errMsg, nil, nil)]);
+                 return;
+             } else {
+-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+-                    callback(@[[NSNull null], @true]);
+-                });
++                callback(@[[NSNull null], @true]);
+             }
+         }];
+     } else {
+@@ -841,7 +845,7 @@ RCT_EXPORT_METHOD(getClinicalRecords:(NSDictionary *)input callback:(RCTResponse
  - (void)emitEventInternal:(NSNotification *)notification {
    if (self.hasListeners) {
      self.callableJSModules = [RCTAppleHealthKit sharedJsModule];

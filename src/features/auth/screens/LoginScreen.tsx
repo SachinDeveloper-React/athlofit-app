@@ -238,6 +238,8 @@ const LoginScreen: React.FC<Props> = () => {
                   );
                   return;
                 }
+                console.log("err?.message", err?.message);
+                
                 toast.error(err?.message ?? 'Google sign-in failed.');
               },
             });

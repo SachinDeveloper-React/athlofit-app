@@ -173,28 +173,23 @@ function resolvePermissionScenario(
   error: string | null,
 ): PermissionScenario | null {
   if (platform === 'unavailable') {
+    // iOS — always resolve to 'ios-denied' when unavailable
+    if (Platform.OS === 'ios') {
+      return 'ios-denied';
+    }
+
     const lower = error?.toLowerCase() ?? '';
     // Health Connect not installed
     if (lower.includes('health connect') || lower.includes('not installed')) {
       return 'android-missing';
     }
     // Permission denied on Android
-    if (lower.includes('denied') || lower.includes('permission')) {
-      return 'android-denied';
-    }
-    // iOS HealthKit denied
-    if (lower.includes('healthkit') || lower.includes('health access')) {
-      return 'ios-denied';
-    }
-    // Generic unavailable — treat as android-denied (most common)
     return 'android-denied';
   }
 
+  // HealthKit initialized but not ready (permission denied mid-session)
   if (!isReady && platform === 'healthkit') {
-    const lower = error?.toLowerCase() ?? '';
-    if (lower.includes('denied') || lower.includes('permission')) {
-      return 'ios-denied';
-    }
+    return 'ios-denied';
   }
 
   return null;

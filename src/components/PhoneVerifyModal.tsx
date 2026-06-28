@@ -7,12 +7,12 @@ import {
   TextInput,
   ActivityIndicator,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import BottomSheet from './BottomSheet';
 import AppText from './AppText';
 import { Icon } from './Icon';

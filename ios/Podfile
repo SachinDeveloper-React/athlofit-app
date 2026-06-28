@@ -31,5 +31,22 @@ target 'Athlofit' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Fix "non-modular include in framework module" errors caused by
+    # use_frameworks! :linkage => :static — many RN pods use #import "RCTxxx.h"
+    # style includes that are incompatible with strict modular frameworks.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        build_config.build_settings['OTHER_CFLAGS'] = '$(inherited) -Wno-error=non-modular-include-in-framework-module'
+        build_config.build_settings['GCC_WARN_ABOUT_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'NO'
+        build_config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+      
+      if ['RNFBApp', 'RNFBMessaging', 'RNFBCore'].include?(target.name)
+             target.build_configurations.each do |build_config|
+               build_config.build_settings['DEFINES_MODULE'] = 'NO'
+        end
+      end
+    end
   end
 end

@@ -6,9 +6,7 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Image,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,6 +14,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { KeyboardAvoidingView } from '../../../../components/KeyboardAvoidingView';
 import BottomSheet from '../../../../components/BottomSheet';
 import { AppText, AppView, Button, Input } from '../../../../components';
 import { Icon } from '../../../../components';
@@ -188,7 +188,7 @@ const SearchTab = memo(({ meal, onSelect }: SearchTabProps) => {
           </AppText>
         </AppView>
       ) : (
-        <FlatList
+        <FlashList
           data={foods}
           keyExtractor={f => f._id}
           renderItem={renderItem}

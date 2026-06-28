@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyBrjfv-RR2QMnxtXXQYeDqZwhM8EHX3JoY</string>
+	<string>AIzaSyCRvJq_TJKKNInGec8v2STDYyidkrw9RnY</string>
 	<key>GCM_SENDER_ID</key>
-	<string>408694605210</string>
+	<string>783435607572</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>org.reactjs.native.example.Athlofit</string>
+	<string>com.athlofit.athlofit</string>
 	<key>PROJECT_ID</key>
-	<string>athlofit-6e24a</string>
+	<string>athlofit-c7ae7</string>
 	<key>STORAGE_BUCKET</key>
-	<string>athlofit-6e24a.firebasestorage.app</string>
+	<string>athlofit-c7ae7.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:408694605210:ios:a1ae2e67fcc953b27fa623</string>
+	<string>1:783435607572:ios:198780f17c9a7e3e36c101</string>
 </dict>
 </plist>

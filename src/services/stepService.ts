@@ -4,7 +4,11 @@ import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 
 export type StepSource = 'health_connect' | 'native_sensor' | 'unavailable';
 
 const { NativeStep } = NativeModules;
-const stepEventEmitter = new NativeEventEmitter(NativeStep);
+// NativeStep is Android-only; on iOS it's null, so guard against the
+// Invariant Violation: `new NativeEventEmitter()` requires a non-null argument.
+const stepEventEmitter = NativeStep
+  ? new NativeEventEmitter(NativeStep)
+  : null;
 
 class StepService {
   private cachedSource: StepSource = 'unavailable';
@@ -15,6 +19,11 @@ class StepService {
    * Caches the result for subsequent getSource() calls.
    */
   async initialize(): Promise<StepSource> {
+    if (!NativeStep) {
+      // Native module not available (iOS) — skip initialization
+      this.cachedSource = 'unavailable';
+      return this.cachedSource;
+    }
     try {
       const source = await NativeStep.getActiveSource();
       this.cachedSource = source as StepSource;
@@ -123,6 +132,9 @@ class StepService {
    * Returns an unsubscribe function.
    */
   onStepUpdate(callback: (steps: number) => void): () => void {
+    if (!stepEventEmitter) {
+      return () => {};
+    }
     const subscription = stepEventEmitter.addListener(
       'onStepUpdate',
       (event: { steps: number }) => {

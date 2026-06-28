@@ -33,7 +33,6 @@ import {
   deriveFromSteps,
   readStepsDeduped,
 } from './healthConnect.service';
-import { initialize } from 'react-native-health-connect';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
@@ -241,6 +240,7 @@ export async function runHealthSync(): Promise<void> {
   const available = await isHealthConnectAvailable();
   if (!available) return;
 
+  const { initialize } = require('react-native-health-connect');
   const initialized = await initialize();
   if (!initialized) return;
 

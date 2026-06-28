@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -9,6 +8,7 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { Icon } from '../../../components';
@@ -173,11 +173,10 @@ const FoodCatalogScreen = memo(() => {
             <ActivityIndicator size="large" color={colors.primary} />
           </AppView>
         ) : (
-          <FlatList
+          <FlashList
             data={displayedFoods}
             keyExtractor={item => item._id}
             numColumns={2}
-            columnWrapperStyle={styles.columnWrapper}
             contentContainerStyle={styles.grid}
             showsVerticalScrollIndicator={false}
             renderItem={renderItem}
@@ -192,9 +191,6 @@ const FoodCatalogScreen = memo(() => {
               </AppView>
             }
             ListFooterComponent={<View style={{ height: 40 }} />}
-            removeClippedSubviews
-            initialNumToRender={10}
-            maxToRenderPerBatch={12}
           />
         )}
       </AppView>
