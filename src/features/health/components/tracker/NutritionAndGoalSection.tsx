@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, ActivityIndicator, View } from 'react-nativ
 import { AppText, AppView } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { CalorieSummaryCard } from '../nutrition/CalorieSummaryCard';
+import { CalorieGoalEditor } from '../nutrition/CalorieGoalEditor';
 import { DietPreferenceChips } from '../nutrition/DietPreferenceChips';
 import { MealSection } from '../nutrition/MealSection';
 import { DietRecommendationCard } from '../nutrition/DietRecommendationCard';
@@ -96,6 +97,18 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
     [preferences, updatePrefs],
   );
 
+  const handleCalorieGoalUpdate = useCallback(
+    (newGoal: number) => {
+      if (!preferences) return;
+      updatePrefs({
+        dietPreference: preferences.dietPreference,
+        dietaryGoal: preferences.dietaryGoal,
+        calorieGoal: newGoal,
+      });
+    },
+    [preferences, updatePrefs],
+  );
+
   const handleRefresh = useCallback(() => {
     refetchSummary();
     refetchPrefs();
@@ -136,6 +149,12 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
         protein={summary?.totalProtein ?? 0}
         carbs={summary?.totalCarbs ?? 0}
         fat={summary?.totalFat ?? 0}
+      />
+
+      <CalorieGoalEditor
+        currentGoal={preferences?.calorieGoal ?? 2000}
+        onUpdate={handleCalorieGoalUpdate}
+        isMutating={isUpdatingPrefs}
       />
 
       <SectionLabel label="Preference & Goal" />

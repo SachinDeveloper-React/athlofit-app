@@ -398,7 +398,7 @@ const ProductDetailScreen = () => {
             {(coinPrice * qty).toLocaleString()} coins needed
           </AppText>
           <View style={{ flex: 1 }} />
-          <AppText variant="caption2" color="#B45309">10 coins = ₹1</AppText>
+          {/* <AppText variant="caption2" color="#B45309">10 coins = ₹1</AppText> */}
         </View>
 
         <View style={styles.ctaRow}>
