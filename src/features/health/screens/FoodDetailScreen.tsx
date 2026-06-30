@@ -240,6 +240,10 @@ const FoodDetailScreen = memo(() => {
   const [selectedMeal, setSelectedMeal] = useState<MealType>('lunch');
   const [loggedSuccess, setLoggedSuccess] = useState(false);
 
+  // Optimistic local favourite state — persists after mutation completes
+  // until the query cache refetches with the new server value.
+  const [localFav, setLocalFav] = useState<boolean | null>(null);
+
   // Heart bounce animation
   const heartScale = useSharedValue(1);
   const heartAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: heartScale.value }] }));
@@ -248,6 +252,11 @@ const FoodDetailScreen = memo(() => {
     if (!food || togglingFav) return;
     heartScale.value = withSpring(1.4, { damping: 4 }, () => {
       heartScale.value = withSpring(1);
+    });
+    // Set optimistic state immediately
+    setLocalFav(prev => {
+      const current = prev !== null ? prev : food.isFavourite;
+      return !current;
     });
     toggleFav(food._id);
   }, [food, togglingFav, toggleFav, heartScale]);
@@ -290,8 +299,8 @@ const FoodDetailScreen = memo(() => {
   const cPct = totalMacroKcal > 0 ? (food.carbs * 4 / totalMacroKcal) * 100 : 0;
   const fPct = totalMacroKcal > 0 ? (food.fat * 9 / totalMacroKcal) * 100 : 0;
 
-  // Optimistic favourite state
-  const isFav = togglingId === food._id ? !food.isFavourite : food.isFavourite;
+  // Optimistic favourite state — local toggle takes priority until server catches up
+  const isFav = localFav !== null ? localFav : food.isFavourite;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

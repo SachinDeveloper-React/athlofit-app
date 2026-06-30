@@ -1,7 +1,7 @@
 // ─── DietPreferenceChips.tsx ──────────────────────────────────────────────────
 
 import React, { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -19,7 +19,7 @@ import type {
   NutritionOption,
 } from '../../types/nutrition.types';
 
-// ─── Animated Chip ────────────────────────────────────────────────────────────
+// ─── Compact Animated Chip ────────────────────────────────────────────────────
 
 interface ChipProps<T extends string> {
   value: T;
@@ -30,13 +30,14 @@ interface ChipProps<T extends string> {
   onPress: (v: T) => void;
   disabled?: boolean;
 }
+
 function Chip<T extends string>({
   value, label, emoji, isActive, activeColor, onPress, disabled,
 }: ChipProps<T>) {
   const progress = useSharedValue(isActive ? 1 : 0);
 
   useEffect(() => {
-    progress.value = withTiming(isActive ? 1 : 0, { duration: 200 });
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
   }, [isActive]);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -48,21 +49,21 @@ function Chip<T extends string>({
     borderColor: interpolateColor(
       progress.value,
       [0, 1],
-      ['rgba(0,0,0,0.1)', activeColor],
+      ['rgba(0,0,0,0.08)', activeColor],
     ),
   }));
 
   return (
     <TouchableOpacity
-      activeOpacity={0.75}
+      activeOpacity={0.7}
       onPress={() => onPress(value)}
       disabled={disabled}
     >
       <Animated.View style={[styles.chip, animStyle]}>
         <AppText style={styles.chipEmoji}>{emoji}</AppText>
         <AppText
-          variant="caption1"
-          weight={isActive ? 'semiBold' : 'regular'}
+          variant="caption2"
+          weight={isActive ? 'bold' : 'medium'}
           color={isActive ? '#ffffff' : undefined}
           style={styles.chipLabel}
         >
@@ -73,7 +74,7 @@ function Chip<T extends string>({
   );
 }
 
-// ─── Overlay ──────────────────────────────────────────────────────────────────
+// ─── Saving Overlay ───────────────────────────────────────────────────────────
 
 const SavingOverlay = memo(({ visible, colors }: { visible: boolean; colors: any }) => {
   const opacity = useSharedValue(0);
@@ -84,7 +85,6 @@ const SavingOverlay = memo(({ visible, colors }: { visible: boolean; colors: any
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    // pointerEvents handled by parent wrapper
   }));
 
   return (
@@ -96,12 +96,7 @@ const SavingOverlay = memo(({ visible, colors }: { visible: boolean; colors: any
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
     >
-      <Animated.View style={[styles.spinnerWrap, { backgroundColor: colors.card }]}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <AppText variant="caption1" style={{ marginTop: 6, color: colors.mutedForeground }}>
-          Saving…
-        </AppText>
-      </Animated.View>
+      <ActivityIndicator size="small" color={colors.primary} />
     </Animated.View>
   );
 });
@@ -120,16 +115,12 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
   const { colors } = useTheme();
   const { data: options, isLoading: optionsLoading } = useNutritionOptions();
 
-  // Optimistic local state — switches instantly on tap
   const [localDietPref, setLocalDietPref] = useState<DietPreference | undefined>(undefined);
-  const [localGoal, setLocalGoal]         = useState<DietaryGoal | undefined>(undefined);
+  const [localGoal, setLocalGoal] = useState<DietaryGoal | undefined>(undefined);
 
   const activeDietPref = localDietPref ?? preferences?.dietPreference;
-  const activeGoal     = localGoal     ?? preferences?.dietaryGoal;
+  const activeGoal = localGoal ?? preferences?.dietaryGoal;
 
-  // Clear optimistic state only when the server value has caught up to what we set.
-  // This prevents the chip from flashing back to the old value between mutation
-  // settling and the React Query cache being invalidated + refetched.
   useEffect(() => {
     if (localDietPref !== undefined && preferences?.dietPreference === localDietPref) {
       setLocalDietPref(undefined);
@@ -160,16 +151,25 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
     [preferences, activeGoal, onUpdate],
   );
 
-  const dietPrefs  = options?.dietPreferences ?? [];
-  const dietGoals  = options?.dietaryGoals    ?? [];
+  const dietPrefs = options?.dietPreferences ?? [];
+  const dietGoals = options?.dietaryGoals ?? [];
+
+  if (optionsLoading) {
+    return (
+      <Card style={styles.card}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </Card>
+    );
+  }
 
   return (
     <Card style={styles.card}>
-      <AppText variant="headline">Dietary Preference</AppText>
-      {optionsLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} style={{ alignSelf: 'flex-start' }} />
-      ) : (
-        <AppView style={styles.row}>
+      {/* Diet Preference Row */}
+      <View style={styles.section}>
+        <AppText variant="caption1" weight="semiBold" color={colors.mutedForeground}>
+          Diet
+        </AppText>
+        <View style={styles.row}>
           {dietPrefs.map(p => (
             <Chip
               key={p.value}
@@ -182,14 +182,18 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
               disabled={isMutating}
             />
           ))}
-        </AppView>
-      )}
+        </View>
+      </View>
 
-      <AppText variant="headline" style={styles.goalLabel}>Your Goal</AppText>
-      {optionsLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} style={{ alignSelf: 'flex-start' }} />
-      ) : (
-        <AppView style={styles.row}>
+      {/* Divider */}
+      <View style={[styles.divider, { backgroundColor: withOpacity(colors.foreground, 0.06) }]} />
+
+      {/* Goal Row */}
+      <View style={styles.section}>
+        <AppText variant="caption1" weight="semiBold" color={colors.mutedForeground}>
+          Goal
+        </AppText>
+        <View style={styles.row}>
           {dietGoals.map(g => (
             <Chip
               key={g.value}
@@ -202,10 +206,9 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
               disabled={isMutating}
             />
           ))}
-        </AppView>
-      )}
+        </View>
+      </View>
 
-      {/* Always mounted — fades in/out smoothly via Reanimated */}
       <SavingOverlay visible={!!isMutating} colors={colors} />
     </Card>
   );
@@ -216,36 +219,40 @@ DietPreferenceChips.displayName = 'DietPreferenceChips';
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  card: { gap: 12 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  goalLabel: { marginTop: 4 },
+  card: {
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  section: {
+    gap: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  divider: {
+    height: 1,
+    borderRadius: 1,
+    marginVertical: 2,
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.2,
   },
-  chipEmoji: { fontSize: 14 },
-  chipLabel: { fontSize: 13 },
+  chipEmoji: { fontSize: 12 },
+  chipLabel: { fontSize: 11.5 },
   overlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  spinnerWrap: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
   },
 });

@@ -3,7 +3,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { AppView, AppText, Button } from '../../../../components';
+import { AppView, AppText, Button, Icon } from '../../../../components';
 import { Step2Props } from '../../types/completeProfile.types';
 import { Controller, useForm } from 'react-hook-form';
 import { NumericStepper } from './NumericStepper';
@@ -42,7 +42,7 @@ export const Step2Body: React.FC<Step2Props> = ({
       <AppView
         style={[s.stepIconWrap, { backgroundColor: colors.primary + '15' }]}
       >
-        <AppText style={s.stepIcon}>📏</AppText>
+        <Icon name="Scale" size={28} color={colors.primary} />
       </AppView>
       <AppText style={[s.stepTitle, { color: colors.foreground }]}>
         Body metrics
@@ -120,7 +120,7 @@ export const Step2Body: React.FC<Step2Props> = ({
           >
             {bloodType || 'Select blood type'}
           </AppText>
-          <AppText style={{ color: colors.mutedForeground }}>⌄</AppText>
+          <Icon name="ChevronDown" size={18} color={colors.mutedForeground} />
         </TouchableOpacity>
         {!!errors.bloodType && (
           <AppText style={[s.errorText, { color: colors.destructive }]}>
@@ -139,7 +139,7 @@ export const Step2Body: React.FC<Step2Props> = ({
       />
 
       <Button
-        label="Complete Profile ✓"
+        label="Complete Profile"
         onPress={handleSubmit(onSubmit)}
         loading={loading}
         size="lg"
@@ -162,7 +162,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 18,
   },
-  stepIcon: { fontSize: 28 },
   stepTitle: {
     fontSize: 28,
     fontWeight: '700',

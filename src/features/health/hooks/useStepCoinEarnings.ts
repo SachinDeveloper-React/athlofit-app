@@ -12,12 +12,16 @@ const SYNC_INTERVAL_MS = 30_000; // 30 seconds
  * - Subscribes to native step sensor updates for live recalculation
  * - Runs a periodic timer (≤30s) to poll for the latest step count
  * - Exposes earnings, steps, isStale, and lastCalcTime
+ *
+ * NOTE: Coin transactions are logged on the backend every 3 hours
+ * (not per-100-steps) to avoid duplicate entries. This hook only
+ * calculates the display value — actual balance comes from the server.
  */
 export function useStepCoinEarnings() {
   const rate = useStepCoinRate();
   const [steps, setSteps] = useState(0);
   const [lastCalcTime, setLastCalcTime] = useState(Date.now());
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const calculateEarnings = useCallback(
     (currentSteps: number) => {

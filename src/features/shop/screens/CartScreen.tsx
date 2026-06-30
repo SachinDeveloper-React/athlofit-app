@@ -31,6 +31,7 @@ import { useGamificationStore } from '../../health/store/gamificationStore';
 import type { AvailableCoupon, SavedAddress, ValidateCouponResult } from '../types/shop.types';
 import { Header, Screen } from '../../../components';
 import { useAuthStore } from '../../auth/store/authStore';
+import AlertDialog, { type AlertDialogProps } from '../../../components/AlertDialog';
 
 type CartRouteProp = RouteProp<ShopStackParamList, typeof ShopRoutes.CART>;
 const COIN_RATE = 10;
@@ -473,6 +474,13 @@ const CartScreen = () => {
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<ValidateCouponResult | null>(null);
 
+  // ── Custom Alert Dialog state ────────────────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<Omit<AlertDialogProps, 'visible' | 'onClose'> | null>(null);
+  const showAlert = useCallback((config: Omit<AlertDialogProps, 'visible' | 'onClose'>) => {
+    setAlertConfig(config);
+  }, []);
+  const hideAlert = useCallback(() => setAlertConfig(null), []);
+
   // Auto-select default address when list loads
   useEffect(() => {
     if (addressList.length > 0 && !selectedAddress) {
@@ -506,26 +514,44 @@ const CartScreen = () => {
     // Require email verification before purchase
     const user = useAuthStore.getState().user;
     if (!user?.emailVerified) {
-      Alert.alert(
-        'Verification Required',
-        'Please verify your email before making a purchase.',
-        [
-          { text: 'Go to Profile', onPress: () => navigation.goBack() },
-          { text: 'Cancel', style: 'cancel' },
+      showAlert({
+        variant: 'warning',
+        title: 'Verification Required',
+        message: 'Please verify your email before making a purchase.',
+        actions: [
+          { label: 'Cancel', onPress: hideAlert, variant: 'outline' },
+          { label: 'Go to Profile', onPress: () => { hideAlert(); navigation.goBack(); }, variant: 'primary' },
         ],
-      );
+      });
       return;
     }
 
     if (!selectedAddress) {
-      Alert.alert('No Address', 'Add a delivery address first.', [
-        { text: 'Add Address', onPress: () => navigation.navigate(ShopRoutes.ADDRESSES, { selectMode: true } as any) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      showAlert({
+        variant: 'warning',
+        title: 'No Address',
+        message: 'Add a delivery address first.',
+        actions: [
+          { label: 'Cancel', onPress: hideAlert, variant: 'outline' },
+          { label: 'Add Address', onPress: () => { hideAlert(); navigation.navigate(ShopRoutes.ADDRESSES, { selectMode: true } as any); }, variant: 'primary' },
+        ],
+      });
       return;
     }
     if (!hasEnoughCoins) {
-      Alert.alert('Not Enough Coins', `You need ${finalTotal.toLocaleString()} coins but have ${coinsBalance.toLocaleString()}.\n\nEarn more by completing your daily step goal!`);
+      showAlert({
+        variant: 'error',
+        title: 'Not Enough Coins',
+        message: 'Earn more by completing your daily step goal!',
+        details: [
+          { emoji: '🪙', text: `Required: ${finalTotal.toLocaleString()} coins` },
+          { emoji: '💰', text: `You have: ${coinsBalance.toLocaleString()} coins` },
+          { emoji: '📉', text: `Short by: ${coinShortfall.toLocaleString()} coins` },
+        ],
+        actions: [
+          { label: 'OK', onPress: hideAlert, variant: 'primary' },
+        ],
+      });
       return;
     }
     buyWithCoinsAPI(
@@ -549,17 +575,41 @@ const CartScreen = () => {
             setAppliedCoupon(null);
             const orderId = res.data?.order?._id ? `#${res.data.order._id.slice(-6).toUpperCase()}` : '';
             const savedTotal = productSavings + couponDiscount;
-            Alert.alert(
-              '🎉 Order Placed!',
-              `Order ${orderId} placed!\n\n💰 Paid: ${finalTotal.toLocaleString()} coins${savedTotal > 0 ? `\n🏷️ Saved: ${savedTotal.toLocaleString()} coins` : ''}\n💰 Remaining: ${(remaining ?? coinsBalance - finalTotal).toLocaleString()} coins`,
-              [
-                { text: 'View Orders', onPress: () => navigation.navigate(ShopRoutes.ORDER_HISTORY) },
-                { text: 'Continue', onPress: () => navigation.goBack() },
+            showAlert({
+              variant: 'success',
+              title: 'Order Placed!',
+              message: `Order ${orderId} confirmed successfully.`,
+              details: [
+                { emoji: '💰', text: `Paid: ${finalTotal.toLocaleString()} coins` },
+                ...(savedTotal > 0 ? [{ emoji: '🏷️', text: `Saved: ${savedTotal.toLocaleString()} coins` }] : []),
+                { emoji: '🪙', text: `Remaining: ${(remaining ?? coinsBalance - finalTotal).toLocaleString()} coins` },
               ],
-            );
-          } else Alert.alert('Checkout Failed', res.message);
+              actions: [
+                { label: 'View Orders', onPress: () => { hideAlert(); navigation.navigate(ShopRoutes.ORDER_HISTORY); }, variant: 'outline' },
+                { label: 'Continue', onPress: () => { hideAlert(); navigation.goBack(); }, variant: 'primary' },
+              ],
+            });
+          } else {
+            showAlert({
+              variant: 'error',
+              title: 'Checkout Failed',
+              message: res.message || 'Something went wrong. Please try again.',
+              actions: [
+                { label: 'OK', onPress: hideAlert, variant: 'primary' },
+              ],
+            });
+          }
         },
-        onError: (err: any) => Alert.alert('Checkout Failed', err?.message || 'Payment failed'),
+        onError: (err: any) => {
+          showAlert({
+            variant: 'error',
+            title: 'Checkout Failed',
+            message: err?.message || 'Payment failed. Please try again.',
+            actions: [
+              { label: 'OK', onPress: hideAlert, variant: 'primary' },
+            ],
+          });
+        },
       },
     );
   };
@@ -857,6 +907,18 @@ const CartScreen = () => {
           )}
         </Pressable>
       </Animated.View>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        visible={alertConfig !== null}
+        onClose={hideAlert}
+        variant={alertConfig?.variant}
+        title={alertConfig?.title ?? ''}
+        message={alertConfig?.message}
+        details={alertConfig?.details}
+        actions={alertConfig?.actions}
+        closeOnBackdrop={false}
+      />
     </View>
   );
 };

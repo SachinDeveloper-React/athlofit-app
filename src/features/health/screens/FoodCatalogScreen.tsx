@@ -30,8 +30,8 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize }) => ({
   searchBox: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[2], borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing[3], height: 44 },
   searchInput: { flex: 1, fontSize: fontSize.base },
   filterRow: { paddingHorizontal: spacing[4], paddingVertical: spacing[3], gap: spacing[2.5], alignItems: 'center' as const },
-  categoryRow: { paddingHorizontal: spacing[4], gap: spacing[2], paddingVertical: spacing[2.5] },
-  catChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[1.25] ?? 5, paddingHorizontal: spacing[3], borderRadius: radius['2xl'] },
+  categoryRow: { paddingHorizontal: spacing[4], gap: spacing[2], paddingVertical: spacing[2.5], alignItems: 'center' as const },
+  catChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing[1.25] ?? 5, paddingHorizontal: spacing[3], paddingVertical: spacing[2], height: 36, borderRadius: radius['2xl'] },
   grid: { paddingHorizontal: spacing[4], paddingTop: spacing[1] },
   columnWrapper: { gap: spacing[2.5], marginBottom: spacing[2.5] },
   gridCell: { flex: 1 },
@@ -127,7 +127,7 @@ const FoodCatalogScreen = memo(() => {
         </AppView>
 
         {/* Diet filter row */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} style={{ minHeight: 50 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} style={{ flexGrow: 0 }}>
           <FilterPill label="❤️ Saved" emoji="" isActive={showFavsOnly} color="#E63946" onPress={() => setShowFavsOnly(v => !v)} />
           {(Object.keys(DIET_TYPE_META) as DietFilter[]).map(d => {
             const m = DIET_TYPE_META[d as keyof typeof DIET_TYPE_META];
@@ -147,7 +147,7 @@ const FoodCatalogScreen = memo(() => {
 
         {/* Category chips */}
         {!showFavsOnly && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow} style={{ minHeight: 50 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow} style={{ flexGrow: 0 }}>
             {(Object.keys(FOOD_CATEGORY_META) as FoodCategory[]).map(cat => {
               const m = FOOD_CATEGORY_META[cat];
               const isActive = categoryFilter === cat;

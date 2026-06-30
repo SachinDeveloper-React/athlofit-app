@@ -1,7 +1,22 @@
-import React, { memo, useCallback } from 'react';
-import { RefreshControl, ScrollView, ActivityIndicator, View } from 'react-native';
-import { AppText, AppView } from '../../../../components';
+import React, { memo, useCallback, useState } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  ActivityIndicator,
+  View,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
+import { AppText, AppView, Card } from '../../../../components';
+import { Icon } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { CalorieSummaryCard } from '../nutrition/CalorieSummaryCard';
 import { CalorieGoalEditor } from '../nutrition/CalorieGoalEditor';
 import { DietPreferenceChips } from '../nutrition/DietPreferenceChips';
@@ -30,7 +45,7 @@ const useStyles = makeStyles(({ colors, spacing }) => ({
     paddingBottom: spacing[5],
   },
   center: {
-    paddingVertical: spacing[15 as any] ?? 60,
+    paddingVertical: (spacing as any)[15] ?? 60,
     alignItems: 'center' as const,
   },
   sectionLabel: {
@@ -53,6 +68,105 @@ const SectionLabel = memo(({ label }: { label: string }) => {
 });
 
 SectionLabel.displayName = 'SectionLabel';
+
+// ─── Collapsible Dropdown Section ─────────────────────────────────────────────
+
+interface CollapsibleSectionProps {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}
+
+const CollapsibleSection = memo(({ title, defaultOpen = false, children }: CollapsibleSectionProps) => {
+  const { colors, spacing } = useTheme();
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const progress = useSharedValue(defaultOpen ? 1 : 0);
+
+  const toggle = useCallback(() => {
+    const next = !isOpen;
+    setIsOpen(next);
+    progress.value = withTiming(next ? 1 : 0, { duration: 250 });
+  }, [isOpen, progress]);
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(progress.value, [0, 1], [0, 180])}deg` }],
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    maxHeight: interpolate(progress.value, [0, 1], [0, 2000]),
+    overflow: 'hidden' as const,
+  }));
+
+  return (
+    <View>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={toggle}
+        style={[
+          dropdownStyles.header,
+          {
+            backgroundColor: withOpacity(colors.primary, 0.06),
+            borderColor: withOpacity(colors.primary, 0.15),
+          },
+        ]}
+      >
+        <AppText variant="headline" weight="semiBold">
+          {title}
+        </AppText>
+        <Animated.View style={chevronStyle}>
+          <Icon name="ChevronDown" size={18} color={colors.mutedForeground} />
+        </Animated.View>
+      </TouchableOpacity>
+
+      <Animated.View style={contentStyle}>
+        <View style={{ gap: spacing[3], paddingTop: spacing[2] }}>
+          {children}
+        </View>
+      </Animated.View>
+    </View>
+  );
+});
+
+CollapsibleSection.displayName = 'CollapsibleSection';
+
+// ─── Nutrition Disclaimer ─────────────────────────────────────────────────────
+
+const DISCLAIMER_TEXT =
+  'Nutrition information (including calories, protein, carbohydrates, fat, and other values) is provided for general informational purposes only. This data is sourced from publicly available food databases and other third-party sources. ATHLOFIT does not claim ownership of this nutritional data and cannot guarantee its complete accuracy or completeness. Nutritional values may vary based on brand, ingredients, preparation methods, and serving size.';
+
+const NutritionDisclaimer = memo(() => {
+  const { colors, spacing } = useTheme();
+  return (
+    <View
+      style={[
+        dropdownStyles.disclaimer,
+        {
+          backgroundColor: withOpacity(colors.mutedForeground, 0.05),
+          borderColor: withOpacity(colors.mutedForeground, 0.12),
+        },
+      ]}
+    >
+      <View style={dropdownStyles.disclaimerHeader}>
+        <Icon name="Info" size={14} color={colors.mutedForeground} />
+        <AppText variant="caption1" weight="semiBold" color={colors.mutedForeground}>
+          Disclaimer
+        </AppText>
+      </View>
+      <AppText
+        variant="caption2"
+        color={colors.mutedForeground}
+        style={{ lineHeight: 18 }}
+      >
+        {DISCLAIMER_TEXT}
+      </AppText>
+    </View>
+  );
+});
+
+NutritionDisclaimer.displayName = 'NutritionDisclaimer';
+
+// ─── Main Section ─────────────────────────────────────────────────────────────
 
 const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const { colors } = useTheme();
@@ -186,6 +300,8 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
       <SectionLabel label="Challenges" />
       <ChallengeNutritionCard />
 
+      <NutritionDisclaimer />
+
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
@@ -194,3 +310,28 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
 NutritionAndGoalSection.displayName = 'NutritionAndGoalSection';
 
 export default NutritionAndGoalSection;
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const dropdownStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  disclaimer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  disclaimerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+});

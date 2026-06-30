@@ -1,4 +1,6 @@
 export { default as AppModal } from './AppModal';
+export { default as AlertDialog } from './AlertDialog';
+export type { AlertDialogProps, AlertVariant, AlertAction } from './AlertDialog';
 export { default as AppText } from './AppText';
 export { default as AppView } from './AppView';
 export { default as Avatar } from './Avatar';

@@ -27,7 +27,7 @@ export const Step1Personal: React.FC<Step1Props> = ({
   return (
     <AppView style={g.stepContent}>
       <AppView style={[g.stepIconWrap, { backgroundColor: colors.primary + '15' }]}>
-        <AppText style={g.stepIcon}>👤</AppText>
+        <Icon name="User" size={28} color={colors.primary} />
       </AppView>
       <AppText style={[g.stepTitle, { color: colors.foreground }]}>
         Personal info
@@ -119,7 +119,11 @@ export const Step1Personal: React.FC<Step1Props> = ({
                       },
                     ]}
                   >
-                    <AppText style={g.emoji}>{opt.emoji}</AppText>
+                    <Icon
+                      name={opt.icon as any}
+                      size={20}
+                      color={selected ? colors.primary : colors.mutedForeground}
+                    />
                     <AppText
                       style={[
                         g.label,
@@ -147,7 +151,7 @@ export const Step1Personal: React.FC<Step1Props> = ({
       />
 
       <Button
-        label="Continue →"
+        label="Continue"
         onPress={handleSubmit(onNext)}
         size="lg"
         fullWidth
@@ -159,8 +163,7 @@ export const Step1Personal: React.FC<Step1Props> = ({
 
 const g = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10 },
-  btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
-  emoji: { fontSize: 20, marginBottom: 4 },
+  btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, gap: 4 },
   label: { fontSize: 13 },
   stepContent: { paddingTop: 28 },
   stepIconWrap: {
@@ -171,7 +174,6 @@ const g = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 18,
   },
-  stepIcon: { fontSize: 28 },
   stepTitle: {
     fontSize: 28,
     fontWeight: '700',

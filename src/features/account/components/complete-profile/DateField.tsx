@@ -306,6 +306,7 @@ export const DateField: React.FC<DateFieldProps> = ({ value, onChange, error }) 
         visible={open}
         onClose={() => setOpen(false)}
         title="Date of Birth"
+        snapHeight="65%"
       >
         {showYearPicker ? (
           <>

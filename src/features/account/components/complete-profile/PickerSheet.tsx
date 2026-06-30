@@ -1,11 +1,13 @@
+import React from 'react';
 import {
   Modal,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { AppView, AppText } from '../../../../components';
+import { AppView, AppText, Icon } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { withOpacity } from '../../../../utils/withOpacity';
 import { PickerSheetProps } from '../../types/completeProfile.types';
 
 export const PickerSheet: React.FC<PickerSheetProps> = ({
@@ -38,26 +40,44 @@ export const PickerSheet: React.FC<PickerSheetProps> = ({
       >
         <AppView style={pk.handle} />
         <AppText style={[pk.title, { color: colors.foreground }]}>{title}</AppText>
-        <FlashList
-          data={options}
-          keyExtractor={i => i}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[pk.item, { borderBottomColor: colors.border }]}
-              onPress={() => {
-                onSelect(item);
-                onClose();
-              }}
-            >
-              <AppText style={[pk.itemText, { color: colors.foreground }]}>
-                {item}
-              </AppText>
-              {selected === item && (
-                <AppText style={[pk.checkmark, { color: colors.primary }]}>✓</AppText>
-              )}
-            </TouchableOpacity>
-          )}
-        />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {options.map(item => {
+            const isSelected = selected === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  pk.item,
+                  {
+                    borderBottomColor: colors.border,
+                    backgroundColor: isSelected
+                      ? withOpacity(colors.primary, 0.08)
+                      : 'transparent',
+                  },
+                ]}
+                onPress={() => {
+                  onSelect(item);
+                  onClose();
+                }}
+              >
+                <AppText
+                  style={[
+                    pk.itemText,
+                    {
+                      color: isSelected ? colors.primary : colors.foreground,
+                      fontWeight: isSelected ? '600' : '400',
+                    },
+                  ]}
+                >
+                  {item}
+                </AppText>
+                {isSelected && (
+                  <Icon name="Check" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </AppView>
     </Modal>
   );
@@ -95,5 +115,4 @@ const pk = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   itemText: { flex: 1, fontSize: 17 },
-  checkmark: { fontSize: 18, fontWeight: '700' },
 });
