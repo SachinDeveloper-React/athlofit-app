@@ -160,20 +160,30 @@ const syncHealthData = async (req, res, next) => {
     // Always update lastActiveDate when syncing today's data
     // (tracks that the user was active today, regardless of goal completion)
     const actualToday = todayISO();
-    if (today === actualToday && gam.lastActiveDate !== actualToday) {
+    // Coins are ONLY awarded for today's actual date — never for past-day background syncs.
+    // Allow a 1-day tolerance for timezone edge cases (app in UTC vs server in IST).
+    const isTodaySync = (today === actualToday);
+    const isNearToday = isTodaySync || (() => {
+      // Check if `today` is yesterday (server time) — which could still be "today" for the user
+      const d1 = new Date(`${actualToday}T00:00:00Z`);
+      const d2 = new Date(`${today}T00:00:00Z`);
+      return Math.abs(d1 - d2) <= 86400000; // within 24 hours
+    })();
+    
+    if ((isTodaySync || isNearToday) && gam.lastActiveDate !== actualToday) {
       gam.lastActiveDate = actualToday;
     }
 
-    // Reset daily coins counter if it's a new day — but ONLY for today's syncs.
-    // Past-day background syncs must not touch the daily counter.
-    if (today === actualToday && gam.lastCoinDate !== actualToday) {
+    // Reset daily coins counter ONLY when we're sure it's a new server-day.
+    // Use lastCoinDate (which is set to the server's actualToday) to avoid double-resets.
+    if (isTodaySync && gam.lastCoinDate !== actualToday) {
       gam.coinsEarnedToday = 0;
     }
 
     let goalCoinsAwarded = false;
     let awardedGoalCoins = 0;
 
-    if (isGoalMet && gam.stepGoalCoinDate !== today && today === actualToday) {
+    if (isGoalMet && gam.stepGoalCoinDate !== today && isTodaySync) {
       // Award step goal coins automatically (subject to daily cap)
       const stepGoalCoins = cfg.rewards.stepGoalCoins ?? 50;
       const effectiveCap = getEffectiveDailyCap(req.user, cfg.coin.maxDailyRewards ?? 500, cfg.coin.unverifiedDailyCap);
@@ -229,9 +239,9 @@ const syncHealthData = async (req, res, next) => {
       // Background syncs for past days must NOT overwrite the daily counter,
       // otherwise the next foreground sync will see a stale lastCoinDate,
       // reset coinsEarnedToday to 0, and re-add coins (double-counting bug).
-      const isTodaySync = today === actualToday;
+      const isTodaySyncPassive = isTodaySync;
 
-      if (isTodaySync) {
+      if (isTodaySyncPassive) {
         const dailyEarnLimit = getEffectiveDailyCap(req.user, cfg.coin.dailyEarnLimit, cfg.coin.unverifiedDailyCap);
         const rate = cfg.coin_config?.steps?.rate_per_100_steps ?? 0.5;
         const coinsEarnedToday = parseFloat(Math.min(dailyEarnLimit, Math.max(0, Math.floor((steps ?? 0) / 100) * rate)).toFixed(2));
@@ -241,7 +251,7 @@ const syncHealthData = async (req, res, next) => {
           const actualAdded = parseFloat((coinsEarnedToday - currentEarned).toFixed(2));
           gam.coinsEarnedToday = coinsEarnedToday;
           gam.coinsBalance = parseFloat((gam.coinsBalance + actualAdded).toFixed(2));
-          gam.lastCoinDate = today;
+          gam.lastCoinDate = actualToday;
           await gam.save();
 
           // Log passive step coin transaction
@@ -259,7 +269,7 @@ const syncHealthData = async (req, res, next) => {
     }
 
     // Ensure lastActiveDate is persisted even if no coins were added this sync
-    if (today === actualToday && gam.isModified('lastActiveDate')) {
+    if (isTodaySync && gam.isModified('lastActiveDate')) {
       await gam.save();
     }
 
@@ -331,10 +341,36 @@ async function _updateStreak(userId, date) {
       gam.streakDays += 1;
       gam.lastActiveDate = date;
       dirty = true;
+
+      // Grant freeze/life protections after streak grows.
+      const { getStreakConfig, grantProtections } = require('../utils/streak');
+      const sCfg = await getStreakConfig();
+      grantProtections(gam, sCfg);
     } else {
-      // Known gap — genuine streak break
-      gam.streakDays = 1;
-      gam.lastActiveDate = date;
+      // Known gap — attempt freeze/life protection before breaking.
+      const { getStreakConfig, attemptProtect } = require('../utils/streak');
+      const sCfg = await getStreakConfig();
+      const protection = attemptProtect(gam, sCfg);
+
+      if (protection.protected) {
+        // Streak saved! Mark today as active, do NOT reset.
+        gam.lastActiveDate = date;
+      } else {
+        // Streak broken — attemptProtect already set streakDays to 0.
+        // Now start a new streak at 1 for today's activity.
+        gam.streakDays = 1;
+        gam.lastActiveDate = date;
+
+        // Send motivational push notification (fire-and-forget).
+        try {
+          createNotification(userId, {
+            type: 'STREAK',
+            title: "💪 Don't worry — start fresh!",
+            message: 'Your streak broke, but every step counts. Get back on track today!',
+            data: { screen: 'Tracker' },
+          });
+        } catch (_) { /* non-critical */ }
+      }
       dirty = true;
     }
 

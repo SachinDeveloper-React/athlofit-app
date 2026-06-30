@@ -21,6 +21,24 @@ const LEGAL_TITLES = {
   refund: "Refund & Cancellation Policy",
 };
 
+// Convert content to clean HTML for the mobile app.
+// If already HTML, just sanitize. If markdown, convert via `marked`.
+function toHtml(raw) {
+  if (!raw || !raw.trim()) return '';
+  let html = raw;
+  const looksLikeHtml = /<[a-z][\s\S]*>/i.test(html);
+  if (!looksLikeHtml) {
+    const { marked } = require('marked');
+    html = marked.parse(html);
+  }
+  // Strip PDF/Word paste artifacts
+  html = html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/\s*class="[^"]*"/gi, '')
+    .replace(/\s*style="[^"]*"/gi, '');
+  return html;
+}
+
 // ─── Internal: get or seed the single global config doc ──────────────────────
 async function getOrCreateConfig() {
   let cfg = await AppConfig.findOne({ key: "global" });
@@ -94,6 +112,7 @@ const getAppConfig = async (req, res, next) => {
           cfg.website?.defaultMetaDescription ??
           'Track your fitness, earn coins by walking, and shop premium health products.',
         ogImage: cfg.website?.ogImage ?? '',
+        logoUrl: cfg.website?.logoUrl ?? '',
         razorpayEnabled: cfg.website?.razorpayEnabled ?? false,
       },
       coin_config: {
@@ -169,8 +188,13 @@ const updateAppConfig = async (req, res, next) => {
     const cfg = await AppConfig.findOneAndUpdate(
       { key: "global" },
       { $set: setMap },
-      { new: true, upsert: true, runValidators: true },
+      { new: true, upsert: true },
     );
+
+    // Invalidate the in-memory config cache so changes take effect immediately.
+    try {
+      require('../utils/configCache').invalidateConfigCache();
+    } catch (_) { /* cache module optional */ }
 
     return success(res, "App config updated", cfg);
   } catch (err) {
@@ -209,6 +233,7 @@ We may update these terms from time to time. Your continued use of the app const
 
     return success(res, "Terms fetched", {
       content: doc.content,
+      htmlContent: toHtml(doc.content),
       version: doc.version,
       updatedAt: doc.updatedAt,
     });
@@ -265,6 +290,7 @@ You can request to delete your account and associated data at any time through t
 
     return success(res, "Privacy policy fetched", {
       content: doc.content,
+      htmlContent: toHtml(doc.content),
       version: doc.version,
       updatedAt: doc.updatedAt,
     });
@@ -328,10 +354,14 @@ const getLegalByType = async (req, res, next) => {
       });
     }
 
+    // Generate HTML for the mobile app.
+    let htmlContent = toHtml(doc.content);
+
     return success(res, "Legal document fetched", {
       type: doc.type,
       title: doc.title,
-      content: doc.content,
+      content: doc.content,       // raw (markdown or HTML) — used by admin editor
+      htmlContent,                 // clean HTML — used by mobile app
       version: doc.version,
       isPublished: doc.isPublished,
       updatedAt: doc.updatedAt,
@@ -608,7 +638,13 @@ const adminGetTickets = async (req, res, next) => {
 // PATCH /config/admin/support-tickets/:id
 const adminUpdateTicket = async (req, res, next) => {
   try {
-    const { status, adminNotes } = req.body;
+    const { status, adminNotes, adminReply } = req.body;
+
+    const oldTicket = await SupportTicket.findById(req.params.id);
+    if (!oldTicket) return error(res, "Ticket not found", 404);
+
+    const oldStatus = oldTicket.status;
+
     const ticket = await SupportTicket.findByIdAndUpdate(
       req.params.id,
       {
@@ -619,7 +655,75 @@ const adminUpdateTicket = async (req, res, next) => {
       },
       { new: true },
     );
-    if (!ticket) return error(res, "Ticket not found", 404);
+
+    // ── Notify the user about the update ─────────────────────────────────────
+    const statusChanged = status && status !== oldStatus;
+    const hasReply = adminReply?.trim();
+
+    if (statusChanged || hasReply) {
+      const statusLabels = {
+        open: 'Open',
+        in_progress: 'In Progress',
+        resolved: 'Resolved',
+        closed: 'Closed',
+      };
+      const newStatusLabel = statusLabels[ticket.status] || ticket.status;
+      const shortId = ticket._id.toString().slice(-6).toUpperCase();
+
+      // Push notification (only if the ticket was submitted by a logged-in user)
+      if (ticket.user) {
+        const { createNotification } = require("../utils/createNotification");
+        createNotification(ticket.user, {
+          type: 'SUPPORT',
+          title: '📩 Support Ticket Updated',
+          message: hasReply
+            ? `Reply on ticket #${shortId}: "${adminReply.trim().slice(0, 80)}"`
+            : `Your ticket #${shortId} status changed to: ${newStatusLabel}`,
+          data: { screen: 'Support', ticketId: ticket._id.toString() },
+        });
+      }
+
+      // Email notification (always — every ticket has an email)
+      try {
+        const { sendOtpEmail } = require("../utils/otp");
+        const nodemailer = require("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT) || 587,
+          secure: Number(process.env.SMTP_PORT) === 465,
+          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        });
+
+        const subject = hasReply
+          ? `Re: ${ticket.subject} — Ticket #${shortId}`
+          : `Your support ticket #${shortId} is now ${newStatusLabel}`;
+
+        const body = [
+          `Hi ${ticket.name},`,
+          '',
+          hasReply ? `We've replied to your support request:` : `Your support ticket status has been updated:`,
+          '',
+          `Subject: ${ticket.subject}`,
+          `Status: ${newStatusLabel}`,
+          ...(hasReply ? ['', `Admin reply:`, adminReply.trim()] : []),
+          '',
+          'If you have more questions, simply reply to this email or submit a new request.',
+          '',
+          '— Athlofit Support Team',
+        ].join('\n');
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_FROM || '"Athlofit" <noreply@athlofit.com>',
+          to: ticket.email,
+          subject,
+          text: body,
+        });
+      } catch (emailErr) {
+        // Non-critical — log but don't fail the request.
+        console.error('[SupportTicket] Email notification failed:', emailErr.message);
+      }
+    }
+
     return success(res, "Ticket updated", ticket);
   } catch (err) {
     next(err);

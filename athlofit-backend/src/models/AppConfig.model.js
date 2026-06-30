@@ -126,6 +126,7 @@ const appConfigSchema = new mongoose.Schema(
         default: 'Track your fitness, earn coins by walking, and shop premium health products.',
       },
       ogImage:         { type: String, default: '' },
+      logoUrl:         { type: String, default: '' },
       razorpayEnabled: { type: Boolean, default: false },
     },
 
@@ -138,6 +139,73 @@ const appConfigSchema = new mongoose.Schema(
           enabled:    { type: Boolean, default: true },
           coin_value: { type: Number, default: 50 },
         },
+      },
+    },
+
+    // ─── Streak protection settings (admin-controlled) ───────────────────────
+    streak: {
+      // Freeze: earned every N consecutive streak days (milestone).
+      freezeEarnEvery:  { type: Number, default: 7 },
+      // Max freezes a user can store at any time.
+      maxFreezes:       { type: Number, default: 2 },
+      // Freeze grace period (hours). Default 24 = 1 missed day is forgiven.
+      freezeGraceHours: { type: Number, default: 24 },
+      // Weekly life: earn 1 life every 7 calendar days.
+      lifeEarnIntervalDays: { type: Number, default: 7 },
+      // Max lives a user can store.
+      maxLives:         { type: Number, default: 2 },
+      // Coin cost to restore a broken streak (manual restore option).
+      restoreCostCoins: { type: Number, default: 100 },
+      // Time window (hours) in which restore is allowed after a break.
+      restoreWindowHours: { type: Number, default: 48 },
+    },
+
+    // ─── Notification templates (admin-editable) ──────────────────────────────
+    // Variables: {{orderId}}, {{coins}}, {{streak}}, {{goal}}, {{name}}, {{badge}}
+    notifications: {
+      orderConfirmed: {
+        title: { type: String, default: '🛍️ Order Confirmed!' },
+        message: { type: String, default: 'Your order #{{orderId}} has been placed successfully.' },
+      },
+      orderCancelled: {
+        title: { type: String, default: '❌ Order Cancelled' },
+        message: { type: String, default: 'Order #{{orderId}} cancelled. {{coins}} coins refunded.' },
+      },
+      stepGoalReached: {
+        title: { type: String, default: '🎯 Daily Step Goal Reached!' },
+        message: { type: String, default: 'You hit your {{goal}} step goal and earned {{coins}} coins!' },
+      },
+      rewardClaimed: {
+        title: { type: String, default: '🪙 Reward Claimed!' },
+        message: { type: String, default: 'You claimed {{coins}} coins for "{{name}}"!' },
+      },
+      achievementUnlocked: {
+        title: { type: String, default: '🏆 Achievement Unlocked!' },
+        message: { type: String, default: 'You unlocked "{{name}}" and earned {{coins}} coins!' },
+      },
+      badgeUnlocked: {
+        title: { type: String, default: '{{badge}} Badge Unlocked!' },
+        message: { type: String, default: 'Congrats! You unlocked the {{name}} badge.' },
+      },
+      streakBroken: {
+        title: { type: String, default: "💪 Start fresh!" },
+        message: { type: String, default: 'Your streak ended, but every step counts. Start a new one today!' },
+      },
+      streakFrozen: {
+        title: { type: String, default: '🧊 Streak Frozen!' },
+        message: { type: String, default: 'Your streak freeze kicked in! Get moving today.' },
+      },
+      streakLifeUsed: {
+        title: { type: String, default: '🩹 Streak Saved!' },
+        message: { type: String, default: 'A streak life was used. Walk today to keep it going!' },
+      },
+      streakRestored: {
+        title: { type: String, default: '🔥 Streak Restored!' },
+        message: { type: String, default: 'Your {{streak}}-day streak is back! Keep it going.' },
+      },
+      challengeComplete: {
+        title: { type: String, default: '🎉 Challenge Complete!' },
+        message: { type: String, default: 'You completed "{{name}}" and earned {{coins}} coins!' },
       },
     },
   },

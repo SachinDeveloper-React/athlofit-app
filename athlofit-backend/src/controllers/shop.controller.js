@@ -8,12 +8,24 @@ const User = require('../models/User.model');
 const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
 const { logCoinTransaction } = require('../utils/logCoinTransaction');
+const { resolveNotification } = require('../utils/notificationTemplates');
 
 // BUG-032: Escape regex special characters to prevent ReDoS
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Conversion Rate: 10 Coins = 1 INR
-const COIN_CONVERSION_RATE = 10;
+// Conversion Rate: reads from AppConfig (admin-controlled). Fallback = 10.
+// Do NOT use this const directly in purchase logic — use getCoinRate() below.
+const DEFAULT_COIN_RATE = 10;
+
+async function getCoinRate() {
+  try {
+    const { getCachedConfig } = require('../utils/configCache');
+    const cfg = await getCachedConfig();
+    return cfg?.coin?.conversionRate ?? DEFAULT_COIN_RATE;
+  } catch {
+    return DEFAULT_COIN_RATE;
+  }
+}
 
 // ─── GET /shop/categories ─────────────────────────────────────────────────────
 const getCategories = async (req, res, next) => {
@@ -250,22 +262,41 @@ const buyWithCoins = async (req, res, next) => {
       if (!product || !product.isActive) {
         return error(res, `Product ${item.productId} unavailable`, 400);
       }
-      if (product.stock < item.quantity) {
-        return error(res, `Insufficient stock for ${product.name}`, 400);
+
+      let activePrice = product.discountedPrice !== null ? product.discountedPrice : product.price;
+      let variantInfo = { variantId: null, size: '', color: '' };
+
+      if (product.hasVariants && product.variants.length) {
+        // A variant must be selected and have enough stock.
+        if (!item.variantId) {
+          return error(res, `Please select a variant for ${product.name}`, 400);
+        }
+        const variant = product.variants.id(item.variantId);
+        if (!variant) {
+          return error(res, `Selected variant unavailable for ${product.name}`, 400);
+        }
+        if (variant.stock < item.quantity) {
+          return error(res, `Insufficient stock for ${product.name} (${[variant.size, variant.color].filter(Boolean).join('/')})`, 400);
+        }
+        if (variant.priceOverride != null) activePrice = variant.priceOverride;
+        variantInfo = { variantId: variant._id, size: variant.size, color: variant.color };
+      } else {
+        if (product.stock < item.quantity) {
+          return error(res, `Insufficient stock for ${product.name}`, 400);
+        }
       }
 
-      const activePrice = product.discountedPrice !== null ? product.discountedPrice : product.price;
-      const itemCoinPrice = activePrice * COIN_CONVERSION_RATE;
-      
+      const itemCoinPrice = activePrice * (await getCoinRate());
       totalStandardPrice += activePrice * item.quantity;
       totalCoinCost += itemCoinPrice * item.quantity;
-      
+
       orderItems.push({
         product: product._id,
         name: product.name,
         price: activePrice,
         coinPrice: itemCoinPrice,
         quantity: item.quantity,
+        variant: variantInfo,
       });
     }
 
@@ -304,36 +335,44 @@ const buyWithCoins = async (req, res, next) => {
     }
 
     // Perform stock decrement, coin deduction, and order creation sequentially.
-    // Uses atomic per-document operations with manual rollback on failure.
+    // Wrap stock decrement, coin deduction, coupon use, and order creation in a
+    // MongoDB transaction so any failure rolls back ALL changes atomically.
+    const session = await mongoose.startSession();
+    session.startTransaction();
     let order;
-    const decrementedItems = [];
     try {
-      // Deduct stock atomically per product
+      // Deduct stock (variant-aware, atomic with guard)
       for (const item of items) {
-        const updated = await Product.findOneAndUpdate(
-          { _id: item.productId, stock: { $gte: item.quantity } },
-          { $inc: { stock: -item.quantity } },
-          { new: true },
-        );
-        if (!updated) {
-          throw new Error(`Insufficient stock for product ${item.productId}`);
+        if (item.variantId) {
+          const r = await Product.updateOne(
+            { _id: item.productId, 'variants._id': item.variantId, 'variants.stock': { $gte: item.quantity } },
+            { $inc: { 'variants.$.stock': -item.quantity, stock: -item.quantity } },
+            { session },
+          );
+          if (r.matchedCount === 0) throw new Error('Variant went out of stock');
+        } else {
+          const r = await Product.updateOne(
+            { _id: item.productId, stock: { $gte: item.quantity } },
+            { $inc: { stock: -item.quantity } },
+            { session },
+          );
+          if (r.matchedCount === 0) throw new Error('Product went out of stock');
         }
-        decrementedItems.push(item);
       }
 
       // BUG-030: Use Math.round to prevent floating-point drift in coin balance
       gamification.coinsBalance = Math.round(gamification.coinsBalance - finalCoinCost);
-      await gamification.save();
+      await gamification.save({ session });
 
       // Mark coupon as used
       if (appliedCoupon) {
         appliedCoupon.usageCount += 1;
         appliedCoupon.usedBy.push(req.user._id);
-        await appliedCoupon.save();
+        await appliedCoupon.save({ session });
       }
 
       // Create Order
-      order = await Order.create({
+      [order] = await Order.create([{
         user: req.user._id,
         items: orderItems,
         totalPrice: totalStandardPrice,
@@ -343,16 +382,14 @@ const buyWithCoins = async (req, res, next) => {
         paymentMethod: 'COIN_PURCHASE',
         status: 'PAID',
         shippingAddress: shippingAddress || {},
-      });
+      }], { session });
+
+      await session.commitTransaction();
     } catch (txErr) {
-      // Rollback: restore stock for already decremented products
-      for (const item of decrementedItems) {
-        await Product.findOneAndUpdate(
-          { _id: item.productId },
-          { $inc: { stock: item.quantity } },
-        );
-      }
+      await session.abortTransaction();
       throw txErr;
+    } finally {
+      session.endSession();
     }
 
     // Log coin transaction for purchase
@@ -367,10 +404,12 @@ const buyWithCoins = async (req, res, next) => {
     });
 
     // ── Persist + push: order confirmed ──────────────────────────────────
+    const ordShortId = order._id.toString().slice(-6).toUpperCase();
+    const ordTpl = await resolveNotification('orderConfirmed', { orderId: ordShortId });
     createNotification(req.user._id, {
       type:    'PRODUCT',
-      title:   '🛍️ Order Confirmed!',
-      message: `Your order #${order._id.toString().slice(-6).toUpperCase()} has been placed successfully.`,
+      title:   ordTpl?.title || '🛍️ Order Confirmed!',
+      message: ordTpl?.message || `Your order #${ordShortId} has been placed successfully.`,
       data:    { screen: 'OrderHistory' },
     });
 
@@ -466,7 +505,13 @@ const cancelOrder = async (req, res, next) => {
 
     // ── Restore product stock ────────────────────────────────────────────────
     for (const item of order.items) {
-      if (item.product) {
+      if (!item.product) continue;
+      if (item.variant?.variantId) {
+        await Product.updateOne(
+          { _id: item.product, 'variants._id': item.variant.variantId },
+          { $inc: { 'variants.$.stock': item.quantity, stock: item.quantity } },
+        );
+      } else {
         await Product.findByIdAndUpdate(item.product, {
           $inc: { stock: item.quantity },
         });
