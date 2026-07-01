@@ -3,7 +3,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { nutritionService } from '../service/nutrition.service';
-import { challengeKeys } from './useChallenges';
 import type {
   LogMealRequest,
   NutritionPreferences,
@@ -84,6 +83,8 @@ export function useNutritionPreferences() {
 
 /**
  * Logs a new meal entry — invalidates the daily summary and challenges.
+ * Adds a short delay before invalidating challenges because the backend
+ * syncs challenge progress asynchronously (fire-and-forget).
  */
 export function useLogMeal() {
   const client = useQueryClient();
@@ -92,14 +93,21 @@ export function useLogMeal() {
     mutationFn: (body: LogMealRequest) => nutritionService.logMeal(body),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
-      // Backend syncs challenge progress on meal log — refetch so UI reflects completion
-      client.invalidateQueries({ queryKey: challengeKeys.all() });
+      // Small delay to ensure backend async operations have fully committed
+      setTimeout(() => {
+        client.invalidateQueries({ queryKey: ['challenges'] });
+        client.invalidateQueries({ queryKey: ['challenge'] }); // detail pages
+        client.invalidateQueries({ queryKey: ['coin-data'] });
+        client.invalidateQueries({ queryKey: ['gamification'] });
+      }, 500);
     },
   });
 }
 
 /**
  * Deletes a logged meal entry by ID.
+ * If deleting the meal reverses a challenge, the response includes
+ * reversedChallenges and coinsDeducted for the UI to show a warning.
  */
 export function useDeleteMeal() {
   const client = useQueryClient();
@@ -108,7 +116,10 @@ export function useDeleteMeal() {
     mutationFn: (id: string) => nutritionService.deleteMeal(id),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
-      client.invalidateQueries({ queryKey: challengeKeys.all() });
+      client.invalidateQueries({ queryKey: ['challenges'] });
+      client.invalidateQueries({ queryKey: ['challenge'] }); // detail pages
+      client.invalidateQueries({ queryKey: ['coin-data'] });
+      client.invalidateQueries({ queryKey: ['gamification'] });
     },
   });
 }

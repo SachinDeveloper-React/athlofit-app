@@ -15,6 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AppText, AppView, Card } from '../../../../components';
 import { Icon } from '../../../../components';
+import AlertDialog, { type AlertDialogProps } from '../../../../components/AlertDialog';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { CalorieSummaryCard } from '../nutrition/CalorieSummaryCard';
@@ -189,13 +190,60 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const { mutate: deleteMeal, isPending: isDeleting } = useDeleteMeal();
   const { mutate: updatePrefs, isPending: isUpdatingPrefs } = useUpdatePreferences();
 
+  // ── Alert dialog state for meal deletion ────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<Omit<AlertDialogProps, 'visible' | 'onClose'> | null>(null);
+  const hideAlert = useCallback(() => setAlertConfig(null), []);
+
   const handleAddMeal = useCallback(
     (entry: LogMealRequest) => { logMeal(entry); },
     [logMeal],
   );
 
   const handleDeleteMeal = useCallback(
-    (id: string) => { deleteMeal(id); },
+    (id: string) => {
+      // Show confirmation alert before deleting
+      setAlertConfig({
+        variant: 'warning',
+        title: 'Remove Meal Log?',
+        message: 'If this meal contributed to a challenge completion, your earned coins will be deducted.',
+        details: [
+          { emoji: '🪙', text: 'Challenge coins will be reversed' },
+          { emoji: '📊', text: 'Challenge progress will update' },
+          { emoji: '📜', text: 'Deduction shown in coin history' },
+        ],
+        actions: [
+          { label: 'Cancel', onPress: () => setAlertConfig(null), variant: 'outline' },
+          {
+            label: 'Remove',
+            onPress: () => {
+              setAlertConfig(null);
+              deleteMeal(id, {
+                onSuccess: (response: any) => {
+                  const data = response?.data;
+                  if (data?.coinsDeducted && data.coinsDeducted > 0) {
+                    // Show info about reversed coins
+                    const challenges = data.reversedChallenges || [];
+                    setAlertConfig({
+                      variant: 'info',
+                      title: 'Coins Deducted',
+                      message: `${data.coinsDeducted} coins were reversed because challenge progress dropped.`,
+                      details: challenges.map((c: any) => ({
+                        emoji: '🏆',
+                        text: `${c.title}: -${c.coinsDeducted} coins`,
+                      })),
+                      actions: [
+                        { label: 'OK', onPress: () => setAlertConfig(null), variant: 'primary' },
+                      ],
+                    });
+                  }
+                },
+              });
+            },
+            variant: 'destructive',
+          },
+        ],
+      });
+    },
     [deleteMeal],
   );
 
@@ -244,6 +292,7 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   }
 
   return (
+  <>
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scroll}
@@ -304,6 +353,19 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
+
+    {/* Meal deletion confirmation / reversal info alert */}
+    <AlertDialog
+      visible={alertConfig !== null}
+      onClose={hideAlert}
+      variant={alertConfig?.variant}
+      title={alertConfig?.title ?? ''}
+      message={alertConfig?.message}
+      details={alertConfig?.details}
+      actions={alertConfig?.actions}
+      closeOnBackdrop={false}
+    />
+  </>
   );
 });
 

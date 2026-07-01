@@ -617,26 +617,40 @@ const CartScreen = () => {
   // ── Empty state ──────────────────────────────────────────────────────────────
   if (items.length === 0) {
     return (
-      <Screen safeArea={false} header={<Header backLabel='' bordered showBack title='My Cart'/>}>
+      <>
+        <Screen safeArea={false} header={<Header backLabel='' bordered showBack title='My Cart'/>}>
 
-        <Animated.View entering={FadeInUp.duration(350)} style={styles.emptyWrap}>
-          <View style={[styles.emptyIcon, { backgroundColor: withOpacity('#F5C518', 0.12) }]}>
-            <Icon name="ShoppingCart" size={44} color="#B45309" />
-          </View>
-          <AppText variant="title3" weight="bold" style={{ marginTop: 20 }}>Your cart is empty</AppText>
-          <AppText variant="body" secondary align="center" style={{ marginTop: 8, lineHeight: 22, paddingHorizontal: 32 }}>
-            Add products and buy them with your earned fitness coins — no real money needed!
-          </AppText>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={[styles.shopNowBtn, { backgroundColor: '#92400E', borderRadius: 16, marginTop: 28 }]}
-          >
-            <Icon name="Coins" size={18} color="#FEF3C7" />
-            <AppText variant="body" weight="bold" color="#FEF3C7" style={{ marginLeft: 8 }}>Shop with Coins</AppText>
-          </Pressable>
-        </Animated.View>
+          <Animated.View entering={FadeInUp.duration(350)} style={styles.emptyWrap}>
+            <View style={[styles.emptyIcon, { backgroundColor: withOpacity('#F5C518', 0.12) }]}>
+              <Icon name="ShoppingCart" size={44} color="#B45309" />
+            </View>
+            <AppText variant="title3" weight="bold" style={{ marginTop: 20 }}>Your cart is empty</AppText>
+            <AppText variant="body" secondary align="center" style={{ marginTop: 8, lineHeight: 22, paddingHorizontal: 32 }}>
+              Add products and buy them with your earned fitness coins — no real money needed!
+            </AppText>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={[styles.shopNowBtn, { backgroundColor: '#92400E', borderRadius: 16, marginTop: 28 }]}
+            >
+              <Icon name="Coins" size={18} color="#FEF3C7" />
+              <AppText variant="body" weight="bold" color="#FEF3C7" style={{ marginLeft: 8 }}>Shop with Coins</AppText>
+            </Pressable>
+          </Animated.View>
       
-      </Screen>
+        </Screen>
+
+        {/* Alert dialog must render here too — after purchase clears cart, this branch renders */}
+        <AlertDialog
+          visible={alertConfig !== null}
+          onClose={hideAlert}
+          variant={alertConfig?.variant}
+          title={alertConfig?.title ?? ''}
+          message={alertConfig?.message}
+          details={alertConfig?.details}
+          actions={alertConfig?.actions}
+          closeOnBackdrop={false}
+        />
+      </>
     );
   }
 

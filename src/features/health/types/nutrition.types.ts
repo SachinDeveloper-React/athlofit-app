@@ -61,7 +61,11 @@ export type UpdatePreferencesRequest = NutritionPreferences;
 export type DailySummaryResponse = ApiResponse<DailyNutritionSummary>;
 export type NutritionPreferencesResponse = ApiResponse<NutritionPreferences>;
 export type LogMealResponse = ApiResponse<MealEntry>;
-export type DeleteMealResponse = ApiResponse<{ deleted: boolean }>;
+export type DeleteMealResponse = ApiResponse<{
+  deleted: boolean;
+  reversedChallenges?: { title: string; coinsDeducted: number }[];
+  coinsDeducted?: number;
+}>;
 export type UpdatePreferencesResponse = ApiResponse<NutritionPreferences>;
 
 // ─── Meal Meta ────────────────────────────────────────────────────────────────

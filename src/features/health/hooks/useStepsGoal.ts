@@ -58,7 +58,7 @@ export function useStepsGoal(initialSteps = 8000): UseStepsGoalReturn {
   });
 
   const handleSlider = useCallback((val: number) => {
-    const rounded = Math.round(val / 500) * 500;
+    const rounded = Math.max(5000, Math.round(val / 500) * 500);
     setSteps(rounded);
     const match = PRESETS.find((p) => p.value === rounded);
     setActivePreset(match ? rounded : null);
