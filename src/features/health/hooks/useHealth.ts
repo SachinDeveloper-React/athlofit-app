@@ -240,12 +240,13 @@ export function useHealth(options: UseHealthOptions = {}) {
       // If native step counter is active, use its value as the step count.
       // This ensures steps show immediately (native counter updates in real-time)
       // rather than waiting for the 5-min Health Connect write cycle.
+      // Also prevents inflation from Health Connect aggregating multiple sources.
       const { stepService } = await import('../../../services/stepService');
       if (stepService.getSource() === 'native_sensor') {
         const nativeSteps = await stepService.getCurrentSteps();
-        if (nativeSteps > 0 || result.steps === 0) {
-          result = { ...result, steps: nativeSteps };
-        }
+        // Always use native sensor as the authoritative step count — it reads
+        // directly from the hardware pedometer without third-party interference.
+        result = { ...result, steps: nativeSteps };
       }
 
       setData(result);

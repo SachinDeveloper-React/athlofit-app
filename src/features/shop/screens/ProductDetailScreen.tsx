@@ -364,7 +364,7 @@ const ProductDetailScreen = () => {
             {[
               { icon: 'Truck', title: 'Fast Delivery', sub: 'Delivered to your door' },
               { icon: 'ShieldCheck', title: 'Secure Purchase', sub: 'Coins deducted instantly' },
-              { icon: 'RotateCcw', title: 'Easy Returns', sub: 'Cancel before shipping' },
+              { icon: 'RefreshCw', title: 'Easy Returns', sub: 'Cancel before shipping' },
             ].map((item, i) => (
               <View key={item.icon} style={[styles.deliveryRow, i > 0 && { marginTop: 14 }]}>
                 <View style={[styles.deliveryIcon, { backgroundColor: withOpacity(colors.primary, 0.12) }]}>

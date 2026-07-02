@@ -182,7 +182,7 @@ const ChallengeDetailScreen: React.FC = () => {
           { icon: 'Activity', text: `Track your ${meta.label.toLowerCase()} through the app` },
           { icon: 'RefreshCw', text: 'Progress updates automatically when you sync health data' },
           { icon: 'Coins', text: `Earn ${challenge.coinReward} coins automatically on completion` },
-          { icon: 'RotateCcw', text: `Resets ${challenge.type === 'daily' ? 'every day at midnight' : 'every Monday'}` },
+          { icon: 'RefreshCw', text: `Resets ${challenge.type === 'daily' ? 'every day at midnight' : 'every Monday'}` },
         ].map((item, i) => (
           <View key={i} style={[styles.howRow, i > 0 && { marginTop: 12 }]}>
             <View style={[styles.howIcon, { backgroundColor: withOpacity(colors.primary, 0.1) }]}>
