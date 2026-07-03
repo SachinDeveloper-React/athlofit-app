@@ -63,6 +63,7 @@ export type HealthStackParamList = {
 export type ShopStackParamList = {
   [ShopRoutes.SHOP]: undefined;
   [ShopRoutes.SHOP_SEARCH]: undefined;
+  [ShopRoutes.FEATURED_ALL]: undefined;
   [ShopRoutes.PRODUCT_DETAIL]: { productId: string };
   [ShopRoutes.CART]: { preSelectCoins?: boolean } | undefined;
   [ShopRoutes.CHECKOUT]: undefined;

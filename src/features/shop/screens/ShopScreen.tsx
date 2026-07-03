@@ -56,6 +56,7 @@ type StaticHeaderProps = {
   onGoToOrders: () => void;
   onCategoryPress: (slug: string) => void;
   onProductPress: (product: Product) => void;
+  onSeeAllFeatured: () => void;
 };
 
 const StaticHeader = memo(({
@@ -69,6 +70,7 @@ const StaticHeader = memo(({
   onGoToOrders,
   onCategoryPress,
   onProductPress,
+  onSeeAllFeatured,
 }: StaticHeaderProps) => {
   const { colors } = useTheme();
 
@@ -136,23 +138,28 @@ const StaticHeader = memo(({
               <AppText variant="title3" weight="bold">Featured</AppText>
               <AppText variant="caption1" secondary style={{ marginTop: 2 }}>Hand-picked for your goals</AppText>
             </View>
-            <Pressable style={[styles.seeAllBtn, { borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => onSeeAllFeatured()}
+              style={[styles.seeAllBtn, { borderColor: colors.border }]}
+            >
               <AppText variant="caption1" color={colors.primary} weight="semiBold">See all</AppText>
               <Icon name="ChevronRight" size={13} color={colors.primary} />
             </Pressable>
           </View>
-          <FlashList
-            data={featuredProducts}
-            keyExtractor={item => item._id}
-            renderItem={({ item, index }) => (
-              <FeaturedCard product={item} index={index} onPress={onProductPress} />
-            )}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 16, paddingRight: 4 }}
-            snapToInterval={SCREEN_WIDTH * 0.74 + 12}
-            decelerationRate="fast"
-          />
+          <View style={{ height: 212 }}>
+            <FlashList
+              data={featuredProducts}
+              keyExtractor={item => item._id}
+              renderItem={({ item, index }) => (
+                <FeaturedCard product={item} index={index} onPress={onProductPress} />
+              )}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 16, paddingRight: 4 }}
+              snapToInterval={SCREEN_WIDTH * 0.74 + 12}
+              decelerationRate="fast"
+            />
+          </View>
         </View>
       )}
     </Animated.View>
@@ -275,6 +282,7 @@ const ShopScreen = () => {
   const goToCart    = useCallback(() => navigation.navigate(RootRoutes.SHOP_NAVIGATOR, { screen: ShopRoutes.CART }), [navigation]);
   const goToSearch  = useCallback(() => navigation.navigate(RootRoutes.SHOP_NAVIGATOR, { screen: ShopRoutes.SHOP_SEARCH }), [navigation]);
   const goToOrders  = useCallback(() => navigation.navigate(RootRoutes.SHOP_NAVIGATOR, { screen: ShopRoutes.ORDER_HISTORY }), [navigation]);
+  const goToFeaturedAll = useCallback(() => navigation.navigate(RootRoutes.SHOP_NAVIGATOR, { screen: ShopRoutes.FEATURED_ALL }), [navigation]);
 
   const rows: Product[][] = [];
   for (let i = 0; i < products.length; i += 2) {
@@ -313,6 +321,7 @@ const ShopScreen = () => {
                 onGoToOrders={goToOrders}
                 onCategoryPress={loadByCategory}
                 onProductPress={handleProductPress}
+                onSeeAllFeatured={goToFeaturedAll}
               />
               <DynamicSection
                 selectedCategory={selectedCategory}

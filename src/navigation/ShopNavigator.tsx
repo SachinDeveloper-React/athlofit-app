@@ -9,6 +9,7 @@ import OrderHistoryScreen from '../features/shop/screens/OrderHistoryScreen';
 import ShopSearchScreen from '../features/shop/screens/ShopSearchScreen';
 import AddressesScreen from '../features/shop/screens/AddressesScreen';
 import AddEditAddressScreen from '../features/shop/screens/AddEditAddressScreen';
+import FeaturedAllScreen from '../features/shop/screens/FeaturedAllScreen';
 import { useTheme } from '../hooks/useTheme';
 
 const Stack = createNativeStackNavigator<ShopStackParamList>();
@@ -25,6 +26,7 @@ const ShopNavigator: React.FC = () => {
       }}
     >
       <Stack.Screen name={ShopRoutes.SHOP_SEARCH}     component={ShopSearchScreen} />
+      <Stack.Screen name={ShopRoutes.FEATURED_ALL}    component={FeaturedAllScreen} />
       <Stack.Screen name={ShopRoutes.PRODUCT_DETAIL}  component={ProductDetailScreen} />
       <Stack.Screen name={ShopRoutes.CART}            component={CartScreen} />
       <Stack.Screen name={ShopRoutes.CHECKOUT}        component={CheckoutScreen} />

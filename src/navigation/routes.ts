@@ -45,6 +45,7 @@ export const HealthRoutes = {
 export const ShopRoutes = {
   SHOP: 'ShopScreen',
   SHOP_SEARCH: 'ShopSearchScreen',
+  FEATURED_ALL: 'FeaturedAllScreen',
   PRODUCT_DETAIL: 'ProductDetailScreen',
   CART: 'CartScreen',
   CHECKOUT: 'CheckoutScreen',
