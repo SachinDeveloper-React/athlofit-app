@@ -73,6 +73,23 @@ class WidgetUpdateWorker(
     }
 
     private suspend fun readTodaySteps(prefs: android.content.SharedPreferences): Int {
+        // Prefer the live in-memory step count from StepCounterService (real-time).
+        // This ensures the widget matches the notification and app UI exactly.
+        val liveSteps = StepCounterService.liveStepCount
+        if (liveSteps >= 0) {
+            Log.d(TAG, "Using live sensor steps: $liveSteps")
+            return liveSteps
+        }
+
+        // Fallback: try persisted value from StepCounterService
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val persistedSteps = stepPrefs.getInt("dailySteps", 0)
+        if (persistedSteps > 0) {
+            Log.d(TAG, "Using persisted sensor steps: $persistedSteps")
+            return persistedSteps
+        }
+
+        // Last resort: query Health Connect
         return try {
             val client     = HealthConnectClient.getOrCreate(context)
             val today      = LocalDate.now()
@@ -86,9 +103,6 @@ class WidgetUpdateWorker(
                 if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
             } else startOfDay
 
-            // readRecords + single-source dedup — same logic as HealthSyncHelper.
-            // aggregate() sums steps from ALL origins (Sweatcoin, Google Fit, etc.)
-            // causing inflation. We pick the single highest-count source instead.
             val stepRecords = client.readRecords(
                 ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(stepsStart, now))
             ).records
@@ -98,7 +112,7 @@ class WidgetUpdateWorker(
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
             val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "Steps by origin: $stepsByOrigin → using $steps")
+            Log.d(TAG, "Steps by origin (HC fallback): $stepsByOrigin → using $steps")
             steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")

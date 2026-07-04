@@ -54,7 +54,10 @@ class StepCounterService : Service(), SensorEventListener {
     companion object {
         private const val TAG = "StepCounterService"
         private const val CHANNEL_ID = "step_counter_live"
-        private const val NOTIF_ID = 2001
+        // Use the same notification ID as StepNotificationService so only one
+        // notification is visible. StepNotificationService handles the display;
+        // this service just needs a foreground notification to stay alive.
+        private const val NOTIF_ID = 1001
         private const val PREFS_NAME = "StepCounterPrefs"
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
         private const val STEP_HISTORY_KEY = "stepHistory"
@@ -610,17 +613,12 @@ class StepCounterService : Service(), SensorEventListener {
     // ── Notification ─────────────────────────────────────────────────────────
 
     /**
-     * Updates the foreground notification with the current step count.
-     * Throttled to update at most once every 60 seconds.
+     * No-op: StepNotificationService handles the notification display (every 10s).
+     * This service shares the same NOTIF_ID so the initial startForeground()
+     * notification is immediately overwritten by StepNotificationService.
      */
     private fun maybeUpdateNotification() {
-        val now = System.currentTimeMillis()
-        if (now - lastNotificationUpdateTime >= 60_000L) {
-            val notification = buildStepNotification(dailySteps)
-            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(NOTIF_ID, notification)
-            lastNotificationUpdateTime = now
-        }
+        // Intentionally empty — StepNotificationService owns notification updates.
     }
 
     // ── Event Emission ──────────────────────────────────────────────────────

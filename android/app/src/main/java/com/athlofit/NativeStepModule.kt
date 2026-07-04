@@ -26,8 +26,9 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
  * - Emit throttled step update events to JS
  * - Emit service stopped and sensor unavailable events to JS
  *
- * On API >= 34, the module skips sensor checks and does not start the service,
- * relying on the existing Health Connect integration.
+ * On API >= 34, the native sensor service still runs for real-time step
+ * counting (notification, widget, app UI all use the live count). Health
+ * Connect remains the source for sync/history.
  */
 class NativeStepModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -130,31 +131,25 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
     /**
      * Starts the step counting service.
      *
-     * - On API >= 34: rejects (Health Connect is the source, not native sensor)
-     * - Checks StepSourceResolver — if not NATIVE_SENSOR, rejects with error
+     * - Checks hardware sensor availability — if TYPE_STEP_COUNTER not present, rejects
      * - Checks StepPermissionManager — if permission needed and not granted, rejects
      * - Starts StepCounterService and resolves with true
+     *
+     * Note: On API >= 34, Health Connect is the official step source for sync/history,
+     * but we still start the native sensor service for real-time step counting so the
+     * notification, widget, and app UI all show the same live value.
      */
     @ReactMethod
     fun start(promise: Promise) {
         try {
             val context = reactApplicationContext
 
-            // On API >= 34, skip — rely on Health Connect
-            if (Build.VERSION.SDK_INT >= 34) {
+            // Check if hardware step counter sensor exists
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            if (sensorManager == null || sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
                 promise.reject(
-                    "SOURCE_NOT_NATIVE",
-                    "Device uses Health Connect (API >= 34). Native step service not applicable."
-                )
-                return
-            }
-
-            // Check source resolution
-            val source = StepSourceResolver.resolve(context)
-            if (source != StepSourceResolver.Source.NATIVE_SENSOR) {
-                promise.reject(
-                    "SOURCE_NOT_NATIVE",
-                    "Step source is not native sensor. Resolved: ${source.name}"
+                    "SENSOR_UNAVAILABLE",
+                    "Hardware TYPE_STEP_COUNTER sensor is not available on this device."
                 )
                 return
             }

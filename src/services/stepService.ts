@@ -15,8 +15,10 @@ class StepService {
 
   /**
    * Initialize the step service by querying the active step source.
-   * If the source is native_sensor, requests permission and starts the service.
-   * Caches the result for subsequent getSource() calls.
+   * Always starts the native sensor service for real-time step counting
+   * (used by notification, widget, and app UI). On API 34+, Health Connect
+   * remains the source for sync/history, but the native sensor provides
+   * the live count so all surfaces show the same value.
    */
   async initialize(): Promise<StepSource> {
     if (!NativeStep) {
@@ -28,10 +30,10 @@ class StepService {
       const source = await NativeStep.getActiveSource();
       this.cachedSource = source as StepSource;
 
-      // Auto-start native step counter if source is native_sensor
-      if (this.cachedSource === 'native_sensor') {
-        await this.requestPermissionAndStart();
-      }
+      // Always start the native step counter for real-time live counts,
+      // regardless of whether the source is health_connect or native_sensor.
+      // This ensures app, notification, and widget all show the same value.
+      await this.requestPermissionAndStart();
 
       return this.cachedSource;
     } catch (e) {

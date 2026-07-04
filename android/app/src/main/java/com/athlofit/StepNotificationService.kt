@@ -30,15 +30,13 @@ import java.time.ZoneId
  *
  * Shows a persistent notification with today's live step count.
  *
- * Step source: Health Connect aggregate() — the same API used by
- * WidgetUpdateWorker and HealthSyncHelper. It automatically deduplicates
- * overlapping records from multiple apps (Sweatcoin, Strava, etc.) and
- * uses the most authoritative source (the device's native step counter).
- * Works on every Android OEM without any package-name allowlist.
+ * Step source priority:
+ * 1. Native sensor (API < 34): reads StepCounterService.liveStepCount
+ *    (in-memory, updated on every sensor event) for real-time accuracy.
+ * 2. Health Connect (API >= 34): queries readRecords() with single-source
+ *    deduplication — same logic as WidgetUpdateWorker and HealthSyncHelper.
  *
- * Refreshes every 60 seconds via a Handler loop. Each refresh calls
- * aggregate() directly so the count is always current — no dependency
- * on WidgetUpdateWorker having run recently.
+ * Refreshes every 10 seconds via a Handler loop for near-real-time updates.
  */
 class StepNotificationService : Service() {
 
@@ -47,7 +45,7 @@ class StepNotificationService : Service() {
         const val CHANNEL_ID = "step_counter_live"
         const val NOTIF_ID = 1001
 
-        private const val REFRESH_INTERVAL_MS = 60_000L  // refresh every 10 s for near-real-time steps
+        private const val REFRESH_INTERVAL_MS = 10_000L  // refresh every 10s for near-real-time steps
         private const val PREFS_NAME = "StepsWidgetPrefs"
         private const val KEY_GOAL   = "goal"
 
@@ -93,7 +91,7 @@ class StepNotificationService : Service() {
         lastSteps = cachedSteps
         Log.d(TAG, "Service started — showing $cachedSteps steps (cached)")
 
-        // Fetch fresh steps from HC immediately, then repeat every 60 s
+        // Fetch fresh steps immediately, then repeat every 10s
         fetchAndRefresh()
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS)
 
@@ -112,23 +110,40 @@ class StepNotificationService : Service() {
     // ── Step fetch via aggregate() ────────────────────────────────────────────
 
     private fun fetchAndRefresh() {
-        // If the native sensor is active, read steps directly from StepCounterPrefs
-        // instead of querying Health Connect. This ensures correct data is shown
-        // even if this service is started on a pre-API 34 device.
-        if (StepSourceResolver.resolve(this) == StepSourceResolver.Source.NATIVE_SENSOR) {
-            val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-            val steps = stepPrefs.getInt("dailySteps", 0)
+        // Always prefer the live in-memory step count from StepCounterService.
+        // This works on ALL API levels (including 34+) since we now start the
+        // native sensor service everywhere. It updates on every sensor event,
+        // giving true real-time accuracy without Health Connect's batching delay.
+        val liveSteps = StepCounterService.liveStepCount
+        if (liveSteps >= 0) {
             val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val goal = goalPrefs.getInt(KEY_GOAL, 10000)
-            if (steps != lastSteps) {
-                lastSteps = steps
+            if (liveSteps != lastSteps) {
+                lastSteps = liveSteps
                 val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                nm.notify(NOTIF_ID, buildNotification(steps, goal))
-                Log.d(TAG, "Notification updated (native sensor): $steps steps")
+                nm.notify(NOTIF_ID, buildNotification(liveSteps, goal))
+                Log.d(TAG, "Notification updated (live sensor): $liveSteps steps")
             }
             return
         }
 
+        // Fallback: StepCounterService is not running (liveStepCount == -1).
+        // Try SharedPreferences from StepCounterService as next best source.
+        val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val persistedSteps = stepPrefs.getInt("dailySteps", 0)
+        if (persistedSteps > 0) {
+            val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val goal = goalPrefs.getInt(KEY_GOAL, 10000)
+            if (persistedSteps != lastSteps) {
+                lastSteps = persistedSteps
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildNotification(persistedSteps, goal))
+                Log.d(TAG, "Notification updated (persisted): $persistedSteps steps")
+            }
+            return
+        }
+
+        // Last resort: query Health Connect (only if native sensor data unavailable)
         serviceScope.launch {
             try {
                 val prefs  = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

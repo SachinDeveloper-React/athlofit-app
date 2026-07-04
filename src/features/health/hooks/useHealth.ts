@@ -237,15 +237,13 @@ export function useHealth(options: UseHealthOptions = {}) {
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
       }
 
-      // If native step counter is active, use its value as the step count.
-      // This ensures steps show immediately (native counter updates in real-time)
-      // rather than waiting for the 5-min Health Connect write cycle.
-      // Also prevents inflation from Health Connect aggregating multiple sources.
+      // Always use native step counter's live value as the authoritative step count.
+      // The native sensor service now runs on ALL API levels (including 34+) and
+      // provides real-time accuracy without Health Connect's batching delay.
+      // This ensures app, notification, and widget all show the same value.
       const { stepService } = await import('../../../services/stepService');
-      if (stepService.getSource() === 'native_sensor') {
-        const nativeSteps = await stepService.getCurrentSteps();
-        // Always use native sensor as the authoritative step count — it reads
-        // directly from the hardware pedometer without third-party interference.
+      const nativeSteps = await stepService.getCurrentSteps();
+      if (nativeSteps > 0) {
         result = { ...result, steps: nativeSteps };
       }
 
@@ -264,22 +262,20 @@ export function useHealth(options: UseHealthOptions = {}) {
   };
 
   // ── Real-time step updates from native sensor ─────────────────────────────
-  // Subscribe to native step events so coins update immediately as the user walks,
-  // without waiting for the 60s full-data poll.
+  // Subscribe to native step events so the UI updates immediately as the user
+  // walks. The native sensor service runs on all API levels now.
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
 
     (async () => {
       const { stepService } = await import('../../../services/stepService');
-      if (stepService.getSource() === 'native_sensor') {
-        unsubscribe = stepService.onStepUpdate((newSteps: number) => {
-          setData(prev => {
-            if (prev.steps === newSteps) return prev;
-            return { ...prev, steps: newSteps };
-          });
-          setLastUpdated(new Date());
+      unsubscribe = stepService.onStepUpdate((newSteps: number) => {
+        setData(prev => {
+          if (prev.steps === newSteps) return prev;
+          return { ...prev, steps: newSteps };
         });
-      }
+        setLastUpdated(new Date());
+      });
     })();
 
     return () => { unsubscribe?.(); };
