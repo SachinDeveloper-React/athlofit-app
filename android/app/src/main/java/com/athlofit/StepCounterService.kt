@@ -69,8 +69,8 @@ class StepCounterService : Service(), SensorEventListener {
         // Sync interval: 15 minutes in milliseconds (requirement 9.4)
         private const val SYNC_INTERVAL_MS = 15 * 60 * 1000L
 
-        // Health Connect write interval: 2 minutes
-        private const val HC_WRITE_INTERVAL_MS = 2 * 60 * 1000L
+        // Health Connect write interval: 30 seconds (keeps Samsung Health in sync)
+        private const val HC_WRITE_INTERVAL_MS = 30 * 1000L
 
         /**
          * Live in-memory step count accessible from NativeStepModule.getCurrentSteps()

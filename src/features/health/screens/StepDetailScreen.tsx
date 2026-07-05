@@ -14,6 +14,7 @@ import {
   Flame,
   Heart,
   MapPin,
+  RefreshCw,
   Scale,
   Timer,
   Zap,
@@ -232,6 +233,43 @@ const GoalBanner = memo(({
 });
 GoalBanner.displayName = 'GoalBanner';
 
+// ─── Sync status indicator ────────────────────────────────────────────────────
+
+const SyncStatus = memo(({
+  isFetching,
+  dataUpdatedAt,
+}: {
+  isFetching: boolean;
+  dataUpdatedAt: number;
+}) => {
+  const { colors } = useTheme();
+
+  const label = useMemo(() => {
+    if (isFetching) return 'Syncing health data...';
+    if (!dataUpdatedAt) return '';
+    const time = new Date(dataUpdatedAt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return `Last synced: ${time}`;
+  }, [isFetching, dataUpdatedAt]);
+
+  if (!label) return null;
+
+  return (
+    <Animated.View
+      entering={FadeInUp.delay(150).duration(300)}
+      style={styles.syncRow}
+    >
+      <RefreshCw size={12} color={colors.mutedForeground} />
+      <AppText variant="caption2" style={{ color: colors.mutedForeground, marginLeft: 5 }}>
+        {label}
+      </AppText>
+    </Animated.View>
+  );
+});
+SyncStatus.displayName = 'SyncStatus';
+
 // ─── Styles hook ──────────────────────────────────────────────────────────────
 
 const useStyles = makeStyles(({ spacing }) => ({
@@ -247,7 +285,7 @@ const StepDetailScreen = memo(({ route }: Props) => {
   const { date } = route.params;
   const { colors, isDark } = useTheme();
   const s = useStyles();
-  const { data, isLoading } = useDayDetail(date);
+  const { data, isLoading, isFetching, dataUpdatedAt } = useDayDetail(date);
   const isOnline = useNetworkStore(state => state.isOnline);
 
   const { barColor } = useMemo(
@@ -340,6 +378,9 @@ const StepDetailScreen = memo(({ route }: Props) => {
 
       {/* ── Goal banner ── */}
       <GoalBanner goalMet={data.goalMet} pct={data.progressPct} barColor={barColor} />
+
+      {/* ── Sync status ── */}
+      <SyncStatus isFetching={isFetching} dataUpdatedAt={dataUpdatedAt} />
 
       {/* ── Activity metrics ── */}
       <AppText variant="headline" weight="semiBold" style={s.sectionTitle}>
@@ -466,6 +507,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 12,
     paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
     marginBottom: 4,
   },
   grid: {
