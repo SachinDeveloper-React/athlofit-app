@@ -134,6 +134,7 @@ export interface FoodItem {
   sugar?: number;     // g
   dietType: DietPreference;   // 'veg' | 'non-veg' | 'vegan'
   category: Exclude<FoodCategory, 'all'>;
+  goals?: DietaryGoal[];      // goal suitability tags
   servingSize: number;
   servingUnit: string; // 'g' | 'ml' | 'serving'
   imageUrl?: string;
@@ -143,6 +144,7 @@ export interface FoodItem {
 export interface FoodQueryParams {
   category?: FoodCategory;
   dietType?: DietFilter;
+  goal?: DietaryGoal;
   search?: string;
   page?: number;
   limit?: number;

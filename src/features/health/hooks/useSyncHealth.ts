@@ -118,6 +118,13 @@ export function useSyncHealth() {
         setCoinsBalance(d.coinsBalance);
       }
 
+      // Store bonus steps from server so the UI shows walked + bonus
+      if (d?.bonusSteps !== undefined && d.bonusSteps > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        const { useHealthDataStore } = require('../store/healthDataStore');
+        useHealthDataStore.getState().setBonusSteps(d.bonusSteps, today);
+      }
+
       // Always invalidate weekly-steps after a sync so the chart reflects
       // the freshly written data immediately — no stale bar for today.
       queryClient.invalidateQueries({ queryKey: ['weekly-steps'] });

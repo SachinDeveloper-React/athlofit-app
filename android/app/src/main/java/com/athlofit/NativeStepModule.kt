@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Build
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -63,10 +64,11 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
          * Throttled to emit at most once per 5 seconds.
          *
          * @param steps The current daily step count.
+         * @param forceEmit If true, bypasses the throttle (used for midnight reset).
          */
-        fun emitStepUpdate(steps: Int) {
+        fun emitStepUpdate(steps: Int, forceEmit: Boolean = false) {
             val now = System.currentTimeMillis()
-            if (now - lastEmitTime < EVENT_THROTTLE_MS) return
+            if (!forceEmit && now - lastEmitTime < EVENT_THROTTLE_MS) return
             lastEmitTime = now
 
             val context = reactContextRef ?: return
@@ -165,6 +167,8 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
 
             // Start the foreground service
             StepCounterService.start(context)
+            // Schedule periodic keepalive worker to restart service if killed by OEM
+            StepServiceScheduler.schedule(context)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("START_ERROR", e.message, e)
@@ -196,6 +200,10 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getCurrentSteps(promise: Promise) {
         try {
+            val today = java.time.LocalDate.now().format(
+                java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+            )
+
             // Prefer live in-memory value (updates instantly on every sensor event)
             val liveSteps = StepCounterService.liveStepCount
             if (liveSteps >= 0) {
@@ -207,6 +215,14 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             val prefs = reactApplicationContext.getSharedPreferences(
                 PREFS_NAME, Context.MODE_PRIVATE
             )
+
+            // Check if stored data is from today — if not, return 0
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            if (storedDate != today) {
+                promise.resolve(0)
+                return
+            }
+
             val steps = prefs.getInt("dailySteps", 0)
             // Ensure non-negative
             promise.resolve(if (steps < 0) 0 else steps)
@@ -300,6 +316,27 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             promise.resolve(sourceString)
         } catch (e: Exception) {
             promise.reject("SOURCE_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Triggers a midnight reset from the JS layer.
+     * Called when the JS midnight timer fires to ensure the native service
+     * resets even if the AlarmManager alarm was delayed by Doze/battery optimization.
+     * This restarts the service with the EXTRA_MIDNIGHT_RESET flag.
+     */
+    @ReactMethod
+    fun triggerMidnightReset(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val serviceIntent = android.content.Intent(context, StepCounterService::class.java).apply {
+                putExtra(MidnightResetReceiver.EXTRA_MIDNIGHT_RESET, true)
+            }
+            context.startForegroundService(serviceIntent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "triggerMidnightReset failed: ${e.message}", e)
+            promise.resolve(false)
         }
     }
 }

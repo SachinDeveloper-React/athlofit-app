@@ -25,6 +25,7 @@ import { MealSection } from '../nutrition/MealSection';
 import { DietRecommendationCard } from '../nutrition/DietRecommendationCard';
 import { FoodCatalog } from '../nutrition/FoodCatalog';
 import ChallengeNutritionCard from '../nutrition/ChallengeNutritionCard';
+import { useHealthDataStore } from '../../store/healthDataStore';
 import {
   useNutritionSummary,
   useNutritionPreferences,
@@ -173,6 +174,9 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const { colors } = useTheme();
   const styles = useStyles();
 
+  // Read step-based calories burned from health data store
+  const caloriesBurned = useHealthDataStore(s => s.data.calories);
+
   const {
     data: summary,
     isLoading: summaryLoading,
@@ -307,7 +311,7 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
       <SectionLabel label="Daily Summary" />
       <CalorieSummaryCard
         caloriesIn={summary?.totalCaloriesIn ?? 0}
-        caloriesOut={summary?.caloriesOut ?? 0}
+        caloriesOut={caloriesBurned}
         calorieGoal={preferences?.calorieGoal ?? summary?.calorieGoal ?? 2000}
         protein={summary?.totalProtein ?? 0}
         carbs={summary?.totalCarbs ?? 0}

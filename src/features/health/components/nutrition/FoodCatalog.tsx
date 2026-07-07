@@ -25,11 +25,12 @@ import {
   useFavourites,
   useToggleFavourite,
   useCatalogFilters,
+  useNutritionPreferences,
   DEFAULT_CATALOG_FILTERS,
 } from '../../hooks/useNutrition';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
-import type { DietFilter, FoodItem, CatalogFilter } from '../../types/nutrition.types';
+import type { DietFilter, FoodItem, CatalogFilter, FoodQueryParams } from '../../types/nutrition.types';
 
 // ─── Animated Filter Chip ─────────────────────────────────────────────────────
 
@@ -92,7 +93,18 @@ EmptyState.displayName = 'EmptyState';
 
 export const FoodCatalog = memo(() => {
   const { colors } = useTheme();
-  const [activeFilter, setActiveFilter] = useState<string>('all');
+
+  // ── Use user's diet preference as default filter ──────────────────────────
+  const { data: preferences } = useNutritionPreferences();
+  const defaultFilter = preferences?.dietPreference ?? 'all';
+  const [activeFilter, setActiveFilter] = useState<string>(defaultFilter);
+
+  // Update active filter when preferences load (initial render may have 'all')
+  useEffect(() => {
+    if (preferences?.dietPreference) {
+      setActiveFilter(preferences.dietPreference);
+    }
+  }, [preferences?.dietPreference]);
 
   // ── Fetch filter chips from API via useMutation ───────────────────────────
   const {
@@ -110,10 +122,14 @@ export const FoodCatalog = memo(() => {
     filtersResponse?.data?.catalogFilters ?? DEFAULT_CATALOG_FILTERS;
 
   // ── Food data ─────────────────────────────────────────────────────────────
-  const catalogParams =
-    activeFilter === 'favourites' || activeFilter === 'all'
+  const catalogParams: FoodQueryParams | undefined =
+    activeFilter === 'favourites'
       ? undefined
-      : { dietType: activeFilter as DietFilter, limit: 10 };
+      : {
+          dietType: activeFilter === 'all' ? undefined : (activeFilter as DietFilter),
+          goal: preferences?.dietaryGoal,
+          limit: 10,
+        };
 
   const { data: catalogData, isLoading: catalogLoading } = useFoodCatalog(catalogParams);
   const { data: favourites, isLoading: favLoading }      = useFavourites();

@@ -58,7 +58,9 @@ export const saveBloodPressureToHealthPlatform = async (
 ): Promise<void> => {
   if (platform === 'healthkit')
     return writeBloodPressureHK(systolic, diastolic);
-  return writeBloodPressureHC(systolic, diastolic);
+  if (platform === 'healthconnect')
+    return writeBloodPressureHC(systolic, diastolic);
+  // native_sensor / unavailable: no external health platform to write to
 };
 
 /** @deprecated Use `saveBloodPressureToHealthPlatform` instead. */

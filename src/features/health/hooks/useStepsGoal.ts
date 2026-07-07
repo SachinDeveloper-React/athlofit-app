@@ -4,6 +4,7 @@ import { api } from '../../../utils/api';
 import { useAuthStore } from '../../auth/store/authStore';
 
 const PRESETS = [
+  { label: '3K', value: 3000, tag: 'Easy' },
   { label: '5K', value: 5000, tag: 'Light' },
   { label: '8K', value: 8000, tag: 'Moderate' },
   { label: '10K', value: 10000, tag: 'Active' },
@@ -38,11 +39,14 @@ function calcStats(steps: number): StepsStats {
 }
 
 export function useStepsGoal(initialSteps = 8000): UseStepsGoalReturn {
-  const [steps, setSteps] = useState(initialSteps);
-  const [activePreset, setActivePreset] = useState<number | null>(initialSteps);
-  const queryClient = useQueryClient();
   const user = useAuthStore(s => s.user);
   const updateUser = useAuthStore(s => s.updateUser);
+
+  // If a pending goal already exists, start the slider at that value
+  const startValue = user?.pendingStepGoal ?? initialSteps;
+  const [steps, setSteps] = useState(startValue);
+  const [activePreset, setActivePreset] = useState<number | null>(startValue);
+  const queryClient = useQueryClient();
 
   const saveMutation = useMutation({
     mutationFn: async (dailyStepGoal: number) => {
@@ -51,14 +55,18 @@ export function useStepsGoal(initialSteps = 8000): UseStepsGoalReturn {
     },
     onSuccess: (data) => {
       if (user) {
-        updateUser({ dailyStepGoal: data.dailyStepGoal });
+        // Store pending goal info — today's active goal stays unchanged
+        updateUser({
+          pendingStepGoal: data.pendingStepGoal,
+          pendingGoalEffectiveDate: data.pendingGoalEffectiveDate,
+        });
       }
       queryClient.invalidateQueries({ queryKey: ['gamification'] });
     },
   });
 
   const handleSlider = useCallback((val: number) => {
-    const rounded = Math.max(5000, Math.round(val / 500) * 500);
+    const rounded = Math.max(3000, Math.round(val / 500) * 500);
     setSteps(rounded);
     const match = PRESETS.find((p) => p.value === rounded);
     setActivePreset(match ? rounded : null);

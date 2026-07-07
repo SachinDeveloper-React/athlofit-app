@@ -33,6 +33,7 @@ import { WeeklyStepEntry } from '../../types/healthTypes';
 import { navigate } from '../../../../navigation/navigationRef';
 import { getStepColor } from '../../utils/stepColorUtils';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
+import { useHealthDataStore } from '../../store/healthDataStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -443,6 +444,12 @@ export const StepProgressCard = memo(
       });
     }, []);
 
+    // Read bonus steps for today from store
+    const todayBonusSteps = useHealthDataStore(s => {
+      const today = new Date().toISOString().split('T')[0];
+      return s.bonusStepsDate === today ? s.bonusSteps : 0;
+    });
+
     return (
       <AppView style={[styles.card, { borderRadius: radius.lg }, style]}>
         <Speedometer
@@ -454,6 +461,15 @@ export const StepProgressCard = memo(
           bg={colors.background}
           onEditGoal={onEditGoal}
         />
+
+        {/* Bonus steps indicator */}
+        {todayBonusSteps > 0 && (
+          <AppView style={styles.bonusBadge}>
+            <AppText variant="caption2" style={{ color: '#1D9E75', fontWeight: '600' }}>
+              🎁 +{todayBonusSteps.toLocaleString()} bonus steps added
+            </AppText>
+          </AppView>
+        )}
 
         {/* Goal reached badge — coins are auto-credited via useSyncHealth */}
         <ClaimCoinsButton
@@ -650,6 +666,15 @@ speedoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
+  },
+  bonusBadge: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(29, 158, 117, 0.08)',
+    alignSelf: 'center',
+    marginBottom: 4,
   },
 
   editBtn: {

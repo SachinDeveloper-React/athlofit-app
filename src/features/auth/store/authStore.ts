@@ -43,6 +43,13 @@ export const useAuthStore = create<AuthState>()(
           useHealthDataStore.getState().setLoginTimestamp(loginTs);
         });
 
+        // Fetch today's synced steps from server (cross-device step continuity).
+        // If the user was walking on another device earlier today, their steps
+        // carry over to this device as a starting offset.
+        import('../../health/service/stepOffset.service').then(({ fetchAndStoreTodayStepOffset }) => {
+          fetchAndStoreTodayStepOffset(tokens.accessToken).catch(() => {});
+        });
+
         // Sync login timestamp to native widget + start background auto-update + EOD alarm
         import('../../../services/widgetService').then(({ widgetService }) => {
           widgetService.setLoggedOut(false);                  // restore normal widget display

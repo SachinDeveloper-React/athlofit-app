@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import type { HealthPlatform } from '../hooks/useHealth';
 
 import { initializeHealthKit } from '../service/healthkit.service';
+import { getHealthPreference } from '../service/healthPreference.service';
 
 // Health Connect is Android-only — lazy-import to avoid crashing on iOS
 // where the native module doesn't exist.
@@ -31,6 +32,8 @@ interface HealthInitState {
 interface HealthInitStore extends HealthInitState {
   /** Run during app bootstrap (splash screen) to pre-initialize health SDK */
   initialize: () => Promise<void>;
+  /** Skip health platform permissions and use native sensor only */
+  skipToNativeSensor: () => void;
   /** Reset (e.g. on logout) */
   reset: () => void;
 }
@@ -47,6 +50,19 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
 
     try {
       if (Platform.OS === 'ios') {
+        // Check if user previously skipped HealthKit permissions
+        const pref = getHealthPreference();
+        if (pref === 'skipped') {
+          // User chose native-sensor-only mode previously — skip HealthKit
+          set({
+            isInitialized: true,
+            platform: 'native_sensor',
+            isReady: true,
+            error: null,
+          });
+          return;
+        }
+
         const ok = await initializeHealthKit();
         set({
           isInitialized: true,
@@ -55,27 +71,34 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
           error: ok ? null : 'HealthKit permission denied',
         });
       } else if (Platform.OS === 'android') {
+        // Check if user previously skipped Health Connect permissions
+        const pref = getHealthPreference();
+        if (pref === 'skipped') {
+          // User chose native-sensor-only mode — start step service and skip HC
+          const { stepService } = await import('../../../services/stepService');
+          await stepService.initialize();
+          set({
+            isInitialized: true,
+            platform: 'native_sensor',
+            isReady: true,
+            error: null,
+          });
+          return;
+        }
+
         const { isHealthConnectAvailable, initializeHealthConnect, hasHealthConnectPermissions } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
-          // Health Connect not installed — check native step service as fallback
+          // Health Connect not installed — start native step service for background
+          // counting but show the permission screen so the user can install HC or skip.
           const { stepService } = await import('../../../services/stepService');
-          const source = await stepService.initialize();
-          if (source === 'native_sensor') {
-            set({
-              isInitialized: true,
-              platform: 'healthconnect',
-              isReady: true,
-              error: null,
-            });
-          } else {
-            set({
-              isInitialized: true,
-              platform: 'unavailable',
-              isReady: false,
-              error: 'Health Connect not installed. Please install it from the Play Store.',
-            });
-          }
+          await stepService.initialize();
+          set({
+            isInitialized: true,
+            platform: 'unavailable',
+            isReady: false,
+            error: 'Health Connect not installed. Please install it from the Play Store.',
+          });
           return;
         }
 
@@ -89,6 +112,13 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
             error: null,
           });
           return;
+        }
+
+        // If user previously had 'connected' but permissions were revoked,
+        // clear the stale preference so Settings shows correct status.
+        if (pref === 'connected') {
+          const { clearHealthPreference } = await import('../service/healthPreference.service');
+          clearHealthPreference();
         }
 
         // Permissions not granted — try requesting
@@ -111,24 +141,17 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
             error: null,
           });
         } else {
-          // Permissions denied — check native sensor fallback
+          // Permissions denied — start native step service in the background for
+          // basic step counting, but show the permission screen so the user can
+          // grant Health Connect access or skip.
           const { stepService } = await import('../../../services/stepService');
-          const source = await stepService.initialize();
-          if (source === 'native_sensor') {
-            set({
-              isInitialized: true,
-              platform: 'healthconnect',
-              isReady: true,
-              error: null,
-            });
-          } else {
-            set({
-              isInitialized: true,
-              platform: 'unavailable',
-              isReady: false,
-              error: 'Health Connect permission denied',
-            });
-          }
+          await stepService.initialize();
+          set({
+            isInitialized: true,
+            platform: 'unavailable',
+            isReady: false,
+            error: 'Health Connect permission denied',
+          });
         }
       }
     } catch (e: any) {
@@ -139,6 +162,15 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
         error: e?.message ?? 'Unknown error during health initialization',
       });
     }
+  },
+
+  skipToNativeSensor: () => {
+    set({
+      isInitialized: true,
+      platform: 'native_sensor',
+      isReady: true,
+      error: null,
+    });
   },
 
   reset: () => set({

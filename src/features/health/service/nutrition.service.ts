@@ -81,6 +81,7 @@ export const nutritionService = {
     const qs = new URLSearchParams();
     if (params?.category && params.category !== 'all') qs.set('category', params.category);
     if (params?.dietType && params.dietType !== 'all') qs.set('dietType', params.dietType);
+    if (params?.goal) qs.set('goal', params.goal);
     if (params?.search) qs.set('search', params.search);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));

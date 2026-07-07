@@ -91,6 +91,9 @@ class StepService {
    * Resolves true on success, false on failure.
    */
   async start(): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
     try {
       const status = await NativeStep.getPermissionStatus();
       if (status === 'denied') {
@@ -108,6 +111,9 @@ class StepService {
    * Resolves true on success, false on failure.
    */
   async stop(): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
     try {
       return await NativeStep.stop();
     } catch (e) {
@@ -118,9 +124,12 @@ class StepService {
 
   /**
    * Get the current daily step count from the native data store.
-   * Returns 0 if no data is available.
+   * Returns 0 if no data is available or if the native module is not present (iOS).
    */
   async getCurrentSteps(): Promise<number> {
+    if (!NativeStep) {
+      return 0;
+    }
     try {
       return await NativeStep.getCurrentSteps();
     } catch (e) {
@@ -144,6 +153,23 @@ class StepService {
       },
     );
     return () => subscription.remove();
+  }
+
+  /**
+   * Triggers a midnight reset on the native step service.
+   * Called from JS when midnight passes while the app is open, ensuring
+   * the native notification and widget reset even if AlarmManager is delayed.
+   */
+  async triggerMidnightReset(): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.triggerMidnightReset();
+    } catch (e) {
+      console.warn('[StepService] triggerMidnightReset failed:', e);
+      return false;
+    }
   }
 
   /**

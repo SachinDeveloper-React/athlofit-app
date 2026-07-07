@@ -302,6 +302,9 @@ export function resolveHealthGateReason({
   isReady: boolean;
   error: string | null;
 }): HealthGateReason | null {
+  // native_sensor mode works independently — never show the gate
+  if (platform === 'native_sensor') return null;
+
   if (
     platform === 'unavailable' &&
     error?.toLowerCase().includes('health connect')

@@ -209,8 +209,15 @@ const TrackerScreen = memo(() => {
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const userId = useAuthStore(state => state.user?._id);
 
-  const { platform, isReady, isLoading, data, error, refresh, retrySetup, lastUpdated } =
+  const { platform, isReady, isLoading, data, error, refresh, retrySetup, skipToNativeSensor, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) || 70 });
+
+  // Bonus steps from admin/system — added on top of device steps
+  const bonusSteps = useHealthDataStore(s => {
+    const today = new Date().toISOString().split('T')[0];
+    return s.bonusStepsDate === today ? s.bonusSteps : 0;
+  });
+  const totalSteps = data.steps + bonusSteps;
 
   const {
     data: weekData,
@@ -253,12 +260,12 @@ const TrackerScreen = memo(() => {
   // Throttle: track last sync time and last synced step count
   const lastSyncTimeRef = useRef<number>(0);
   const lastSyncedStepsRef = useRef<number>(-1);
-  const MIN_SYNC_INTERVAL_MS = 5 * 60_000; // 5 minutes between syncs
+  const MIN_SYNC_INTERVAL_MS = 20_000; // 20 seconds between backend syncs
   const MIN_STEP_DELTA = 10; // only re-sync if steps changed by at least 10
 
   // Sync widget with current steps and goal
   useWidgetSync({
-    steps: data.steps,
+    steps: totalSteps,
     goal: dailyStepGoal || 10000,
     enabled: isAuthenticated && isReady,
   });
@@ -290,8 +297,8 @@ const TrackerScreen = memo(() => {
       return;
     }
 
-    const isGoalMet = data.steps >= (dailyStepGoal || 8000);
-    syncHealth({ ...data, goalMet: isGoalMet });
+    const isGoalMet = totalSteps >= (dailyStepGoal || 8000);
+    syncHealth({ ...data, steps: totalSteps, goalMet: isGoalMet });
     lastSyncedUserRef.current = userId;
     lastSyncTimeRef.current = now;
     lastSyncedStepsRef.current = data.steps;
@@ -317,6 +324,18 @@ const TrackerScreen = memo(() => {
 
   const metricRows = useMemo(() => buildMetricRows(data), [data]);
 
+  // Override today's entry in weekly chart with live local step count.
+  // The server may have stale data (from a previous sync before midnight reset),
+  // but the user should see their actual current steps for today.
+  const adjustedWeekData = useMemo(() => {
+    if (!weekData || weekData.length === 0) return weekData;
+    const todayDate = new Date();
+    const todayISO = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+    return weekData.map(entry =>
+      entry.fullDate === todayISO ? { ...entry, steps: totalSteps } : entry,
+    );
+  }, [weekData, totalSteps]);
+
   const subtitle = useMemo(() => {
     if (!lastUpdated) return 'Today';
     const h = lastUpdated.getHours().toString().padStart(2, '0');
@@ -328,16 +347,10 @@ const TrackerScreen = memo(() => {
 
   useFocusEffect(
     useCallback(() => {
-      // On focus: check staleness before refreshing to deduplicate rapid
-      // focus events (e.g., tab switches within 5s).
-      const lastFetchedAt = useHealthDataStore.getState().lastFetchedAt;
-      const isFresh = lastFetchedAt != null && Date.now() - lastFetchedAt < 5_000;
-
-      if (!isFresh) {
-        // Data is stale or never fetched — silently refresh
-        refresh(true);
-        refreshWeek();
-      }
+      // Always force-refresh on screen focus so the user sees live steps
+      // immediately — not cached/stale data from 5+ seconds ago.
+      refresh(false);
+      refreshWeek();
     }, [refresh, refreshWeek]),
   );
 
@@ -413,6 +426,7 @@ const TrackerScreen = memo(() => {
             setGateReason(null);
             retrySetup();
           }}
+          onSkip={skipToNativeSensor}
         />
       </Screen>
     );
@@ -461,8 +475,8 @@ const TrackerScreen = memo(() => {
           <TabPanels
             goal={dailyStepGoal || 8000}
             activeTab={activeTab}
-            data={data}
-            weekData={weekData || []}
+            data={{ ...data, steps: totalSteps }}
+            weekData={adjustedWeekData || []}
             isWeekPending={isWeekPending}
             isWeekSkeleton={isWeekPending && !weekData}
             metricRows={metricRows}

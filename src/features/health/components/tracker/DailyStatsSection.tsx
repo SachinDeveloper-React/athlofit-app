@@ -174,20 +174,20 @@ const DailyStatsSection = memo(
           />
         </AppView>
 
-        {isStreakPending ? (
+        {isStreakPending && !streakData ? (
           <TrackerStreaksSkeleton />
-        ) : streakData ? (
+        ) : (
           <Pressable
             onPress={() => navigate('HealthStack', { screen: 'StreakScreen' })}
           >
             <TrackerStreaksBadges
-              streakDays={streakData.streakDays}
-              bestStreakDays={streakData.bestStreakDays}
-              nextBadgeAt={streakData.nextBadgeAt}
-              badges={streakData.badges}
+              streakDays={streakData?.streakDays ?? 0}
+              bestStreakDays={streakData?.bestStreakDays ?? 0}
+              nextBadgeAt={streakData?.nextBadgeAt}
+              badges={streakData?.badges ?? []}
             />
           </Pressable>
-        ) : null}
+        )}
 
         <ChallengeTrackerCard />
 

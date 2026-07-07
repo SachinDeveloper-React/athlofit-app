@@ -53,7 +53,8 @@ export const saveHeartRateToHealthPlatform = async (
   platform: HealthPlatform,
 ): Promise<void> => {
   if (platform === 'healthkit') return writeHeartRateHK(bpm);
-  return writeHeartRateHC(bpm);
+  if (platform === 'healthconnect') return writeHeartRateHC(bpm);
+  // native_sensor / unavailable: no external health platform to write to
 };
 
 /** @deprecated Use `saveHeartRateToHealthPlatform` instead. */

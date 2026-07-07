@@ -1,7 +1,8 @@
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Platform,
   ScrollView,
@@ -29,6 +30,7 @@ import { AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { initializeHealthKit } from '../../service/healthkit.service';
+import { setHealthPreference } from '../../service/healthPreference.service';
 
 // Health Connect is Android-only — lazy-import to avoid crashing on iOS
 // where the native module proxy throws on property access.
@@ -56,6 +58,7 @@ interface Props {
   scenario: PermissionScenario;
   errorMessage?: string;
   onPermissionGranted: () => void;
+  onSkip?: () => void;
 }
 
 // ─── Required permissions list ────────────────────────────────────────────────
@@ -230,9 +233,10 @@ PermissionRow.displayName = 'PermissionRow';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGranted }: Props) => {
+const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGranted, onSkip }: Props) => {
   const { colors, isDark } = useTheme();
   const [isRequesting, setIsRequesting] = useState(false);
+  const denialCountRef = useRef(0);
   const cfg = CONFIGS[scenario];
   const { HeaderIcon } = cfg;
 
@@ -240,12 +244,41 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
   const showPermissions = scenario === 'android-denied' || scenario === 'ios-denied';
 
   // ── Primary action ────────────────────────────────────────────────────────
+  const showOpenSettingsAlert = () => {
+    const platformName = Platform.OS === 'ios' ? 'Health' : 'Health Connect';
+    Alert.alert(
+      'Permission Required',
+      `You have denied ${platformName} access. Please open Settings and grant the required permissions manually.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Settings',
+          onPress: () => {
+            if (Platform.OS === 'ios') {
+              Linking.openURL(IOS_SETTINGS_URL);
+            } else {
+              Linking.openURL('package:com.google.android.apps.healthdata').catch(() =>
+                Linking.openSettings(),
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handlePrimary = async () => {
     setIsRequesting(true);
     try {
       if (scenario === 'android-missing') {
         await Linking.openURL(HEALTH_CONNECT_STORE_URL);
       } else if (scenario === 'android-denied') {
+        // If user already denied once from this screen, go straight to settings alert
+        if (denialCountRef.current >= 1) {
+          showOpenSettingsAlert();
+          return;
+        }
+
         const { isHealthConnectAvailable, initializeHealthConnect } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
@@ -253,16 +286,26 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
           return;
         }
         const granted = await initializeHealthConnect();
-        if (granted) onPermissionGranted();
-      } else if (scenario === 'ios-denied') {
-        // Re-request HealthKit permissions — iOS shows the permission dialog
-        // again only if the user hasn't permanently denied it yet.
-        const granted = await initializeHealthKit();
         if (granted) {
+          setHealthPreference('connected');
           onPermissionGranted();
         } else {
-          // User has permanently denied — open Health app settings
-          await Linking.openURL(IOS_SETTINGS_URL);
+          // Permission denied — track and show settings alert
+          denialCountRef.current += 1;
+          showOpenSettingsAlert();
+        }
+      } else if (scenario === 'ios-denied') {
+        // On iOS, HealthKit only shows the permission dialog once per app install.
+        // After that, requestAuthorization resolves silently. Try it — if the user
+        // hasn't interacted with the dialog yet, it will show. If they already
+        // denied, open the Health app settings so they can toggle permissions.
+        const granted = await initializeHealthKit();
+        if (granted) {
+          setHealthPreference('connected');
+          onPermissionGranted();
+        } else {
+          // Permission denied — show settings alert
+          showOpenSettingsAlert();
         }
       } else {
         onPermissionGranted();
@@ -282,7 +325,10 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
         // "Try Again" after installing
         const { initializeHealthConnect } = getHealthConnectService();
         const granted = await initializeHealthConnect();
-        if (granted) onPermissionGranted();
+        if (granted) {
+          setHealthPreference('connected');
+          onPermissionGranted();
+        }
       } else if (scenario === 'android-denied') {
         // "Open Settings" → Health Connect app settings
         await Linking.openURL('package:com.google.android.apps.healthdata').catch(() =>
@@ -474,6 +520,20 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
             </AppText>
           </TouchableOpacity>
         )}
+
+        {/* Skip — continue without full health data */}
+        {onSkip && (
+          <TouchableOpacity
+            onPress={onSkip}
+            disabled={isRequesting}
+            activeOpacity={0.7}
+            style={styles.skipBtn}
+          >
+            <AppText variant="subhead" style={{ color: colors.mutedForeground }}>
+              {Platform.OS === 'ios' ? 'Skip for Now' : 'Continue with Steps Only'}
+            </AppText>
+          </TouchableOpacity>
+        )}
       </Animated.View>
     </ScrollView>
   );
@@ -609,5 +669,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  skipBtn: {
+    width: '100%',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
 });

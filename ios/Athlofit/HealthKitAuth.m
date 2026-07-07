@@ -83,6 +83,40 @@ RCT_EXPORT_METHOD(requestAuthorization:(RCTPromiseResolveBlock)resolve
   }];
 }
 
+#pragma mark - Authorization Status Check
+
+/**
+ * Checks if write authorization has been granted for key data types.
+ * Apple allows querying write (share) authorization status.
+ * Returns YES if at least Steps write permission is authorized.
+ * This is used to verify whether the user actually granted permissions
+ * after requestAuthorization (which always returns success=YES on iOS).
+ */
+RCT_EXPORT_METHOD(getWritePermissionStatus:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  if (![HKHealthStore isHealthDataAvailable]) {
+    resolve(@"unavailable");
+    return;
+  }
+
+  HKQuantityType *stepType = [HKQuantityType quantityTypeForIdentifier:HKQuantityTypeIdentifierStepCount];
+  HKAuthorizationStatus status = [[self store] authorizationStatusForType:stepType];
+
+  switch (status) {
+    case HKAuthorizationStatusSharingAuthorized:
+      resolve(@"granted");
+      break;
+    case HKAuthorizationStatusSharingDenied:
+      resolve(@"denied");
+      break;
+    case HKAuthorizationStatusNotDetermined:
+    default:
+      resolve(@"not_determined");
+      break;
+  }
+}
+
 #pragma mark - Steps
 
 RCT_EXPORT_METHOD(getStepCount:(NSString *)startDate

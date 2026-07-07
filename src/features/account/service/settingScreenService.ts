@@ -1,6 +1,7 @@
-import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2 } from 'lucide-react-native';
+import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2, HeartPulse, Bell, Footprints, Camera } from 'lucide-react-native';
 import { Section } from '../types/setting.types';
 import { DeletionStatus } from './accountDeletion.service';
+import type { PermissionStatuses } from './permissionStatus.service';
 
 export const settingScreenService = {
   getSettingsSections: (
@@ -15,8 +16,12 @@ export const settingScreenService = {
       onSignOut: () => void;
       onDeleteAccount?: () => void;
       onCancelDeletion?: () => void;
+      onConnectHealth?: () => void;
+      onRequestPermission?: (key: string) => void;
       deletionStatus?: DeletionStatus;
       scheduledDeletionDate?: string | null;
+      healthConnectionStatus?: 'connected' | 'skipped' | 'not_set';
+      permissionStatuses?: PermissionStatuses | null;
     },
   ): Section[] => {
     const sections: Section[] = [
@@ -41,6 +46,68 @@ export const settingScreenService = {
           },
         ],
       },
+      {
+        title: 'HEALTH DATA',
+        rows: [
+          {
+            key: 'connect_health',
+            type: 'nav',
+            title: callbacks.healthConnectionStatus === 'connected'
+              ? 'HEALTH CONNECTED'
+              : 'CONNECT HEALTH',
+            icon: HeartPulse,
+            iconColorKey: callbacks.healthConnectionStatus === 'connected' ? 'primary' : 'foreground',
+            valueText: callbacks.healthConnectionStatus === 'connected'
+              ? 'Connected'
+              : 'Steps only',
+            onPress: callbacks.onConnectHealth,
+            ...(callbacks.healthConnectionStatus === 'connected' && {
+              badge: { text: 'Active', variant: 'success' as const },
+            }),
+          },
+        ],
+      },
+      ...(callbacks.permissionStatuses ? [{
+        title: 'PERMISSIONS',
+        rows: [
+          {
+            key: 'perm_notification',
+            type: 'nav' as const,
+            title: 'NOTIFICATIONS',
+            icon: Bell,
+            valueText: callbacks.permissionStatuses.notification === 'granted' ? 'Allowed' : 'Not Allowed',
+            badge: callbacks.permissionStatuses.notification === 'granted'
+              ? { text: 'Granted', variant: 'success' as const }
+              : { text: 'Denied', variant: 'destructive' as const },
+            onPress: () => callbacks.onRequestPermission?.('notification'),
+          },
+          {
+            key: 'perm_activity',
+            type: 'nav' as const,
+            title: 'STEP TRACKING',
+            icon: Footprints,
+            valueText: callbacks.permissionStatuses.activityRecognition === 'granted' ? 'Allowed' : 'Not Allowed',
+            badge: callbacks.permissionStatuses.activityRecognition === 'granted'
+              ? { text: 'Granted', variant: 'success' as const }
+              : { text: 'Denied', variant: 'destructive' as const },
+            onPress: () => callbacks.onRequestPermission?.('activityRecognition'),
+          },
+          {
+            key: 'perm_camera',
+            type: 'nav' as const,
+            title: 'CAMERA',
+            icon: Camera,
+            valueText: callbacks.permissionStatuses.camera === 'granted' ? 'Allowed'
+              : callbacks.permissionStatuses.camera === 'denied' ? 'Not Allowed' : 'Not Requested',
+            badge: callbacks.permissionStatuses.camera === 'granted'
+              ? { text: 'Granted', variant: 'success' as const }
+              : callbacks.permissionStatuses.camera === 'denied'
+                ? { text: 'Denied', variant: 'destructive' as const }
+                : undefined,
+            onPress: () => callbacks.onRequestPermission?.('camera'),
+          },
+        ],
+      }] : []),
       {
         title: 'ADDITIONAL OPTION',
         rows: [

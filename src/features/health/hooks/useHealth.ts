@@ -18,7 +18,7 @@ import {
 const getHealthConnectService = () =>
   require('../service/healthConnect.service') as typeof import('../service/healthConnect.service');
 
-export type HealthPlatform = 'healthkit' | 'healthconnect' | 'unavailable';
+export type HealthPlatform = 'healthkit' | 'healthconnect' | 'native_sensor' | 'unavailable';
 
 interface UseHealthOptions {
   /** Auto-refresh interval in ms. Default 60s. Set 0 to disable. */
@@ -31,7 +31,7 @@ interface UseHealthOptions {
 
 export function useHealth(options: UseHealthOptions = {}) {
   const {
-    refreshInterval = 60_000,  // refresh every 10 s for near-real-time steps
+    refreshInterval = 20_000,  // refresh every 20s for near-real-time steps
     pauseInBackground = true,
     weightKg = 70,
   } = options;
@@ -124,11 +124,30 @@ export function useHealth(options: UseHealthOptions = {}) {
     midnight.setHours(0, 0, 1, 0); // 1 second past midnight
     const msUntilMidnight = midnight.getTime() - now.getTime();
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
+      // Reset cached data to zero immediately so the UI doesn't show stale steps
+      const freshData = { ...defaultHealthData };
+      setData(freshData);
+      setLastUpdated(new Date());
+      useHealthDataStore.getState().setData(freshData);
+
+      // Clear the synced step offset — it was for yesterday
+      useHealthDataStore.getState().setSyncedStepOffset(0, '');
+
+      // Trigger native service midnight reset (resets notification + widget)
+      // This ensures reset even if AlarmManager alarm was delayed by Doze
+      if (Platform.OS === 'android') {
+        const { stepService } = await import('../../../services/stepService');
+        stepService.triggerMidnightReset();
+      }
+
       if (isReadyRef.current) {
         // Force a fresh fetch — bypass staleness guard so new day's data loads
         lastFetchedAtRef.current = 0;
-        loadData(platformRef.current);
+        // Small delay to allow native service and Health Connect to reset
+        setTimeout(() => {
+          loadData(platformRef.current);
+        }, 3000);
       }
     }, msUntilMidnight);
 
@@ -136,10 +155,24 @@ export function useHealth(options: UseHealthOptions = {}) {
   }, []);
 
   // ── Auto-refresh timer ────────────────────────────────────────────────────
+  // Track the date we're on — used to detect day change during polling
+  const currentDateRef = useRef<string>(new Date().toISOString().split('T')[0]);
+
   const startAutoRefresh = useCallback(() => {
     if (refreshInterval <= 0) return;
     stopAutoRefresh();
     intervalRef.current = setInterval(() => {
+      // Detect day change during polling (backup for midnight timer)
+      const today = new Date().toISOString().split('T')[0];
+      if (today !== currentDateRef.current) {
+        currentDateRef.current = today;
+        // Day changed — reset data to 0 and force fresh fetch
+        const freshData = { ...defaultHealthData };
+        setData(freshData);
+        useHealthDataStore.getState().setData(freshData);
+        useHealthDataStore.getState().setSyncedStepOffset(0, '');
+        lastFetchedAtRef.current = 0;
+      }
       // silent=true — don't show loading spinner on background polls,
       // only update the data when it arrives so the UI doesn't flash.
       if (isReadyRef.current) loadData(platformRef.current, true);
@@ -160,6 +193,23 @@ export function useHealth(options: UseHealthOptions = {}) {
     setIsLoading(true);
     setError(null);
     try {
+      // Check if user previously chose native-sensor-only mode
+      const { getHealthPreference } = await import('../service/healthPreference.service');
+      const pref = getHealthPreference();
+
+      if (pref === 'skipped') {
+        // User chose to skip health platform — use native sensor only
+        const { stepService } = await import('../../../services/stepService');
+        await stepService.initialize();
+        platformRef.current = 'native_sensor';
+        setPlatform('native_sensor');
+        isReadyRef.current = true;
+        setIsReady(true);
+        await loadData('native_sensor');
+        startAutoRefresh();
+        return;
+      }
+
       if (Platform.OS === 'ios') {
         const ok = await initializeHealthKit();
         platformRef.current = ok ? 'healthkit' : 'unavailable';
@@ -174,6 +224,9 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { isHealthConnectAvailable, initializeHealthConnect } = getHealthConnectService();
         const available = await isHealthConnectAvailable();
         if (!available) {
+          // Start native step service in background but show permission screen
+          const { stepService } = await import('../../../services/stepService');
+          await stepService.initialize();
           setPlatform('unavailable');
           setError(
             'Health Connect not installed. Please install it from the Play Store.',
@@ -203,16 +256,11 @@ export function useHealth(options: UseHealthOptions = {}) {
           await loadData('healthconnect');
           startAutoRefresh();
         } else {
-          // Health Connect unavailable — check if native step counter can provide data
+          // Health Connect permission denied — start native step service in the
+          // background for basic step counting, but keep platform as 'unavailable'
+          // so the PermissionDeniedScreen renders and the user can grant access or skip.
           const { stepService } = await import('../../../services/stepService');
-          if (stepService.getSource() === 'native_sensor') {
-            // Native sensor is active — mark as ready so the UI renders with native step data
-            platformRef.current = 'healthconnect'; // keep platform label for loadData routing
-            isReadyRef.current = true;
-            setIsReady(true);
-            await loadData('healthconnect');
-            startAutoRefresh();
-          }
+          await stepService.initialize();
         }
       }
     } catch (e: any) {
@@ -230,21 +278,41 @@ export function useHealth(options: UseHealthOptions = {}) {
       let result: HealthData;
       if (p === 'healthkit') {
         result = await fetchAllHealthKitData();
+      } else if (p === 'native_sensor') {
+        // Native sensor only — get steps and derive other metrics
+        const { stepService } = await import('../../../services/stepService');
+        const nativeSensorSteps = await stepService.getCurrentSteps();
+
+        // Add synced step offset from server (cross-device continuity).
+        // If the user walked on another device today, those steps carry over.
+        const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
+        const today = new Date().toISOString().split('T')[0];
+        const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
+        const steps = nativeSensorSteps + offset;
+
+        const STEPS_PER_MINUTE = 100;
+        const STEP_LENGTH_KM = 0.76 / 1000; // average step length ~0.76m
+        const CAL_PER_STEP = (weightKg * 0.57) / 1000; // rough calorie derivation
+
+        result = {
+          ...defaultHealthData,
+          steps,
+          calories: Math.round(steps * CAL_PER_STEP),
+          distance: Math.round(steps * STEP_LENGTH_KM * 100) / 100,
+          activeMinutes: Math.round(steps / STEPS_PER_MINUTE),
+        };
       } else {
-        // Get login timestamp from healthDataStore to filter historical data
+        // Health Connect path
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
         const { fetchAllHealthConnectData } = getHealthConnectService();
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
-      }
 
-      // Always use native step counter's live value as the authoritative step count.
-      // The native sensor service now runs on ALL API levels (including 34+) and
-      // provides real-time accuracy without Health Connect's batching delay.
-      // This ensures app, notification, and widget all show the same value.
-      const { stepService } = await import('../../../services/stepService');
-      const nativeSteps = await stepService.getCurrentSteps();
-      if (nativeSteps > 0) {
-        result = { ...result, steps: nativeSteps };
+        // Overlay native step counter's live value for real-time accuracy
+        const { stepService } = await import('../../../services/stepService');
+        const nativeSteps = await stepService.getCurrentSteps();
+        if (nativeSteps > 0) {
+          result = { ...result, steps: nativeSteps };
+        }
       }
 
       setData(result);
@@ -264,15 +332,26 @@ export function useHealth(options: UseHealthOptions = {}) {
   // ── Real-time step updates from native sensor ─────────────────────────────
   // Subscribe to native step events so the UI updates immediately as the user
   // walks. The native sensor service runs on all API levels now.
+  // Adds the synced step offset for cross-device continuity.
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
 
     (async () => {
       const { stepService } = await import('../../../services/stepService');
       unsubscribe = stepService.onStepUpdate((newSteps: number) => {
+        // Add synced offset from server (steps from previous device today)
+        // Only for native_sensor mode — HC/HK handle their own step totals.
+        let totalSteps = newSteps;
+        if (platformRef.current === 'native_sensor') {
+          const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
+          const today = new Date().toISOString().split('T')[0];
+          const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
+          totalSteps = newSteps + offset;
+        }
+
         setData(prev => {
-          if (prev.steps === newSteps) return prev;
-          return { ...prev, steps: newSteps };
+          if (prev.steps === totalSteps) return prev;
+          return { ...prev, steps: totalSteps };
         });
         setLastUpdated(new Date());
       });
@@ -299,7 +378,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   );
 
   // ── Retry setup (after permissions granted from PermissionDeniedScreen) ───
-  const retrySetup = useCallback(() => {
+  const retrySetup = useCallback(async () => {
+    // Clear any stored "skipped" preference so the full flow runs
+    const { clearHealthPreference } = await import('../service/healthPreference.service');
+    clearHealthPreference();
     // Reset the guard so setup() can run again
     isSettingUpRef.current = false;
     // Also reset healthInitStore so it doesn't short-circuit
@@ -307,15 +389,40 @@ export function useHealth(options: UseHealthOptions = {}) {
     setup();
   }, []);
 
+  // ── Skip to native sensor (user chose to continue without HC/HK) ─────────
+  const skipToNativeSensor = useCallback(async () => {
+    const { setHealthPreference } = await import('../service/healthPreference.service');
+    setHealthPreference('skipped');
+
+    // Initialize native step service
+    const { stepService } = await import('../../../services/stepService');
+    await stepService.initialize();
+
+    // Update state to native_sensor mode
+    platformRef.current = 'native_sensor';
+    setPlatform('native_sensor');
+    isReadyRef.current = true;
+    setIsReady(true);
+    setError(null);
+
+    // Update the init store so it stays consistent
+    useHealthInitStore.getState().skipToNativeSensor();
+
+    // Load data using native sensor
+    await loadData('native_sensor');
+    startAutoRefresh();
+  }, []);
+
   // ── Manual log methods — routed by platform ───────────────────────────────
 
   const logHeartRate = useCallback(
     async (bpm: number) => {
       if (platform === 'healthkit') await writeHeartRateHK(bpm);
-      else {
+      else if (platform === 'healthconnect') {
         const { writeHeartRateHC } = getHealthConnectService();
         await writeHeartRateHC(bpm);
       }
+      // native_sensor: no external write — just update local state
       setData(prev => ({ ...prev, heartRate: bpm }));
       setLastUpdated(new Date());
     },
@@ -326,7 +433,7 @@ export function useHealth(options: UseHealthOptions = {}) {
     async (systolic: number, diastolic: number) => {
       if (platform === 'healthkit')
         await writeBloodPressureHK(systolic, diastolic);
-      else {
+      else if (platform === 'healthconnect') {
         const { writeBloodPressureHC } = getHealthConnectService();
         await writeBloodPressureHC(systolic, diastolic);
       }
@@ -343,7 +450,7 @@ export function useHealth(options: UseHealthOptions = {}) {
   const logWeight = useCallback(
     async (kg: number) => {
       if (platform === 'healthkit') await writeWeightHK(kg, new Date());
-      else {
+      else if (platform === 'healthconnect') {
         const { writeWeightHC } = getHealthConnectService();
         await writeWeightHC(kg, new Date());
       }
@@ -358,7 +465,7 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeSteps = useCallback(
     async (count: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeStepsHK(count, start);
-      else {
+      else if (platform === 'healthconnect') {
         const { writeStepsHC } = getHealthConnectService();
         await writeStepsHC(count, start, end);
       }
@@ -369,7 +476,7 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeWeight = useCallback(
     async (kg: number, date: Date) => {
       if (platform === 'healthkit') await writeWeightHK(kg, date);
-      else {
+      else if (platform === 'healthconnect') {
         const { writeWeightHC } = getHealthConnectService();
         await writeWeightHC(kg, date);
       }
@@ -380,7 +487,7 @@ export function useHealth(options: UseHealthOptions = {}) {
   const writeHydration = useCallback(
     async (ml: number, start: Date, end: Date) => {
       if (platform === 'healthkit') await writeHydrationHK(ml, start);
-      else {
+      else if (platform === 'healthconnect') {
         const { writeHydrationHC } = getHealthConnectService();
         await writeHydrationHC(ml, start, end);
       }
@@ -397,6 +504,7 @@ export function useHealth(options: UseHealthOptions = {}) {
     lastUpdated,
     refresh,
     retrySetup,
+    skipToNativeSensor,
     logHeartRate,
     logBloodPressure,
     logWeight,

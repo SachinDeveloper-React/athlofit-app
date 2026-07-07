@@ -1,5 +1,5 @@
 // src/features/account/service/accountScreenService.ts
-import { Activity, Award, Coins, Gift, Swords, Droplets, Footprints, Package, ShoppingBag, Zap, Trophy } from 'lucide-react-native';
+import { Activity, Award, Coins, Gift, Swords, Droplets, Footprints, Package, ShoppingBag, Zap, Trophy, HelpCircle } from 'lucide-react-native';
 import { MenuRow, Stat } from '../types/account.types';
 import { formatInt } from './accountService';
 import { navigate } from '../../../navigation/navigationRef';
@@ -126,6 +126,17 @@ export const accountScreenService = {
       onPress: () => {
         navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
           screen: AccountRoutes.REFERRAL,
+        });
+      },
+    },
+    {
+      key: 'help_support',
+      title: 'HELP & SUPPORT',
+      icon: HelpCircle,
+      tint: 'blue',
+      onPress: () => {
+        navigate(RootRoutes.ACCOUNT_NAVIGATOR, {
+          screen: AccountRoutes.HELP_SUPPORT,
         });
       },
     },

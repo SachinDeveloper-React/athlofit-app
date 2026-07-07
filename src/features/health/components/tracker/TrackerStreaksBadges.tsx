@@ -53,7 +53,8 @@ export const TrackerStreaksBadges = memo(
     const { colors, spacing } = useTheme();
 
     // animations
-    const appear = useSharedValue(0);
+    // Start visible — avoids intermittent invisibility on rapid remounts
+    const appear = useSharedValue(1);
     const prog = useSharedValue(0);
 
     const progress = useMemo(() => {
@@ -89,16 +90,11 @@ export const TrackerStreaksBadges = memo(
     );
 
     useEffect(() => {
-      appear.value = withTiming(1, {
-        duration: 380,
-        easing: Easing.out(Easing.cubic),
-      });
-
       prog.value = withTiming(progress, {
         duration: 700,
         easing: Easing.out(Easing.cubic),
       });
-    }, [progress, appear, prog]);
+    }, [progress, prog]);
 
     const wrapAnim = useAnimatedStyle(() => ({
       opacity: appear.value,

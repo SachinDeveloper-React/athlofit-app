@@ -50,6 +50,8 @@ export interface User {
   emailVerified: boolean;
   isProfileCompleted: boolean;
   dailyStepGoal: number;
+  pendingStepGoal?: number | null;
+  pendingGoalEffectiveDate?: string | null; // ISO "YYYY-MM-DD"
   provider: string;
   role: string;
   createdAt: string;

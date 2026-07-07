@@ -21,7 +21,18 @@ export const initializeHealthKit = async (): Promise<boolean> => {
   }
   try {
     const result = await HK.requestAuthorization();
-    return !!result;
+    if (!result) return false;
+
+    // Apple's requestAuthorization returns success=true even when the user
+    // denies permissions. Check actual write permission status to confirm.
+    const status = await HK.getWritePermissionStatus();
+    if (status === 'denied') {
+      console.log('[HealthKit] Write permission denied by user');
+      return false;
+    }
+    // 'granted' or 'not_determined' (first launch before dialog interaction)
+    // — treat not_determined as granted because the dialog was just shown
+    return true;
   } catch (e) {
     console.log('[HealthKit] requestAuthorization error:', e);
     return false;

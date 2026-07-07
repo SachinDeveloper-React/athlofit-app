@@ -10,6 +10,8 @@ import { useAuthStore } from '../../auth/store/authStore';
 import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../components/Toast';
 import { makeStyles } from '../../../hooks/makeStyles';
+import { withOpacity } from '../../../utils/withOpacity';
+import { Info } from 'lucide-react-native';
 
 const useStyles = makeStyles(({ colors, spacing, fontWeight }) => ({
   container: {
@@ -25,7 +27,22 @@ const useStyles = makeStyles(({ colors, spacing, fontWeight }) => ({
   },
   subtitle: {
     lineHeight: 21,
+    marginBottom: spacing[3],
+  },
+  infoBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: withOpacity(colors.primary, 0.08),
+    borderRadius: 10,
+    paddingVertical: spacing[2.5],
+    paddingHorizontal: spacing[3],
     marginBottom: spacing[6],
+    gap: spacing[2],
+  },
+  infoText: {
+    flex: 1,
+    lineHeight: 18,
+    color: colors.foreground,
   },
   divider: {
     height: 0.5,
@@ -74,6 +91,13 @@ const EditStepsGoalScreen = memo(() => {
         Choose a daily target that fits your lifestyle. You can update this
         anytime.
       </AppText>
+
+      <AppView style={styles.infoBanner}>
+        <Info size={18} color="#1D9E75" />
+        <AppText variant='caption1' style={styles.infoText}>
+          Step goal change will take effect from tomorrow. Today's challenges and streaks use your current goal.
+        </AppText>
+      </AppView>
 
       <AppView style={styles.divider} />
 

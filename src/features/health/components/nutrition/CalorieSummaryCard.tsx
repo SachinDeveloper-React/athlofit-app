@@ -201,7 +201,7 @@ export const CalorieSummaryCard = memo(
           </AppView>
         </AppView>
 
-        <AppView style={styles.burnRow}>
+        {/* <AppView style={styles.burnRow}>
           <AppText variant="caption1" weight="semiBold">Burned</AppText>
           <AppView style={styles.burnBarBg}>
             <View
@@ -215,7 +215,7 @@ export const CalorieSummaryCard = memo(
             />
           </AppView>
           <AppText variant="caption2">{caloriesOut} kcal</AppText>
-        </AppView>
+        </AppView> */}
 
         <AppView style={styles.macroRow}>
           <MacroPill label=" Protein" value={protein} unit="g" color="#2E7D62" />

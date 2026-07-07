@@ -12,10 +12,16 @@ interface HealthDataStore {
   lastUpdated: Date | null;
   loginTimestamp: number | null; // Timestamp when user logged in (to filter historical data)
   lastFetchedAt: number | null; // Timestamp of last successful health data fetch
+  syncedStepOffset: number; // Steps synced from server on login (from previous device)
+  syncedStepOffsetDate: string | null; // Date (YYYY-MM-DD) the offset applies to
+  bonusSteps: number; // Bonus steps credited by admin/system for today
+  bonusStepsDate: string | null; // Date the bonus applies to (resets daily)
   setData: (data: HealthData) => void;
   setLastUpdated: (date: Date | null) => void;
   setLoginTimestamp: (timestamp: number) => void;
   setLastFetchedAt: (timestamp: number) => void;
+  setSyncedStepOffset: (steps: number, date: string) => void;
+  setBonusSteps: (steps: number, date: string) => void;
   reset: () => void;
 }
 
@@ -26,6 +32,10 @@ export const useHealthDataStore = create<HealthDataStore>()(
       lastUpdated: null,
       loginTimestamp: null,
       lastFetchedAt: null,
+      syncedStepOffset: 0,
+      syncedStepOffsetDate: null,
+      bonusSteps: 0,
+      bonusStepsDate: null,
       
       setData: (data) => set({ data }),
       
@@ -34,12 +44,20 @@ export const useHealthDataStore = create<HealthDataStore>()(
       setLoginTimestamp: (timestamp) => set({ loginTimestamp: timestamp }),
 
       setLastFetchedAt: (timestamp) => set({ lastFetchedAt: timestamp }),
+
+      setSyncedStepOffset: (steps, date) => set({ syncedStepOffset: steps, syncedStepOffsetDate: date }),
+
+      setBonusSteps: (steps, date) => set({ bonusSteps: steps, bonusStepsDate: date }),
       
       reset: () => set({ 
         data: defaultHealthData, 
         lastUpdated: null,
         loginTimestamp: null,
         lastFetchedAt: null,
+        syncedStepOffset: 0,
+        syncedStepOffsetDate: null,
+        bonusSteps: 0,
+        bonusStepsDate: null,
       }),
     }),
     {
@@ -51,6 +69,10 @@ export const useHealthDataStore = create<HealthDataStore>()(
         data: state.data,
         lastUpdated: state.lastUpdated,
         lastFetchedAt: state.lastFetchedAt,
+        syncedStepOffset: state.syncedStepOffset,
+        syncedStepOffsetDate: state.syncedStepOffsetDate,
+        bonusSteps: state.bonusSteps,
+        bonusStepsDate: state.bonusStepsDate,
       }),
     }
   )

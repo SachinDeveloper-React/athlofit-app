@@ -15,7 +15,7 @@ interface StepsSliderProps {
 export function StepsSlider({
   value,
   onValueChange,
-  min = 5000,
+  min = 3000,
   max = 20000,
   step = 500,
 }: StepsSliderProps) {

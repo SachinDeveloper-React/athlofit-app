@@ -263,6 +263,18 @@ class StepCounterService : Service(), SensorEventListener {
         val cumulative = event.values[0].toLong()
         lastCumulative = cumulative
 
+        // Check if the day has changed since last event — handles the case where
+        // the midnight alarm fires late or doesn't fire at all (Doze mode).
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "onSensorChanged — day changed ($storedDate → $today), performing midnight reset")
+            persistStepHistory(storedDate, dailySteps)
+            performMidnightReset()
+            // After reset, baseline is set to lastCumulative (which is 'cumulative' here)
+            // so this event produces 0 steps — just return
+            return
+        }
+
         // First event after service start: initialize baseline if not already set
         if (!hasReceivedFirstEvent) {
             hasReceivedFirstEvent = true
@@ -535,8 +547,18 @@ class StepCounterService : Service(), SensorEventListener {
         }
         storedDate = today
 
+        // Update live step count immediately so JS reads 0 right after midnight
+        liveStepCount = 0
+
         persistState()
         scheduleMidnightAlarm()
+
+        // Emit step update event to JS so the UI resets to 0 immediately
+        NativeStepModule.emitStepUpdate(0, forceEmit = true)
+
+        // Update notification and widget to show 0 steps
+        maybeUpdateNotification()
+        updateWidget()
 
         Log.d(TAG, "performMidnightReset — reset complete. baseline=$baseline, storedDate=$storedDate")
     }
@@ -613,12 +635,17 @@ class StepCounterService : Service(), SensorEventListener {
     // ── Notification ─────────────────────────────────────────────────────────
 
     /**
-     * No-op: StepNotificationService handles the notification display (every 10s).
-     * This service shares the same NOTIF_ID so the initial startForeground()
-     * notification is immediately overwritten by StepNotificationService.
+     * Updates the foreground notification with the current step count.
+     * Throttled to at most once every 5 seconds to avoid excessive notification
+     * updates which could drain battery or cause visual flickering.
      */
     private fun maybeUpdateNotification() {
-        // Intentionally empty — StepNotificationService owns notification updates.
+        val now = System.currentTimeMillis()
+        if (now - lastNotificationUpdateTime < 5_000L) return
+        lastNotificationUpdateTime = now
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        nm.notify(NOTIF_ID, buildStepNotification(dailySteps))
     }
 
     // ── Event Emission ──────────────────────────────────────────────────────
