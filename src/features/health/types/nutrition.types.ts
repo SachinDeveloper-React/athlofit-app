@@ -8,13 +8,14 @@ import { ApiResponse } from '../../../types/auth.types';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks';
 
-export type DietPreference = 'veg' | 'non-veg' | 'vegan';
+export type DietPreference = 'all' | 'veg' | 'non-veg' | 'vegan' | 'eggetarian';
 
 export type DietaryGoal =
   | 'weight_loss'
   | 'muscle_gain'
   | 'maintenance'
-  | 'endurance';
+  | 'endurance'
+  | 'weight_gain';
 
 export type MealUnit = 'g' | 'ml' | 'serving' | 'piece';
 
@@ -120,7 +121,7 @@ export const MEAL_META: MealMeta[] = [
 
 export type FoodCategory = 'all' | 'breakfast' | 'lunch' | 'dinner' | 'snacks';
 
-export type DietFilter = 'all' | 'veg' | 'non-veg' | 'vegan';
+export type DietFilter = 'all' | 'veg' | 'non-veg' | 'vegan' | 'eggetarian';
 
 export interface FoodItem {
   _id: string;
@@ -250,5 +251,12 @@ export const DIET_RECOMMENDATIONS: Record<
     emoji: '🏃',
     color: '#7B3FA8',
     bg: '#F3ECFB',
+  },
+  weight_gain: {
+    title: 'Healthy Weight Gain',
+    body: 'Focus on calorie-dense, nutrient-rich foods. Aim for a 300–500 kcal surplus with balanced meals including healthy fats, complex carbs, and protein.',
+    emoji: '⚖️',
+    color: '#D4820A',
+    bg: '#FFF8EC',
   },
 };

@@ -70,7 +70,7 @@ export function useNutritionPreferences() {
     queryFn: () => nutritionService.getPreferences(),
     select: (response): NutritionPreferences =>
       response.data ?? {
-        dietPreference: 'non-veg',
+        dietPreference: 'all',
         dietaryGoal: 'maintenance',
         calorieGoal: 2000,
       },
@@ -138,6 +138,8 @@ export function useUpdatePreferences() {
     onSuccess: () => {
       client.invalidateQueries({ queryKey: nutritionKeys.preferences() });
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
+      // Refresh food catalog when diet/goal changes so the list reflects new preferences
+      client.invalidateQueries({ queryKey: ['nutrition-foods'] });
     },
   });
 }

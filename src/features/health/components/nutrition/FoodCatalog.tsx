@@ -1,8 +1,9 @@
 // ─── FoodCatalog.tsx ──────────────────────────────────────────────────────────
 // Inline food catalog widget for NutritionAndGoalSection.
-// Filter chips are loaded from the API via useCatalogFilters (useMutation).
+// Diet filtering is driven entirely by user's diet preference selection —
+// no local filter chips needed (already selected via DietPreferenceChips).
 
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -10,12 +11,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
 import { AppText, AppView, Card } from '../../../../components';
 import { Icon } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
@@ -24,60 +19,11 @@ import {
   useFoodCatalog,
   useFavourites,
   useToggleFavourite,
-  useCatalogFilters,
   useNutritionPreferences,
-  DEFAULT_CATALOG_FILTERS,
 } from '../../hooks/useNutrition';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
-import type { DietFilter, FoodItem, CatalogFilter, FoodQueryParams } from '../../types/nutrition.types';
-
-// ─── Animated Filter Chip ─────────────────────────────────────────────────────
-
-interface ChipProps {
-  chip: CatalogFilter;
-  isActive: boolean;
-  activeColor: string;
-  onPress: (id: string) => void;
-}
-
-const Chip = memo(({ chip, isActive, activeColor, onPress }: ChipProps) => {
-  const progress = useSharedValue(isActive ? 1 : 0);
-
-  useEffect(() => {
-    progress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
-  }, [isActive]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      ['rgba(0,0,0,0.03)', activeColor],
-    ),
-    borderColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      ['rgba(0,0,0,0.1)', activeColor],
-    ),
-  }));
-
-  return (
-    <TouchableOpacity onPress={() => onPress(chip.id)} activeOpacity={0.75}>
-      <Animated.View style={[styles.chip, animStyle]}>
-        <AppText style={styles.chipEmoji}>{chip.emoji}</AppText>
-        <AppText
-          variant="caption1"
-          weight={isActive ? 'semiBold' : 'regular'}
-          color={isActive ? '#ffffff' : undefined}
-        >
-          {chip.label}
-        </AppText>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-});
-
-Chip.displayName = 'Chip';
+import type { DietFilter, FoodItem, FoodQueryParams } from '../../types/nutrition.types';
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -94,59 +40,33 @@ EmptyState.displayName = 'EmptyState';
 export const FoodCatalog = memo(() => {
   const { colors } = useTheme();
 
-  // ── Use user's diet preference as default filter ──────────────────────────
+  // ── Use user's diet preference & goal directly (no local filter state) ────
   const { data: preferences } = useNutritionPreferences();
-  const defaultFilter = preferences?.dietPreference ?? 'all';
-  const [activeFilter, setActiveFilter] = useState<string>(defaultFilter);
 
-  // Update active filter when preferences load (initial render may have 'all')
-  useEffect(() => {
-    if (preferences?.dietPreference) {
-      setActiveFilter(preferences.dietPreference);
-    }
-  }, [preferences?.dietPreference]);
+  const dietPref = preferences?.dietPreference;
+  const dietaryGoal = preferences?.dietaryGoal;
 
-  // ── Fetch filter chips from API via useMutation ───────────────────────────
-  const {
-    mutate: fetchFilters,
-    data: filtersResponse,
-    isPending: filtersLoading,
-  } = useCatalogFilters();
-
-  useEffect(() => {
-    fetchFilters();
-  }, [fetchFilters]);
-
-  // Use API chips if available, fall back to defaults while loading or on error
-  const filterChips: CatalogFilter[] =
-    filtersResponse?.data?.catalogFilters ?? DEFAULT_CATALOG_FILTERS;
-
-  // ── Food data ─────────────────────────────────────────────────────────────
-  const catalogParams: FoodQueryParams | undefined =
-    activeFilter === 'favourites'
-      ? undefined
-      : {
-          dietType: activeFilter === 'all' ? undefined : (activeFilter as DietFilter),
-          goal: preferences?.dietaryGoal,
-          limit: 10,
-        };
+  // Build catalog params from user preferences:
+  // - If dietPreference is 'all' or not set, don't filter by dietType (show all foods)
+  // - Otherwise filter by the selected diet
+  const catalogParams: FoodQueryParams = {
+    dietType: (!dietPref || dietPref === 'all') ? undefined : (dietPref as DietFilter),
+    goal: dietaryGoal,
+    limit: 10,
+  };
 
   const { data: catalogData, isLoading: catalogLoading } = useFoodCatalog(catalogParams);
-  const { data: favourites, isLoading: favLoading }      = useFavourites();
+  const { data: favourites }      = useFavourites();
   const {
     mutate: toggleFav,
     variables: togglingId,
     isPending: isTogglingFav,
   } = useToggleFavourite();
 
-  const displayedFoods: FoodItem[] =
-    activeFilter === 'favourites' ? (favourites ?? []) : (catalogData?.foods ?? []);
-
-  const isLoading = activeFilter === 'favourites' ? favLoading : catalogLoading;
+  const displayedFoods: FoodItem[] = catalogData?.foods ?? [];
+  const isLoading = catalogLoading;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleFilterPress = useCallback((id: string) => setActiveFilter(id), []);
-
   const handleCardPress = useCallback((item: FoodItem) => {
     navigate(RootRoutes.HEALTH_NAVIGATOR, {
       screen: HealthRoutes.FOOD_DETAIL,
@@ -174,32 +94,6 @@ export const FoodCatalog = memo(() => {
           <Icon name="ChevronRight" size={14} color={colors.primary} />
         </TouchableOpacity>
       </AppView>
-
-      {/* Filter chips — skeleton while loading */}
-      {filtersLoading ? (
-        <AppView style={styles.chipRow}>
-          {DEFAULT_CATALOG_FILTERS.map(f => (
-            <View key={f.id} style={[styles.chipSkeleton, { backgroundColor: colors.border }]} />
-          ))}
-        </AppView>
-      ) : (
-        <FlashList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={filterChips}
-          keyExtractor={c => c.id}
-          contentContainerStyle={styles.chipRowList}
-          ItemSeparatorComponent={() => <View style={{ width: 8 }} />}
-          renderItem={({ item: chip }) => (
-            <Chip
-              chip={chip}
-              isActive={activeFilter === chip.id}
-              activeColor={colors.primary}
-              onPress={handleFilterPress}
-            />
-          )}
-        />
-      )}
 
       {/* Food list */}
       {isLoading ? (
@@ -241,19 +135,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerLeft: { gap: 2 },
   viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4 },
-  chipRowList: { paddingRight: 4 },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  chipSkeleton: { width: 72, height: 32, borderRadius: 20, opacity: 0.4 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
-  },
-  chipEmoji: { fontSize: 13 },
   foodList: { paddingVertical: 4, paddingRight: 4 },
   cardWrap: { width: 148 },
   loader: { paddingVertical: 24, alignItems: 'center' },

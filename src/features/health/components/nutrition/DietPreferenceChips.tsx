@@ -1,6 +1,6 @@
 // ─── DietPreferenceChips.tsx ──────────────────────────────────────────────────
 
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -35,23 +35,33 @@ function Chip<T extends string>({
   value, label, emoji, isActive, activeColor, onPress, disabled,
 }: ChipProps<T>) {
   const progress = useSharedValue(isActive ? 1 : 0);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    progress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
+    // On first render, snap immediately (no animation) to avoid stale frame
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      progress.value = isActive ? 1 : 0;
+    } else {
+      progress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
+    }
   }, [isActive]);
 
-  const animStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      ['rgba(0,0,0,0.03)', activeColor],
-    ),
-    borderColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      ['rgba(0,0,0,0.08)', activeColor],
-    ),
-  }));
+  const animStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      backgroundColor: interpolateColor(
+        progress.value,
+        [0, 1],
+        ['rgba(0,0,0,0.03)', activeColor],
+      ),
+      borderColor: interpolateColor(
+        progress.value,
+        [0, 1],
+        ['rgba(0,0,0,0.08)', activeColor],
+      ),
+    };
+  });
 
   return (
     <TouchableOpacity

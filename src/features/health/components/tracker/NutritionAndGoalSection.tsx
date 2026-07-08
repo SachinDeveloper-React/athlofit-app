@@ -188,7 +188,7 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
     data: preferences,
     isLoading: prefsLoading,
     refetch: refetchPrefs,
-  } = useNutritionPreferences();
+  } = useNutritionPreferences();  
 
   const { mutate: logMeal, isPending: isAdding } = useLogMeal();
   const { mutate: deleteMeal, isPending: isDeleting } = useDeleteMeal();
