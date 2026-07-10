@@ -20,6 +20,7 @@ import {
   useFavourites,
   useToggleFavourite,
   useNutritionPreferences,
+  useNutritionSummary,
 } from '../../hooks/useNutrition';
 import { navigate } from '../../../../navigation/navigationRef';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
@@ -42,6 +43,7 @@ export const FoodCatalog = memo(() => {
 
   // ── Use user's diet preference & goal directly (no local filter state) ────
   const { data: preferences } = useNutritionPreferences();
+  const { data: summary } = useNutritionSummary();
 
   const dietPref = preferences?.dietPreference;
   const dietaryGoal = preferences?.dietaryGoal;
@@ -110,16 +112,21 @@ export const FoodCatalog = memo(() => {
           keyExtractor={item => item._id}
           contentContainerStyle={styles.foodList}
           ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
-          renderItem={({ item }) => (
-            <View style={styles.cardWrap}>
-              <FoodCard
-                item={item}
-                onPress={handleCardPress}
-                onFavouriteToggle={handleFavToggle}
-                isTogglingFav={isTogglingFav && togglingId === item._id}
-              />
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const intake = summary?.foodIntakeSummary?.find(e => e.foodRef === item._id);
+            return (
+              <View style={styles.cardWrap}>
+                <FoodCard
+                  item={item}
+                  onPress={handleCardPress}
+                  onFavouriteToggle={handleFavToggle}
+                  isTogglingFav={isTogglingFav && togglingId === item._id}
+                  intakeCount={intake?.totalQuantity}
+                  intakeCalories={intake?.totalCalories}
+                />
+              </View>
+            );
+          }}
         />
       )}
     </Card>

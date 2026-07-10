@@ -22,7 +22,6 @@ import {
   BackgroundAccessPermission,
   Permission,
 } from 'react-native-health-connect';
-import { Platform } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
 // ─── Derivation constants (70 kg, 76 cm stride adult baseline) ────────────────
@@ -255,18 +254,15 @@ export const writeDerivedActivity = async (
 
 // ─── Step deduplication ───────────────────────────────────────────────────────
 //
-// Health Connect aggregate() sums steps from ALL data origins — including
-// third-party apps like Sweatcoin, Google Fit, Samsung Health, etc. that also
-// write StepsRecord. This causes inflated counts vs the native step counter.
+// Health Connect can have steps from MULTIPLE data origins — Samsung Health,
+// Google Fit, platform sensor, third-party apps like Sweatcoin, etc.
+//
+// aggregateRecord() sums all sources, which inflates the count on Samsung
+// devices where Samsung Health and the platform sensor both write steps.
 //
 // Fix: read individual StepsRecord entries, group by dataOrigin, and keep only
-// the single source with the highest step count for the window. This mirrors
-// what the native step counter app and Money Walk do — they read from one
-// authoritative source (the device's hardware pedometer), not the aggregate.
-//
-// On API >= 34 (Android 14+), Health Connect is a platform component and the
-// system handles deduplication natively via priority-based source ranking.
-// We use aggregateRecord() there which returns the correct de-duped total.
+// the single source with the highest step count. This mirrors what the native
+// HealthSyncHelper.kt does and matches what Samsung Health shows.
 //
 
 export async function readStepsDeduped(
@@ -274,24 +270,16 @@ export async function readStepsDeduped(
   endTime: string,
 ): Promise<number> {
   try {
-    // On API >= 34 (Android 14+), the platform's Health Connect handles
-    // deduplication internally. aggregateRecord returns the correct total
-    // that matches the native step counter app.
-    if (Platform.OS === 'android' && Platform.Version >= 34) {
-      const result = await readWithRetry(() =>
-        aggregateRecord({
-          recordType: 'Steps',
-          timeRangeFilter: { operator: 'between' as const, startTime, endTime },
-        }),
-      );
-      const total = (result as any).COUNT_TOTAL ?? 0;
-      console.log('[HealthConnect] Steps (aggregate, API 34+):', total);
-      return total;
-    }
-
-    // On API < 34, third-party apps may write duplicate step records.
-    // Read individual records, group by dataOrigin, pick the highest
-    // single-source total to avoid inflation.
+    // Read individual records and pick the single highest-count source.
+    // This prevents inflation from multiple apps (Samsung Health, Google Fit,
+    // platform sensor) that all write StepsRecord to Health Connect.
+    //
+    // NOTE: We previously used aggregateRecord() on API 34+ assuming the
+    // platform handles deduplication internally. However, Samsung devices
+    // (OneUI) treat Samsung Health and the platform sensor as separate valid
+    // sources and sum them, causing ~2x inflation. The readRecords + max-source
+    // approach matches what the native HealthSyncHelper.kt does and produces
+    // correct counts on all OEMs.
     const { records } = await readWithRetry(() =>
       readRecords('Steps', {
         timeRangeFilter: { operator: 'between' as const, startTime, endTime },
@@ -309,8 +297,8 @@ export async function readStepsDeduped(
 
     console.log('[HealthConnect] Steps by origin:', totals);
 
-    // Return the highest single-source total — this is what the native
-    // step counter app shows (it reads from one source, not the sum).
+    // Return the highest single-source total — this matches what Samsung Health
+    // shows and what the native Kotlin worker reports.
     return Math.max(...Object.values(totals));
   } catch (e) {
     console.warn('[HealthConnect] readStepsDeduped failed, falling back to aggregate:', e);

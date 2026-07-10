@@ -6,11 +6,6 @@ import {
   View,
 } from 'react-native';
 import { FlashList, ListRenderItem } from '@shopify/flash-list';
-import Animated, {
-  FadeInDown,
-  FadeInUp,
-  LinearTransition,
-} from 'react-native-reanimated';
 
 import { useTheme } from '../../../hooks/useTheme';
 import AppView from '../../../components/AppView';
@@ -144,9 +139,8 @@ const CoinScreen = () => {
   // ── Render helpers ────────────────────────────────────────────────────────
 
   const renderHero = useCallback(() => (
-    <Animated.View layout={LinearTransition.springify()}>
-      <Animated.View
-        entering={FadeInDown.duration(500)}
+    <View>
+      <View
         style={[
           styles.heroCard,
           {
@@ -173,13 +167,12 @@ const CoinScreen = () => {
         <AppText variant="body" secondary style={{ textAlign: 'center', marginTop: spacing[2], paddingHorizontal: spacing[3] }}>
           Track rewards, review coin activity, and unlock more benefits through challenges and goals.
         </AppText>
-      </Animated.View>
-    </Animated.View>
+      </View>
+    </View>
   ), [balance, colors, spacing, radius]);
 
   const renderStats = useCallback(() => (
-    <Animated.View
-      entering={FadeInUp.duration(650)}
+    <View
       style={[styles.statsRow, { paddingHorizontal: spacing[4], marginTop: spacing[4], gap: spacing[3] }]}
     >
       {stats.map(stat => (
@@ -202,12 +195,11 @@ const CoinScreen = () => {
           <AppText variant="caption1" secondary style={{ marginTop: 4 }}>{stat.label}</AppText>
         </View>
       ))}
-    </Animated.View>
+    </View>
   ), [stats, colors, spacing, radius]);
 
   const renderTabs = useCallback(() => (
-    <Animated.View
-      entering={FadeInUp.duration(750)}
+    <View
       style={[
         styles.tabsContainer,
         {
@@ -245,7 +237,7 @@ const CoinScreen = () => {
           </Pressable>
         );
       })}
-    </Animated.View>
+    </View>
   ), [activeTab, colors, spacing, radius]);
 
   const renderSectionHeader = useCallback(() => (

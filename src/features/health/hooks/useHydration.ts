@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useHydrationStore,
   selectPercentage,
@@ -11,6 +12,7 @@ import { deleteRecordsByTimeRange } from 'react-native-health-connect';
 import { buildTodayFilter } from '../utils/healthFormatters';
 
 export const useHydration = () => {
+  const queryClient = useQueryClient();
   const {
     consumed,
     dailyGoal,
@@ -39,9 +41,14 @@ export const useHydration = () => {
   // Only set consumed from Health Connect on the INITIAL load (when hydration
   // store consumed is 0 and Health Connect has a non-zero value). After that,
   // the store's optimistic updates from addWater are the source of truth.
+  // IMPORTANT: Skip if user already reset today — otherwise Health Connect's
+  // stale data would overwrite the reset back to the old value.
   useEffect(() => {
     if (!isReady || healthLoading) return;
-    const currentConsumed = useHydrationStore.getState().consumed;
+    const { consumed: currentConsumed, lastResetDate } = useHydrationStore.getState();
+    const today = new Date().toDateString();
+    // If the user already reset today, don't re-sync from Health Connect
+    if (lastResetDate === today) return;
     // Only sync from Health Connect if the store has no local data yet
     if (currentConsumed === 0 && data?.hydration > 0) {
       setConsumed(data.hydration);
@@ -60,11 +67,18 @@ export const useHydration = () => {
           storeAddWater(amount),
           writeHydration(amount, start, end),
         ]);
+
+        // Refresh claim button state when water intake crosses the goal
+        const { consumed: newConsumed, dailyGoal: goal } = useHydrationStore.getState();
+        if (newConsumed >= goal) {
+          queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+          queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+        }
       } catch (error) {
         console.log('error', error);
       }
     },
-    [storeAddWater, writeHydration],
+    [storeAddWater, writeHydration, queryClient],
   );
 
   // ── resetDay ───────────────────────────────────────────────────────────────
@@ -78,7 +92,11 @@ export const useHydration = () => {
       );
     }
     await Promise.allSettled(promises);
-  }, [storeResetDay, platform]);
+
+    // Refresh earn-coins / claim button state after hydration reset
+    queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+    queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+  }, [storeResetDay, platform, queryClient]);
 
   return {
     // Data

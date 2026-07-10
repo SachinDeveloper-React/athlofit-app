@@ -307,10 +307,13 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { fetchAllHealthConnectData } = getHealthConnectService();
         result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
 
-        // Overlay native step counter's live value for real-time accuracy
+        // Overlay native step counter's live value for real-time accuracy.
+        // Take the higher of HC and native sensor — the native service may have
+        // just restarted (showing 0 or a low value) while HC has accumulated
+        // steps from before the service was running.
         const { stepService } = await import('../../../services/stepService');
         const nativeSteps = await stepService.getCurrentSteps();
-        if (nativeSteps > 0) {
+        if (nativeSteps > result.steps) {
           result = { ...result, steps: nativeSteps };
         }
       }
@@ -351,6 +354,13 @@ export function useHealth(options: UseHealthOptions = {}) {
 
         setData(prev => {
           if (prev.steps === totalSteps) return prev;
+          // In healthconnect/healthkit mode, the native sensor is a supplementary
+          // source for real-time updates. Never let it decrease the step count
+          // below what Health Connect already reported — this prevents the service
+          // from overwriting HC steps with 0 when it restarts after being stopped.
+          if (platformRef.current !== 'native_sensor' && totalSteps < prev.steps) {
+            return prev;
+          }
           return { ...prev, steps: totalSteps };
         });
         setLastUpdated(new Date());

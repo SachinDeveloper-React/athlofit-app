@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import { useTheme } from '../../../../hooks/useTheme';
 import AppText from '../../../../components/AppText';
 import { Icon } from '../../../../components/Icon';
@@ -114,7 +113,7 @@ const getCategoryExplanation = (category?: TransactionCategory, type?: string): 
   }
 };
 
-// Format date
+// Format date — shows full date + time with relative duration
 const formatTransactionDate = (dateStr: string): string => {
   const date = new Date(dateStr);
   const now = new Date();
@@ -123,16 +122,30 @@ const formatTransactionDate = (dateStr: string): string => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  // Relative label
+  let relative = '';
+  if (diffMins < 1) relative = 'Just now';
+  else if (diffMins < 60) relative = `${diffMins}m`;
+  else if (diffHours < 24) relative = `${diffHours}h`;
+  else if (diffDays < 30) relative = `${diffDays}d`;
+  else relative = `${Math.floor(diffDays / 30)}mo`;
 
-  return date.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  // Full date + time: "Sat 11 Jul 2026 1:26:00 AM"
+  const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+  const time = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
   });
+
+  const fullDate = `${dayName} ${day} ${month} ${year} ${time}`;
+
+  if (relative === 'Just now') return `${fullDate} (now)`;
+  return `${fullDate} (${relative})`;
 };
 
 const formatFullDate = (dateStr: string): string => {
@@ -269,10 +282,9 @@ const TransactionItem = ({ item }: Props) => {
 
   return (
     <>
-      <Animated.View layout={Layout.springify()}>
+      <View>
         <Pressable onPress={handlePress}>
-          <Animated.View
-            entering={FadeInDown.delay(100)}
+          <View
             style={[
               styles.transactionCard,
               {
@@ -301,9 +313,9 @@ const TransactionItem = ({ item }: Props) => {
                 </AppText>
               )}
             </View>
-          </Animated.View>
+          </View>
         </Pressable>
-      </Animated.View>
+      </View>
 
       <DetailPopup
         visible={showDetail}

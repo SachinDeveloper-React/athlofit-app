@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Platform, RefreshControl, ScrollView, View, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppView, Header, Loader, Screen, Tabs } from '../../../components';
 import RightTrackerHeader from '../components/tracker/RightTrackerHeader';
 import DailyStatsSection, {
@@ -37,6 +38,7 @@ import {
 } from '../../../navigation/routes';
 import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
+import { nutritionKeys } from '../hooks/useNutrition';
 
 const RIGHTACTION = memo(
   ({
@@ -201,6 +203,7 @@ const TrackerScreen = memo(() => {
   // ── Track whether the current load was triggered by the user pulling down ──
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const isOnline = useNetworkStore(state => state.isOnline);
+  const queryClient = useQueryClient();
 
   const userAvatarUrl = useAuthStore(state => state.user?.avatarUrl);
   const userName = useAuthStore(state => state.user?.name);
@@ -351,7 +354,13 @@ const TrackerScreen = memo(() => {
       // immediately — not cached/stale data from 5+ seconds ago.
       refresh(false);
       refreshWeek();
-    }, [refresh, refreshWeek]),
+      // Invalidate nutrition data on focus so preferences/goals updated
+      // on another screen (e.g. settings) are reflected immediately.
+      const today = new Date().toISOString().split('T')[0];
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.preferences() });
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.summary(today) });
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.options() });
+    }, [refresh, refreshWeek, queryClient]),
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -371,7 +380,12 @@ const TrackerScreen = memo(() => {
     // streak refetch is handled by useStreaks/useStreak via React Query's
     // refetchOnWindowFocus and the manual refetch below
     refetchStreak();
-  }, [refresh, refreshWeek, fetchGamification, refetchStreak]);
+    // Refresh nutrition preferences and daily summary so goals/prefs update
+    const today = new Date().toISOString().split('T')[0];
+    queryClient.invalidateQueries({ queryKey: nutritionKeys.preferences() });
+    queryClient.invalidateQueries({ queryKey: nutritionKeys.summary(today) });
+    queryClient.invalidateQueries({ queryKey: nutritionKeys.options() });
+  }, [refresh, refreshWeek, fetchGamification, refetchStreak, queryClient]);
 
   const handleGateRetry = useCallback(() => {
     setGateReason(null);

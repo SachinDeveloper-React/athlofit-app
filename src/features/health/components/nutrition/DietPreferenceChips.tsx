@@ -131,17 +131,22 @@ export const DietPreferenceChips = memo(({ preferences, onUpdate, isMutating }: 
   const activeDietPref = localDietPref ?? preferences?.dietPreference;
   const activeGoal = localGoal ?? preferences?.dietaryGoal;
 
+  // Clear optimistic local state once the server confirms the new value
+  // OR when the server returns a different value (e.g. mutation failed,
+  // or a fresh refetch/pull-to-refresh returns updated data).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (localDietPref !== undefined && preferences?.dietPreference === localDietPref) {
+    if (localDietPref !== undefined && preferences?.dietPreference !== undefined) {
       setLocalDietPref(undefined);
     }
-  }, [preferences?.dietPreference, localDietPref]);
+  }, [preferences?.dietPreference]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (localGoal !== undefined && preferences?.dietaryGoal === localGoal) {
+    if (localGoal !== undefined && preferences?.dietaryGoal !== undefined) {
       setLocalGoal(undefined);
     }
-  }, [preferences?.dietaryGoal, localGoal]);
+  }, [preferences?.dietaryGoal]);
 
   const handleDietPref = useCallback(
     (value: string) => {

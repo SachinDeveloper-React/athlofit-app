@@ -215,9 +215,11 @@ const EditProfileScreen: React.FC = () => {
                           },
                         ]}
                       >
-                        <AppText style={styles.genderEmoji}>
-                          {opt.emoji}
-                        </AppText>
+                        <Icon
+                          name={opt.icon as any}
+                          size={20}
+                          color={selected ? colors.primary : colors.mutedForeground}
+                        />
                         <AppText
                           style={[
                             styles.genderLabel,
@@ -393,10 +395,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
+    gap: 4,
   },
-  genderEmoji: { fontSize: 20, marginBottom: 4 },
   genderLabel: { fontSize: 13 },
   pseudoInput: {
     flexDirection: 'row',

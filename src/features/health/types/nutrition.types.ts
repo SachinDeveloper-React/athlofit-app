@@ -31,6 +31,7 @@ export interface MealEntry {
   fat?: number;      // g
   quantity?: number;
   unit?: MealUnit;
+  foodRef?: string;  // reference to food catalog item
   loggedAt: string;  // ISO datetime
 }
 
@@ -38,6 +39,13 @@ export interface NutritionPreferences {
   dietPreference: DietPreference;
   dietaryGoal: DietaryGoal;
   calorieGoal: number; // kcal/day
+}
+
+export interface FoodIntakeEntry {
+  foodRef: string;
+  name: string;
+  totalQuantity: number;
+  totalCalories: number;
 }
 
 export interface DailyNutritionSummary {
@@ -49,6 +57,7 @@ export interface DailyNutritionSummary {
   totalCarbs: number;
   totalFat: number;
   meals: Record<MealType, MealEntry[]>;
+  foodIntakeSummary?: FoodIntakeEntry[];
 }
 
 // ─── Request / Response ───────────────────────────────────────────────────────

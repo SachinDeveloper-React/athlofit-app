@@ -20,6 +20,10 @@ interface Props {
   onPress: (item: FoodItem) => void;
   onFavouriteToggle: (id: string) => void;
   isTogglingFav?: boolean;
+  /** Number of servings already consumed today */
+  intakeCount?: number;
+  /** Total calories consumed today for this food */
+  intakeCalories?: number;
 }
 
 const MacroBadge = memo(
@@ -147,10 +151,17 @@ const useStyles = makeStyles(({ colors, spacing, radius, fontSize }) => ({
     borderRadius: radius.sm,
     gap: spacing[0.25 as any] ?? 1,
   },
+  intakeBadge: {
+    paddingHorizontal: spacing[1.5],
+    paddingVertical: spacing[0.75 as any] ?? 3,
+    borderRadius: radius.sm,
+    alignSelf: 'flex-start' as const,
+    marginTop: spacing[0.5],
+  },
 }));
 
 export const FoodCard = memo(
-  ({ item, onPress, onFavouriteToggle, isTogglingFav }: Props) => {
+  ({ item, onPress, onFavouriteToggle, isTogglingFav, intakeCount, intakeCalories }: Props) => {
     const { colors } = useTheme();
     const styles = useStyles();
     const dietMeta = DIET_TYPE_META[item.dietType];
@@ -229,6 +240,15 @@ export const FoodCard = memo(
             <MacroBadge label="C" value={item.carbs} color="#2C5FA3" />
             <MacroBadge label="F" value={item.fat} color="#B04C78" />
           </AppView>
+
+          {/* Today's intake badge */}
+          {intakeCount != null && intakeCount > 0 && (
+            <AppView style={[styles.intakeBadge, { backgroundColor: withOpacity(colors.primary, 0.08) }]}>
+              <AppText variant="caption2" weight="semiBold" color={colors.primary}>
+                ✓ {intakeCount} eaten · {intakeCalories ?? 0} kcal
+              </AppText>
+            </AppView>
+          )}
         </AppView>
       </TouchableOpacity>
     );

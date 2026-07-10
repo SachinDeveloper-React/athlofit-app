@@ -55,6 +55,7 @@ export function useNutritionSummary(date?: string) {
           dinner: [],
           snacks: [],
         },
+        foodIntakeSummary: [],
       },
     staleTime: 30_000,
     retry: 1,
@@ -140,6 +141,10 @@ export function useUpdatePreferences() {
       client.invalidateQueries({ queryKey: nutritionKeys.summary(todayISO()) });
       // Refresh food catalog when diet/goal changes so the list reflects new preferences
       client.invalidateQueries({ queryKey: ['nutrition-foods'] });
+    },
+    onError: () => {
+      // Refetch preferences on failure so the UI reverts to server truth
+      client.invalidateQueries({ queryKey: nutritionKeys.preferences() });
     },
   });
 }

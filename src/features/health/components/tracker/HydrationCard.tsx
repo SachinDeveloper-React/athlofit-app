@@ -28,12 +28,14 @@ const CIRCLE_SIZE = SCREEN_WIDTH * 0.3;
 export const HydrationCard = memo(({ value = 0, onUpdate }: Props) => {
   const { consumed, dailyGoal, addWater } = useHydration();
   const max = dailyGoal;
+  // Store's consumed is the source of truth (reflects resets & optimistic adds).
+  const displayValue = consumed;
   
   const { data: coinData } = useCoinData();
   const { mutate: claimReward, isPending: claimPending } = useClaimReward();
 
   const hydrationReward = coinData?.claimable?.find(c => c.id === 'hydration_daily');
-  const isGoalMet = value >= max;
+  const isGoalMet = displayValue >= max;
   const isClaimed = hydrationReward?.isClaimed;
 
   const { colors } = useTheme();
@@ -75,13 +77,13 @@ export const HydrationCard = memo(({ value = 0, onUpdate }: Props) => {
     <AppView>
       <Card style={styles.card} onPress={handleNavigate}>
           {/* Circle progress */}
-          <WaterCircleProgress size={CIRCLE_SIZE} value={value} max={max} />
+          <WaterCircleProgress size={CIRCLE_SIZE} value={displayValue} max={max} />
 
           {/* Right content */}
           <AppView style={styles.right}>
             <AppView style={styles.textBlock}>
               <AppText variant="title3">
-                {value}{' '}
+                {displayValue}{' '}
                 <AppText variant="caption2" style={mutedStyle}>
                   / {max}ml
                 </AppText>

@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -22,12 +22,13 @@ import { AppText, AppView, Button } from '../../../components';
 import { Icon } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { withOpacity } from '../../../utils/withOpacity';
-import { useFoodDetail, useToggleFavourite, useLogMeal } from '../hooks/useNutrition';
+import { useFoodDetail, useToggleFavourite, useLogMeal, useNutritionSummary } from '../hooks/useNutrition';
 import { DIET_TYPE_META, MEAL_META } from '../types/nutrition.types';
 import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
 import type { MealType } from '../types/nutrition.types';
 import MealPicker from '../components/nutrition/MealPicker';
+import { QuantityStepper } from '../components/nutrition/QuantityStepper';
 
 type DetailRoute = RouteProp<HealthStackParamList, typeof HealthRoutes.FOOD_DETAIL>;
 
@@ -117,8 +118,10 @@ const FoodDetailScreen = memo(() => {
   const { data: food, isLoading } = useFoodDetail(foodId);
   const { mutate: toggleFav, isPending: togglingFav } = useToggleFavourite();
   const { mutate: logMeal, isPending: isLogging } = useLogMeal();
+  const { data: summary } = useNutritionSummary();
 
   const [selectedMeal, setSelectedMeal] = useState<MealType>('lunch');
+  const [servings, setServings] = useState(1);
   const [loggedSuccess, setLoggedSuccess] = useState(false);
   const [localFav, setLocalFav] = useState<boolean | null>(null);
 
@@ -140,16 +143,46 @@ const FoodDetailScreen = memo(() => {
       {
         mealType: selectedMeal,
         name: food.name,
-        calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
-        quantity: food.servingSize,
+        calories: Math.round(food.calories * servings),
+        protein: Math.round(food.protein * servings),
+        carbs: Math.round(food.carbs * servings),
+        fat: Math.round(food.fat * servings),
+        quantity: servings,
         unit: food.servingUnit as any,
+        foodRef: food._id,
       },
       { onSuccess: () => { setLoggedSuccess(true); setTimeout(() => setLoggedSuccess(false), 2500); } },
     );
-  }, [food, logMeal, selectedMeal]);
+  }, [food, logMeal, selectedMeal, servings]);
+
+  // Calculate today's intake of this specific food from the summary
+  const todayIntake = useMemo(() => {
+    if (!summary || !food) return { count: 0, totalCalories: 0 };
+    // Prefer the aggregated foodIntakeSummary from the API
+    const fromSummary = summary.foodIntakeSummary?.find(
+      entry => entry.foodRef === food._id,
+    );
+    if (fromSummary) {
+      return { count: fromSummary.totalQuantity, totalCalories: fromSummary.totalCalories };
+    }
+    // Fallback: scan all meal entries by name/foodRef
+    let count = 0;
+    let totalCalories = 0;
+    const allMeals = Object.values(summary.meals).flat();
+    for (const entry of allMeals) {
+      if (entry.name === food.name || entry.foodRef === food._id) {
+        count += entry.quantity ?? 1;
+        totalCalories += entry.calories;
+      }
+    }
+    return { count, totalCalories };
+  }, [summary, food]);
+
+  // Dynamic values based on servings count
+  const computedCalories = Math.round((food?.calories ?? 0) * servings);
+  const computedProtein = Math.round((food?.protein ?? 0) * servings);
+  const computedCarbs = Math.round((food?.carbs ?? 0) * servings);
+  const computedFat = Math.round((food?.fat ?? 0) * servings);
 
   if (isLoading || !food) {
     return (
@@ -318,14 +351,52 @@ const FoodDetailScreen = memo(() => {
             </AppText>
           </View>
           <AppText variant="caption2" color={colors.mutedForeground} style={{ marginTop: 4, marginBottom: 12 }}>
-            Select a meal to log this food for today.
+            Select quantity and meal to log this food for today.
           </AppText>
+
+          {/* Today's intake badge */}
+          {todayIntake.count > 0 && (
+            <View style={[styles.intakeBadge, { backgroundColor: withOpacity(colors.primary, 0.08), borderColor: withOpacity(colors.primary, 0.15) }]}>
+              <Icon name="CheckCircle" size={14} color={colors.primary} />
+              <AppText variant="caption2" weight="semiBold" color={colors.primary} style={{ marginLeft: 6 }}>
+                Today: {todayIntake.count} {food.servingUnit} · {todayIntake.totalCalories} kcal consumed
+              </AppText>
+            </View>
+          )}
+
+          {/* Quantity stepper */}
+          <QuantityStepper
+            value={servings}
+            onChange={setServings}
+            min={1}
+            max={20}
+            label="Servings"
+            accentColor={dietMeta.color}
+          />
+
+          {/* Dynamic calorie summary for selected quantity */}
+          <View style={[styles.quantitySummary, { backgroundColor: withOpacity(dietMeta.color, 0.06), borderColor: withOpacity(dietMeta.color, 0.12) }]}>
+            <View style={styles.quantitySummaryRow}>
+              <AppText variant="caption2" color={colors.mutedForeground}>
+                {servings} × {food.name}
+              </AppText>
+              <AppText variant="subhead" weight="bold" color={dietMeta.color}>
+                {computedCalories} kcal
+              </AppText>
+            </View>
+            <View style={styles.quantityMacros}>
+              <AppText variant="caption2" color="#1A6B4A">P: {computedProtein}g</AppText>
+              <AppText variant="caption2" color="#2C5FA3">C: {computedCarbs}g</AppText>
+              <AppText variant="caption2" color="#B04C78">F: {computedFat}g</AppText>
+            </View>
+          </View>
+
           <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
           <Button
             label={
               isLogging ? 'Logging…'
                 : loggedSuccess ? '✓ Added!'
-                : `Add to ${MEAL_META.find(m => m.type === selectedMeal)?.label}`
+                : `Add ${servings > 1 ? `${servings} servings` : ''} to ${MEAL_META.find(m => m.type === selectedMeal)?.label}`
             }
             onPress={handleLog}
             disabled={isLogging}
@@ -451,4 +522,34 @@ const styles = StyleSheet.create({
 
   // Log button
   logBtn: { marginTop: 12 },
+
+  // Intake badge
+  intakeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+
+  // Quantity summary
+  quantitySummary: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 12,
+    gap: 6,
+  },
+  quantitySummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quantityMacros: {
+    flexDirection: 'row',
+    gap: 12,
+  },
 });

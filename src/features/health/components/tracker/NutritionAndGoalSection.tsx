@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -32,6 +33,8 @@ import {
   useLogMeal,
   useDeleteMeal,
   useUpdatePreferences,
+  useNutritionOptions,
+  nutritionKeys,
 } from '../../hooks/useNutrition';
 import { MEAL_META } from '../../types/nutrition.types';
 import type { LogMealRequest, NutritionPreferences } from '../../types/nutrition.types';
@@ -173,6 +176,7 @@ NutritionDisclaimer.displayName = 'NutritionDisclaimer';
 const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const { colors } = useTheme();
   const styles = useStyles();
+  const queryClient = useQueryClient();
 
   // Read step-based calories burned from health data store
   const caloriesBurned = useHealthDataStore(s => s.data.calories);
@@ -188,7 +192,10 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
     data: preferences,
     isLoading: prefsLoading,
     refetch: refetchPrefs,
+    isRefetching: isPrefsRefetching,
   } = useNutritionPreferences();  
+
+  
 
   const { mutate: logMeal, isPending: isAdding } = useLogMeal();
   const { mutate: deleteMeal, isPending: isDeleting } = useDeleteMeal();
@@ -278,7 +285,9 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
   const handleRefresh = useCallback(() => {
     refetchSummary();
     refetchPrefs();
-  }, [refetchSummary, refetchPrefs]);
+    // Also invalidate nutrition options so DietPreferenceChips gets fresh data
+    queryClient.invalidateQueries({ queryKey: nutritionKeys.options() });
+  }, [refetchSummary, refetchPrefs, queryClient]);
 
   const isLoading = summaryLoading && prefsLoading;
 
@@ -302,7 +311,7 @@ const NutritionAndGoalSection = memo(({ hidden }: Props) => {
       contentContainerStyle={styles.scroll}
       refreshControl={
         <RefreshControl
-          refreshing={isRefetching}
+          refreshing={isRefetching || isPrefsRefetching}
           onRefresh={handleRefresh}
           tintColor={colors.primary}
         />

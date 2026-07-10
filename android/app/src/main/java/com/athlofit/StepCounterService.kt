@@ -20,6 +20,8 @@ import androidx.core.app.NotificationCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -488,12 +490,81 @@ class StepCounterService : Service(), SensorEventListener {
             storedDate = today
             persistState()
             Log.d(TAG, "handleDateChangeOnStart — initialized storedDate to $today")
+            // Seed from Health Connect if available (service starting fresh)
+            seedFromHealthConnectIfNeeded()
             return
         }
 
         if (storedDate != today) {
             Log.d(TAG, "handleDateChangeOnStart — date changed from $storedDate to $today")
             handleMultiDayGap(storedDate, today)
+            // After midnight reset, seed from Health Connect so steps accumulated
+            // while the service was stopped are not lost.
+            seedFromHealthConnectIfNeeded()
+        }
+    }
+
+    /**
+     * If dailySteps is 0 after service start/reset, queries Health Connect for
+     * today's accumulated steps and uses them as the initial dailySteps value.
+     * This handles the case where the user stopped the service, walked (tracked
+     * by Health Connect), and then restarted — without this, the service would
+     * show 0 and overwrite the actual steps.
+     *
+     * Runs on a background coroutine since Health Connect requires suspend calls.
+     * Updates liveStepCount, notification, and widget once the seed value arrives.
+     */
+    private fun seedFromHealthConnectIfNeeded() {
+        // Only seed if service currently has 0 steps (freshly started/reset)
+        if (dailySteps > 0) return
+
+        serviceScope.launch {
+            try {
+                val client = HealthConnectClient.getOrCreate(this@StepCounterService)
+                val zone = ZoneId.systemDefault()
+                val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+                val now = Instant.now()
+
+                // Apply loginTimestamp filter if available (same logic as notification service)
+                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
+                val loginTs = widgetPrefs.getLong("loginTimestamp", 0L)
+                val stepsStart = if (loginTs > 0L) {
+                    val loginInstant = Instant.ofEpochMilli(loginTs)
+                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
+                } else startOfDay
+
+                val stepRecords = client.readRecords(
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        TimeRangeFilter.between(stepsStart, now),
+                    )
+                ).records
+
+                // Dedup by data origin — pick highest single source (same logic as notification)
+                val stepsByOrigin = stepRecords
+                    .groupBy { it.metadata.dataOrigin.packageName }
+                    .mapValues { (_, records) -> records.sumOf { it.count } }
+
+                val hcSteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+
+                if (hcSteps > 0 && dailySteps == 0) {
+                    Log.d(TAG, "seedFromHealthConnect — seeding with $hcSteps steps from Health Connect")
+                    dailySteps = hcSteps
+                    liveStepCount = hcSteps
+                    persistState()
+                    // Update notification and widget immediately
+                    maybeUpdateNotification()
+                    updateWidget()
+                    // Emit to JS so the app shows correct value
+                    NativeStepModule.emitStepUpdate(hcSteps, forceEmit = true)
+                } else {
+                    Log.d(TAG, "seedFromHealthConnect — HC returned $hcSteps steps, dailySteps=$dailySteps, no seed needed")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "seedFromHealthConnect — failed: ${e.message}", e)
+                // Non-fatal: service continues counting from 0, HC data will
+                // show in the app via the normal useHealth flow.
+            }
         }
     }
 

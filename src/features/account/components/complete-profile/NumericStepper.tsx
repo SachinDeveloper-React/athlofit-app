@@ -6,7 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
 } from 'react-native';
-import { AppView, AppText } from '../../../../components';
+import { AppView, AppText, Icon } from '../../../../components';
 
 export const NumericStepper: React.FC<StepperProps> = ({
   label,
@@ -60,7 +60,7 @@ export const NumericStepper: React.FC<StepperProps> = ({
           onPress={decrement}
           style={[st.btn, { borderRightColor: colors.border }]}
         >
-          <AppText style={[st.btnText, { color: colors.primary }]}>−</AppText>
+          <Icon name="Minus" size={18} color={colors.primary} />
         </TouchableOpacity>
 
         <AppView style={st.inputWrap}>
@@ -81,7 +81,7 @@ export const NumericStepper: React.FC<StepperProps> = ({
           onPress={increment}
           style={[st.btn, { borderLeftColor: colors.border }]}
         >
-          <AppText style={[st.btnText, { color: colors.primary }]}>+</AppText>
+          <Icon name="Plus" size={18} color={colors.primary} />
         </TouchableOpacity>
       </AppView>
       {!!error && (
@@ -109,7 +109,6 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 0,
   },
-  btnText: { fontSize: 24, fontWeight: '300', lineHeight: 30 },
   inputWrap: {
     flex: 1,
     flexDirection: 'row',
