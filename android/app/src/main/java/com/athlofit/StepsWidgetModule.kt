@@ -109,15 +109,12 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
     /**
      * Save the current access token so EodSyncWorker can use it.
      * Call this on login AND every time the token is refreshed.
+     * FIX #10: Now stores token in EncryptedSharedPreferences.
      */
     @ReactMethod
     fun saveAccessToken(token: String, promise: Promise) {
         try {
-            reactApplicationContext
-                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
-                .edit()
-                .putString("accessToken", token)
-                .apply()
+            SecureTokenStore.saveToken(reactApplicationContext, token)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("TOKEN_SAVE_ERROR", e.message, e)
@@ -126,15 +123,12 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
 
     /**
      * Clear the stored access token on logout.
+     * FIX #10: Clears from both encrypted and legacy stores.
      */
     @ReactMethod
     fun clearAccessToken(promise: Promise) {
         try {
-            reactApplicationContext
-                .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
-                .edit()
-                .remove("accessToken")
-                .apply()
+            SecureTokenStore.clearToken(reactApplicationContext)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("TOKEN_CLEAR_ERROR", e.message, e)

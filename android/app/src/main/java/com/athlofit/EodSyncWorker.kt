@@ -38,8 +38,9 @@ class EodSyncWorker(
             return@withContext Result.success()
         }
 
-        val token = prefs.getString("accessToken", null)
-        if (token.isNullOrBlank()) {
+        // FIX #10: Read token from SecureTokenStore (encrypted)
+        val token = SecureTokenStore.getToken(context)
+        if (token.isBlank()) {
             Log.d(TAG, "No access token — skipping EOD sync")
             return@withContext Result.success()
         }

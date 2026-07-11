@@ -7,6 +7,27 @@ import { BASE_URL } from '../../../utils/api';
 import { useHealthDataStore } from '../store/healthDataStore';
 
 /**
+ * FIX #9: Clears the synced step offset if it belongs to a previous day.
+ * Call this on app launch (before health data loads) to prevent yesterday's
+ * offset from briefly inflating today's step count during the window between
+ * app launch and the first server fetch.
+ *
+ * The existing date guard (syncedStepOffsetDate === today) in useHealth already
+ * prevents stale offsets from being *used*, but this eagerly clears the stored
+ * value so there's zero ambiguity.
+ */
+export function clearStaleStepOffset(): void {
+  const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
+  if (syncedStepOffset <= 0) return;
+
+  const today = new Date().toISOString().split('T')[0];
+  if (syncedStepOffsetDate && syncedStepOffsetDate !== today) {
+    useHealthDataStore.getState().setSyncedStepOffset(0, '');
+    console.log('[StepOffset] Cleared stale offset from', syncedStepOffsetDate);
+  }
+}
+
+/**
  * Fetches today's health record from the server and stores the step count
  * as a synced offset. This offset is added to the native sensor count so
  * the user sees their cumulative daily steps across devices.
@@ -17,6 +38,9 @@ import { useHealthDataStore } from '../store/healthDataStore';
  * Only sets the offset if the server has a record for today with steps > 0.
  */
 export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise<void> {
+  // FIX #9: Always clear stale offset first before fetching fresh one
+  clearStaleStepOffset();
+
   try {
     const response = await fetch(`${BASE_URL}health/today`, {
       method: 'GET',

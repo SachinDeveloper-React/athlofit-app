@@ -38,6 +38,7 @@ import {
   showChallengeNotifications,
 } from '../hooks/useSyncHealth';
 import { BASE_URL } from '../../../utils/api';
+import { getTimezone } from '../../../utils/timezone';
 import { useNetworkStore } from '../../../store/networkStore';
 import { offlineQueue } from '../../../services/offlineQueue';
 
@@ -120,6 +121,7 @@ async function syncOneDayIOS(
     ...data,
     date: dateStr,
     goalMet: false, // server recalculates
+    timezone: getTimezone(), // FIX #3: include device timezone
   };
 
   const result = await postSync(token, body);
@@ -161,6 +163,7 @@ async function syncOneDayAndroid(
     distance: derived.distanceKm,
     activeMinutes: derived.activeMinutes,
     goalMet: false, // server recalculates
+    timezone: getTimezone(), // FIX #3: include device timezone
   };
 
   const result = await postSync(token, body);

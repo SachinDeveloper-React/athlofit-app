@@ -53,7 +53,8 @@ class WidgetUpdateWorker(
             }
 
             val goal  = prefs.getInt("goal", 10000)
-            val token = prefs.getString("accessToken", null)
+            // FIX #10: Read token from SecureTokenStore (encrypted)
+            val token = SecureTokenStore.getToken(context).ifBlank { null }
 
             val todaySteps = readTodaySteps(prefs)
             StepsWidgetProvider.updateWidget(context, todaySteps, goal)

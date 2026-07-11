@@ -189,11 +189,19 @@ export const lastNDays = (n: number) => ({
 //  Delete today's previously derived records first, then insert fresh ones.
 //  This prevents values from multiplying on every refresh.
 //
+// FIX #3: Track last written step count to skip redundant delete+insert cycles.
+let _lastDerivedWriteSteps: number = 0;
+
 export const writeDerivedActivity = async (
   steps: number,
   weightKg = DEFAULT_WEIGHT_KG,
 ): Promise<void> => {
   if (steps <= 0) return;
+
+  // FIX #3: Skip if steps haven't changed since last write — avoids unnecessary
+  // delete+insert of calories/distance/exercise records on every 90s poll.
+  if (steps === _lastDerivedWriteSteps) return;
+  _lastDerivedWriteSteps = steps;
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -265,10 +273,26 @@ export const writeDerivedActivity = async (
 // HealthSyncHelper.kt does and matches what Samsung Health shows.
 //
 
+// ─── FIX #5: Cache layer for readStepsDeduped ─────────────────────────────────
+// Avoids redundant Health Connect reads when called multiple times within 30s.
+// On devices with many health apps, each read can return dozens of records —
+// caching prevents unnecessary IPC overhead on the Binder.
+const STEP_CACHE_TTL_MS = 30_000; // 30 seconds
+let _stepCacheValue: number = 0;
+let _stepCacheTime: number = 0;
+let _stepCacheKey: string = ''; // startTime+endTime fingerprint
+
 export async function readStepsDeduped(
   startTime: string,
   endTime: string,
 ): Promise<number> {
+  // FIX #5: Return cached value if within TTL and same time range
+  const cacheKey = `${startTime}|${endTime}`;
+  const now = Date.now();
+  if (cacheKey === _stepCacheKey && now - _stepCacheTime < STEP_CACHE_TTL_MS) {
+    return _stepCacheValue;
+  }
+
   try {
     // Read individual records and pick the single highest-count source.
     // This prevents inflation from multiple apps (Samsung Health, Google Fit,
@@ -299,15 +323,29 @@ export async function readStepsDeduped(
 
     // Return the highest single-source total — this matches what Samsung Health
     // shows and what the native Kotlin worker reports.
-    return Math.max(...Object.values(totals));
+    const result = Math.max(...Object.values(totals));
+
+    // FIX #5: Store in cache
+    _stepCacheValue = result;
+    _stepCacheTime = Date.now();
+    _stepCacheKey = cacheKey;
+
+    return result;
   } catch (e) {
     console.warn('[HealthConnect] readStepsDeduped failed, falling back to aggregate:', e);
     // Fallback to aggregate if readRecords fails
-    const result = await aggregateRecord({
+    const aggResult = await aggregateRecord({
       recordType: 'Steps',
       timeRangeFilter: { operator: 'between' as const, startTime, endTime },
     }).catch(() => ({ COUNT_TOTAL: 0 }));
-    return (result as any).COUNT_TOTAL ?? 0;
+    const fallback = (aggResult as any).COUNT_TOTAL ?? 0;
+
+    // FIX #5: Cache the fallback value too
+    _stepCacheValue = fallback;
+    _stepCacheTime = Date.now();
+    _stepCacheKey = cacheKey;
+
+    return fallback;
   }
 }
 

@@ -120,6 +120,9 @@ class StepCounterService : Service(), SensorEventListener {
     /** Timestamp of last network sync. */
     private var lastSyncTime: Long = 0L
 
+    /** Step count at the time of last successful sync (FIX #8: skip sync if unchanged). */
+    private var lastSyncedSteps: Int = -1
+
     /** Unsent sync payload retained after a failed sync attempt. */
     private var pendingSyncPayload: String = ""
 
@@ -346,6 +349,7 @@ class StepCounterService : Service(), SensorEventListener {
             .putInt("rebootOffset", rebootOffset)
             .putString("storedDate", storedDate)
             .putLong("lastSyncTime", lastSyncTime)
+            .putInt("lastSyncedSteps", lastSyncedSteps)
             .putString("pendingSyncPayload", pendingSyncPayload)
             .apply()
     }
@@ -360,6 +364,7 @@ class StepCounterService : Service(), SensorEventListener {
         rebootOffset = prefs.getInt("rebootOffset", 0)
         storedDate = prefs.getString("storedDate", "") ?: ""
         lastSyncTime = prefs.getLong("lastSyncTime", 0L)
+        lastSyncedSteps = prefs.getInt("lastSyncedSteps", -1)
         pendingSyncPayload = prefs.getString("pendingSyncPayload", "") ?: ""
 
         // Keep live count in sync with persisted state on service start
@@ -371,11 +376,17 @@ class StepCounterService : Service(), SensorEventListener {
     /**
      * Triggers a background sync to POST /health/sync if enough time has elapsed.
      * Rate-limited to at most once every 15 minutes.
+     * FIX #8: Skips the sync entirely if dailySteps hasn't changed since the last
+     * successful sync — avoids unnecessary network calls when the user is idle.
      * Also retries any pending sync payload from a previous failed attempt.
      */
     private fun maybeSync() {
         val now = System.currentTimeMillis()
         if (now - lastSyncTime < SYNC_INTERVAL_MS) return
+
+        // FIX #8: Skip sync if steps haven't changed and there's no pending retry.
+        // This prevents POSTing identical data every 15 min when the phone is on a desk.
+        if (dailySteps == lastSyncedSteps && pendingSyncPayload.isEmpty()) return
 
         // Build a fresh payload for the current step data
         val payload = buildSyncPayload()
@@ -394,7 +405,7 @@ class StepCounterService : Service(), SensorEventListener {
      * Derives calories, distance, activeMinutes from steps using design formulas.
      * Uses default weight of 70.0 kg if weightKg is unavailable.
      *
-     * @return JSON string with date, steps, calories, distance, activeMinutes, goalMet
+     * @return JSON string with date, steps, calories, distance, activeMinutes, goalMet, timezone
      */
     private fun buildSyncPayload(): String {
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
@@ -409,6 +420,9 @@ class StepCounterService : Service(), SensorEventListener {
 
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
+        // FIX #3: Include device timezone (IANA name) so the server uses correct day boundary
+        val timezone = java.util.TimeZone.getDefault().id
+
         val json = JSONObject().apply {
             put("date", today)
             put("steps", steps)
@@ -416,6 +430,7 @@ class StepCounterService : Service(), SensorEventListener {
             put("distance", distanceKm)
             put("activeMinutes", activeMinutes)
             put("goalMet", goalMet)
+            put("timezone", timezone)
         }
 
         return json.toString()
@@ -432,9 +447,9 @@ class StepCounterService : Service(), SensorEventListener {
      * Must be called from a background thread.
      */
     private fun performSync(payload: String) {
-        val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-        val accessToken = widgetPrefs.getString("accessToken", "") ?: ""
-        val baseUrl = widgetPrefs.getString("baseUrl", "https://api.athlofit.com") ?: "https://api.athlofit.com"
+        // FIX #10: Read token from SecureTokenStore (encrypted) instead of plaintext prefs
+        val accessToken = SecureTokenStore.getToken(this)
+        val baseUrl = SecureTokenStore.getBaseUrl(this)
 
         if (accessToken.isEmpty()) {
             Log.w(TAG, "performSync — no accessToken available, retaining payload for retry")
@@ -462,6 +477,7 @@ class StepCounterService : Service(), SensorEventListener {
                 Log.d(TAG, "performSync — success (HTTP $responseCode)")
                 pendingSyncPayload = ""
                 lastSyncTime = System.currentTimeMillis()
+                lastSyncedSteps = dailySteps // FIX #8: track synced value
                 persistState()
             } else {
                 Log.w(TAG, "performSync — failed (HTTP $responseCode), retaining payload for retry")

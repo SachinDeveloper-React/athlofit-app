@@ -31,7 +31,11 @@ interface UseHealthOptions {
 
 export function useHealth(options: UseHealthOptions = {}) {
   const {
-    refreshInterval = 20_000,  // refresh every 20s for near-real-time steps
+    // FIX #6: Reduced from 20s to 90s. Live step count is driven by the
+    // native onStepUpdate event (fires every 5s) — see subscription below.
+    // This interval only refreshes full health data (vitals, hydration, etc.)
+    // which don't change as frequently and are expensive to read from HC/HK.
+    refreshInterval = 90_000,
     pauseInBackground = true,
     weightKg = 70,
   } = options;
@@ -67,6 +71,13 @@ export function useHealth(options: UseHealthOptions = {}) {
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // FIX #9: Eagerly clear any stale step offset from a previous day.
+    // This prevents yesterday's offset from briefly inflating today's count
+    // before the server fetch completes.
+    import('../service/stepOffset.service').then(({ clearStaleStepOffset }) => {
+      clearStaleStepOffset();
+    });
+
     if (preInitialized) {
       // Already initialized during splash — skip setup, just load data
       loadData(initState.platform);

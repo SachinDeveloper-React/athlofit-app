@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import notifee, { AndroidImportance, AndroidColor } from '@notifee/react-native';
 import { Platform } from 'react-native';
+import { getTimezone } from '../../../utils/timezone';
 import { healthService } from '../service/health.service';
 import { useGamificationStore } from '../store/gamificationStore';
 import type { HealthData } from '../types/healthTypes';
@@ -106,7 +107,7 @@ export function useSyncHealth() {
 
   const mutation = useMutation({
     mutationFn: (data: Partial<HealthData> & { date?: string; goalMet?: boolean }) =>
-      healthService.syncHealthData(data),
+      healthService.syncHealthData({ ...data, timezone: getTimezone() }),
 
     onSuccess: (response: any) => {
       const d = response?.data;
