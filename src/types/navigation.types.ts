@@ -68,6 +68,7 @@ export type ShopStackParamList = {
   [ShopRoutes.CART]: { preSelectCoins?: boolean } | undefined;
   [ShopRoutes.CHECKOUT]: undefined;
   [ShopRoutes.ORDER_HISTORY]: undefined;
+  [ShopRoutes.ORDER_TRACKING]: { orderId: string };
   [ShopRoutes.ADDRESSES]: { selectMode?: boolean } | undefined;
   [ShopRoutes.ADD_EDIT_ADDRESS]: { addressId?: string } | undefined;
 };

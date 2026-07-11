@@ -14,6 +14,9 @@ interface HealthDataStore {
   lastFetchedAt: number | null; // Timestamp of last successful health data fetch
   syncedStepOffset: number; // Steps synced from server on login (from previous device)
   syncedStepOffsetDate: string | null; // Date (YYYY-MM-DD) the offset applies to
+  syncedServerBaseline: HealthData | null; // Full health data from server for today (cross-device/reinstall)
+  syncedServerBaselineDate: string | null; // Date the baseline applies to
+  stepOffsetFetched: boolean; // Whether the step offset fetch has completed (success or fail)
   bonusSteps: number; // Bonus steps credited by admin/system for today
   bonusStepsDate: string | null; // Date the bonus applies to (resets daily)
   setData: (data: HealthData) => void;
@@ -21,6 +24,8 @@ interface HealthDataStore {
   setLoginTimestamp: (timestamp: number) => void;
   setLastFetchedAt: (timestamp: number) => void;
   setSyncedStepOffset: (steps: number, date: string) => void;
+  setSyncedServerBaseline: (baseline: HealthData | null, date: string) => void;
+  setStepOffsetFetched: (fetched: boolean) => void;
   setBonusSteps: (steps: number, date: string) => void;
   reset: () => void;
 }
@@ -34,6 +39,9 @@ export const useHealthDataStore = create<HealthDataStore>()(
       lastFetchedAt: null,
       syncedStepOffset: 0,
       syncedStepOffsetDate: null,
+      syncedServerBaseline: null,
+      syncedServerBaselineDate: null,
+      stepOffsetFetched: false,
       bonusSteps: 0,
       bonusStepsDate: null,
       
@@ -47,6 +55,10 @@ export const useHealthDataStore = create<HealthDataStore>()(
 
       setSyncedStepOffset: (steps, date) => set({ syncedStepOffset: steps, syncedStepOffsetDate: date }),
 
+      setSyncedServerBaseline: (baseline, date) => set({ syncedServerBaseline: baseline, syncedServerBaselineDate: date }),
+
+      setStepOffsetFetched: (fetched) => set({ stepOffsetFetched: fetched }),
+
       setBonusSteps: (steps, date) => set({ bonusSteps: steps, bonusStepsDate: date }),
       
       reset: () => set({ 
@@ -56,6 +68,9 @@ export const useHealthDataStore = create<HealthDataStore>()(
         lastFetchedAt: null,
         syncedStepOffset: 0,
         syncedStepOffsetDate: null,
+        syncedServerBaseline: null,
+        syncedServerBaselineDate: null,
+        stepOffsetFetched: false,
         bonusSteps: 0,
         bonusStepsDate: null,
       }),
@@ -71,6 +86,9 @@ export const useHealthDataStore = create<HealthDataStore>()(
         lastFetchedAt: state.lastFetchedAt,
         syncedStepOffset: state.syncedStepOffset,
         syncedStepOffsetDate: state.syncedStepOffsetDate,
+        syncedServerBaseline: state.syncedServerBaseline,
+        syncedServerBaselineDate: state.syncedServerBaselineDate,
+        stepOffsetFetched: state.stepOffsetFetched,
         bonusSteps: state.bonusSteps,
         bonusStepsDate: state.bonusStepsDate,
       }),

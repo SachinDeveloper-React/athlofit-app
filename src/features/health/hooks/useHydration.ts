@@ -10,6 +10,8 @@ import { useHealth } from './useHealth';
 import { DrinkSize } from '../types/hydration.type';
 import { deleteRecordsByTimeRange } from 'react-native-health-connect';
 import { buildTodayFilter } from '../utils/healthFormatters';
+import { healthService } from '../service/health.service';
+import { getTimezone } from '../../../utils/timezone';
 
 export const useHydration = () => {
   const queryClient = useQueryClient();
@@ -71,8 +73,17 @@ export const useHydration = () => {
         // Refresh claim button state when water intake crosses the goal
         const { consumed: newConsumed, dailyGoal: goal } = useHydrationStore.getState();
         if (newConsumed >= goal) {
-          queryClient.invalidateQueries({ queryKey: ['coin-data'] });
-          queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+          // Trigger a health sync so the backend receives the updated hydration
+          // value and can mark hydration_daily as claimable. Without this, the
+          // coin-data refetch returns stale data because the backend hasn't seen
+          // the new hydration total yet.
+          healthService.syncHealthData({ hydration: newConsumed, timezone: getTimezone() }).catch(() => {});
+
+          // Invalidate after a short delay to let the sync complete
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+            queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+          }, 1500);
         }
       } catch (error) {
         console.log('error', error);
@@ -93,9 +104,18 @@ export const useHydration = () => {
     }
     await Promise.allSettled(promises);
 
-    // Refresh earn-coins / claim button state after hydration reset
-    queryClient.invalidateQueries({ queryKey: ['coin-data'] });
-    queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+    // Sync hydration=0 to backend so it knows the user reset their water intake.
+    // The backend will revert the hydration reward AND hydration challenges,
+    // deducting any coins that were earned from them.
+    healthService.syncHealthData({ hydration: 0, timezone: getTimezone() }).catch(() => {});
+
+    // Refresh earn-coins, challenges, and gamification state after hydration reset
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+      queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['challenges'] });
+      queryClient.invalidateQueries({ queryKey: ['gamification'] });
+    }, 1500);
   }, [storeResetDay, platform, queryClient]);
 
   return {

@@ -377,7 +377,7 @@ export const fetchAllHealthConnectData = async (
           return { COUNT_TOTAL: 0 };
         }),
 
-      readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: todayRange() })).catch(e => {
+      readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: lastNDays(1) })).catch(e => {
         console.warn('HeartRate read failed:', e);
         return { records: [] };
       }),
@@ -423,14 +423,41 @@ export const fetchAllHealthConnectData = async (
     const activeMinutes = derived.activeMinutes;
 
     // ── Heart rate ─────────────────────────────────────────────────────────
+    // Use last 24h of records to capture smartwatch data that spans midnight.
+    // Prefer today's samples for the average, but show the most recent reading
+    // if no data exists for today (common with smartwatches that sync periodically).
     const allSamples = hrRecords.records.flatMap(r => r.samples ?? []);
     const bpms = allSamples.map(s => s.beatsPerMinute);
-    const hrAvg = bpms.length
-      ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length)
+
+    // Filter to only today's samples for the average display
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todaySamples = allSamples.filter(s => {
+      const sampleTime = new Date(s.time).getTime();
+      return sampleTime >= startOfToday.getTime();
+    });
+    const todayBpms = todaySamples.map(s => s.beatsPerMinute);
+
+    // Use today's readings if available, otherwise fall back to all 24h readings
+    const effectiveBpms = todayBpms.length > 0 ? todayBpms : bpms;
+    const hrAvg = effectiveBpms.length
+      ? Math.round(effectiveBpms.reduce((a, b) => a + b, 0) / effectiveBpms.length)
       : 0;
+
+    console.log(`[HealthConnect] HR: ${hrRecords.records.length} records, ${allSamples.length} total samples, ${todaySamples.length} today samples, avg=${hrAvg}`);
+    if (hrRecords.records.length > 0 && allSamples.length === 0) {
+      console.warn('[HealthConnect] HR records exist but have no samples — smartwatch may use a different record format');
+    }
+    if (hrRecords.records.length === 0) {
+      console.log('[HealthConnect] No HR records found in last 24h. Ensure smartwatch companion app syncs to Health Connect.');
+    }
 
     // ── Blood pressure ─────────────────────────────────────────────────────
     const latestBP = bpRecords.records.at(-1);
+    console.log(`[HealthConnect] BP: ${bpRecords.records.length} records in last 7 days, latest=${latestBP ? `${Math.round(latestBP.systolic.inMillimetersOfMercury)}/${Math.round(latestBP.diastolic.inMillimetersOfMercury)}` : 'none'}`);
+    if (bpRecords.records.length === 0) {
+      console.log('[HealthConnect] No BP records found in last 7 days. Ensure smartwatch companion app syncs BP to Health Connect.');
+    }
 
     // ── Weight ─────────────────────────────────────────────────────────────
     const latestWeight = weightRecords.records.at(-1);
@@ -448,8 +475,8 @@ export const fetchAllHealthConnectData = async (
       activeMinutes,
       heartRate: hrAvg,
       hydration: Math.round(hydrationMl),
-      heartRateMin: bpms.length ? Math.min(...bpms) : 0,
-      heartRateMax: bpms.length ? Math.max(...bpms) : 0,
+      heartRateMin: effectiveBpms.length ? Math.min(...effectiveBpms) : 0,
+      heartRateMax: effectiveBpms.length ? Math.max(...effectiveBpms) : 0,
       bloodPressureSystolic: latestBP
         ? Math.round(latestBP.systolic.inMillimetersOfMercury)
         : 0,

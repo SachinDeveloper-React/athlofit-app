@@ -39,6 +39,7 @@ import {
 import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
+import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -116,7 +117,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const)[(new Date().getDay() + 6) % 7]}
+        todayIndex={new Date().toISOString().split('T')[0]}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,
@@ -485,6 +486,7 @@ const TrackerScreen = memo(() => {
 
         >
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
+          <CoinBlockedBanner />
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
             goal={dailyStepGoal || 8000}

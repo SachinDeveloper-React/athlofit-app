@@ -52,6 +52,7 @@ export interface User {
   dailyStepGoal: number;
   pendingStepGoal?: number | null;
   pendingGoalEffectiveDate?: string | null; // ISO "YYYY-MM-DD"
+  lastStepGoalChangeDate?: string | null; // ISO "YYYY-MM-DD" — last time goal was changed
   provider: string;
   role: string;
   createdAt: string;

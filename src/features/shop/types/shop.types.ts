@@ -78,6 +78,25 @@ export interface Order {
     country?: string;
   };
   createdAt: string;
+  // Tracking fields
+  trackingHistory?: TrackingEvent[];
+  paidAt?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+  estimatedDelivery?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  carrier?: string;
+  cancellationReason?: string;
+  cancellationNote?: string;
+}
+
+export interface TrackingEvent {
+  status: 'PENDING' | 'PAID' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
+  title: string;
+  description: string;
+  timestamp: string;
 }
 
 export interface OrdersData {
@@ -95,6 +114,14 @@ export interface CancelOrderResult {
   status: string;
   refundedCoins: number;
 }
+
+export interface ConfirmDeliveryResult {
+  orderId: string;
+  status: string;
+  deliveredAt: string;
+}
+
+export type OrderDetailResponse = ApiResponse<Order>;
 
 export interface Review {
   _id: string;

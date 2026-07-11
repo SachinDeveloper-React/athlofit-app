@@ -113,7 +113,30 @@ export function useOrders() {
 export function useCancelOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (orderId: string) => shopService.cancelOrder(orderId),
+    mutationFn: ({ orderId, reason, note }: { orderId: string; reason?: string; note?: string }) =>
+      shopService.cancelOrder(orderId, reason, note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SHOP_ORDERS_KEY });
+    },
+  });
+}
+
+// ─── useOrderDetail — single order for tracking screen ────────────────────────
+export function useOrderDetail(orderId: string) {
+  return useQuery({
+    queryKey: ['order-detail', orderId],
+    queryFn: () => shopService.getOrderById(orderId),
+    staleTime: 30_000,
+    enabled: !!orderId,
+    select: res => res.data ?? null,
+  });
+}
+
+// ─── useConfirmDelivery ───────────────────────────────────────────────────────
+export function useConfirmDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderId: string) => shopService.confirmDelivery(orderId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SHOP_ORDERS_KEY });
     },

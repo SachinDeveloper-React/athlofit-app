@@ -1,5 +1,5 @@
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,7 +23,10 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { useOrders, useCancelOrder } from '../hooks/useShop';
 import { useGamificationStore } from '../../health/store/gamificationStore';
 import type { Order } from '../types/shop.types';
+import type { ShopStackParamList } from '../../../types/navigation.types';
+import { ShopRoutes } from '../../../navigation/routes';
 import { Header } from '../../../components';
+import CancelOrderModal from '../components/CancelOrderModal';
 
 const STATUS_CONFIG: Record<Order['status'], { label: string; icon: string; color: string; bg: string }> = {
   PENDING:   { label: 'Pending',   icon: 'Clock',        color: '#D97706', bg: '#FEF3C7' },
@@ -37,9 +41,9 @@ const fmt = (iso: string) =>
 
 // ─── Order Card ───────────────────────────────────────────────────────────────
 const OrderCard = ({
-  order, index, onCancel, isCancelling,
+  order, index, onCancel, onTrack, isCancelling,
 }: {
-  order: Order; index: number; onCancel: (id: string) => void; isCancelling: boolean;
+  order: Order; index: number; onCancel: (id: string) => void; onTrack: (id: string) => void; isCancelling: boolean;
 }) => {
   const { colors, radius } = useTheme();
   const cfg = STATUS_CONFIG[order.status];
@@ -102,7 +106,7 @@ const OrderCard = ({
       {/* Divider */}
       <View style={[styles.divider, { backgroundColor: colors.border, marginVertical: 14 }]} />
 
-      {/* Total + Cancel */}
+      {/* Total + Actions */}
       <View style={styles.totalRow}>
         <View>
           <AppText variant="caption1" secondary>Order Total</AppText>
@@ -115,6 +119,20 @@ const OrderCard = ({
             <AppText variant="body" weight="bold" color={colors.primary} style={{ marginTop: 2 }}>₹{order.totalPrice.toLocaleString()}</AppText>
           )}
         </View>
+      </View>
+
+      {/* Action buttons row */}
+      <View style={[styles.actionsRow, { marginTop: 12 }]}>
+        {/* Track Order button — always visible */}
+        <Pressable
+          onPress={() => onTrack(order._id)}
+          style={[styles.trackBtn, { backgroundColor: withOpacity(colors.primary, 0.1), borderRadius: 10 }]}
+        >
+          <Icon name="Truck" size={14} color={colors.primary} />
+          <AppText variant="caption1" weight="semiBold" color={colors.primary} style={{ marginLeft: 5 }}>Track Order</AppText>
+        </Pressable>
+
+        {/* Cancel button — only for PENDING/PAID */}
         {canCancel && (
           <Pressable
             onPress={() => onCancel(order._id)}
@@ -140,9 +158,13 @@ const OrderCard = ({
 const OrderHistoryScreen = () => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<ShopStackParamList>>();
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
   const coinsBalance = useGamificationStore(s => s.coinsBalance);
+
+  // Cancel modal state
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
   const {
     data: ordersData,
@@ -164,26 +186,44 @@ const OrderHistoryScreen = () => {
     pending:    orders.filter(o => o.status === 'PENDING' || o.status === 'PAID').length,
   }), [orders, ordersData?.total]);
 
-  const handleCancel = useCallback((orderId: string) => {
-    const order = orders.find(o => o._id === orderId);
-    const refundMsg = order?.paymentMethod === 'COIN_PURCHASE' && order.totalCoins > 0
-      ? `\n\n💰 ${order.totalCoins.toLocaleString()} coins will be refunded.` : '';
-    Alert.alert('Cancel Order?', `Are you sure you want to cancel this order?${refundMsg}`, [
-      { text: 'Keep Order', style: 'cancel' },
+  // Get the order being cancelled (for modal info)
+  const cancellingOrder = useMemo(
+    () => orders.find(o => o._id === cancellingOrderId),
+    [orders, cancellingOrderId],
+  );
+
+  const handleCancelPress = useCallback((orderId: string) => {
+    setCancellingOrderId(orderId);
+    setCancelModalVisible(true);
+  }, []);
+
+  const handleCancelConfirm = useCallback((reason: string, note: string) => {
+    if (!cancellingOrderId) return;
+    cancelOrderMutate(
+      { orderId: cancellingOrderId, reason, note },
       {
-        text: 'Cancel Order', style: 'destructive',
-        onPress: () => cancelOrderMutate(orderId, {
-          onSuccess: res => {
-            if (res.success) {
-              if ((res.data?.refundedCoins ?? 0) > 0) setCoinsBalance(coinsBalance + (res.data?.refundedCoins ?? 0));
-              Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
-            } else Alert.alert('Failed', res.message || 'Could not cancel order.');
-          },
-          onError: (err: any) => Alert.alert('Error', err?.message || 'Failed to cancel order.'),
-        }),
+        onSuccess: res => {
+          setCancelModalVisible(false);
+          setCancellingOrderId(null);
+          if (res.success) {
+            if ((res.data?.refundedCoins ?? 0) > 0) setCoinsBalance(coinsBalance + (res.data?.refundedCoins ?? 0));
+            Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+          } else {
+            Alert.alert('Failed', res.message || 'Could not cancel order.');
+          }
+        },
+        onError: (err: any) => {
+          setCancelModalVisible(false);
+          setCancellingOrderId(null);
+          Alert.alert('Error', err?.message || 'Failed to cancel order.');
+        },
       },
-    ]);
-  }, [orders, cancelOrderMutate, setCoinsBalance, coinsBalance]);
+    );
+  }, [cancellingOrderId, cancelOrderMutate, setCoinsBalance, coinsBalance]);
+
+  const handleTrack = useCallback((orderId: string) => {
+    navigation.navigate(ShopRoutes.ORDER_TRACKING, { orderId });
+  }, [navigation]);
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
@@ -263,12 +303,22 @@ const OrderHistoryScreen = () => {
             <OrderCard
               order={item}
               index={index}
-              onCancel={handleCancel}
-              isCancelling={isCancelling && cancellingId === item._id}
+              onCancel={handleCancelPress}
+              onTrack={handleTrack}
+              isCancelling={isCancelling && cancellingId?.orderId === item._id}
             />
           )}
         />
       )}
+
+      {/* Cancel Order Modal */}
+      <CancelOrderModal
+        visible={cancelModalVisible}
+        onClose={() => { setCancelModalVisible(false); setCancellingOrderId(null); }}
+        onConfirm={handleCancelConfirm}
+        isLoading={isCancelling}
+        orderCoins={cancellingOrder?.paymentMethod === 'COIN_PURCHASE' ? cancellingOrder.totalCoins : undefined}
+      />
     </View>
   );
 };
@@ -308,5 +358,8 @@ const styles = StyleSheet.create({
   divider: { height: 1 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   coinLine: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+
+  actionsRow: { flexDirection: 'row', gap: 8 },
+  trackBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 9, flex: 1, justifyContent: 'center' },
   cancelBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderRadius: 10 },
 });

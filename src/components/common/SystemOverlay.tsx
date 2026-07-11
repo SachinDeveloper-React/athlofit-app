@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Modal, Animated, Easing, StatusBar } from 'react-native';
+import { View, Modal, Animated, Easing, StatusBar, Platform } from 'react-native';
 import { useNetInfo } from '@react-native-community/netinfo';
 import AnimatedRN, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,10 @@ import Button from '../Button';
 import { Icon } from '../Icon';
 import { BASE_URL } from '../../utils/api';
 import AppView from '../AppView';
+import ForceUpdateModal from './ForceUpdateModal';
+
+// App version from package.json — used for version check against backend
+const APP_VERSION = require('../../../package.json').version;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -220,7 +224,7 @@ const SystemOverlay = () => {
   const { colors, spacing } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const { isMaintenance, setMaintenance, isServerUnreachable, setServerUnreachable } =
+  const { isMaintenance, setMaintenance, isServerUnreachable, setServerUnreachable, forceUpdate, setForceUpdate } =
     useSystemStore();
   const maintenanceMessage = useAppConfigStore(s => s.config.maintenance?.message);
   const netInfo = useNetInfo();
@@ -228,6 +232,34 @@ const SystemOverlay = () => {
   const [retrying, setRetrying] = useState(false);
 
   const isOffline = netInfo.isConnected === false;
+
+  // ── Version check on mount ────────────────────────────────────────────────
+  // Calls the backend once on app launch to determine if an update is required.
+  useEffect(() => {
+    const checkAppVersion = async () => {
+      try {
+        const platform = Platform.OS; // 'android' | 'ios'
+        const res = await fetch(
+          `${BASE_URL}config/check-version?platform=${platform}&version=${APP_VERSION}`,
+        );
+        const data = await res.json();
+
+        if (data?.success && data?.data?.updateRequired) {
+          setForceUpdate({
+            updateType: data.data.updateType,
+            title: data.data.title || 'Update Available',
+            message: data.data.message || 'A new version is available.',
+            latestVersion: data.data.latestVersion || '',
+            updateUrl: data.data.updateUrl || '',
+          });
+        }
+      } catch {
+        // Silently fail — don't block the app if version check fails
+      }
+    };
+
+    checkAppVersion();
+  }, [setForceUpdate]);
 
   // ── Maintenance polling ───────────────────────────────────────────────────
   useEffect(() => {
@@ -341,6 +373,23 @@ const SystemOverlay = () => {
           <Icon name="WifiOff" size={20} color="#fff" />
           <AppText style={styles.offlineText} variant="subhead">No Internet Connection</AppText>
         </AnimatedRN.View>
+      )}
+
+      {/* ── Force update modal ────────────────────────────────────────────── */}
+      {forceUpdate && (
+        <ForceUpdateModal
+          visible={true}
+          updateType={forceUpdate.updateType}
+          title={forceUpdate.title}
+          message={forceUpdate.message}
+          latestVersion={forceUpdate.latestVersion}
+          updateUrl={forceUpdate.updateUrl}
+          onDismiss={
+            forceUpdate.updateType === 'soft'
+              ? () => setForceUpdate(null)
+              : undefined
+          }
+        />
       )}
     </>
   );

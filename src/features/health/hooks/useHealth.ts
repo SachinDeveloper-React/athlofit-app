@@ -145,6 +145,9 @@ export function useHealth(options: UseHealthOptions = {}) {
       // Clear the synced step offset — it was for yesterday
       useHealthDataStore.getState().setSyncedStepOffset(0, '');
 
+      // Clear the server baseline — it was for yesterday
+      useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+
       // Trigger native service midnight reset (resets notification + widget)
       // This ensures reset even if AlarmManager alarm was delayed by Doze
       if (Platform.OS === 'android') {
@@ -182,6 +185,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         setData(freshData);
         useHealthDataStore.getState().setData(freshData);
         useHealthDataStore.getState().setSyncedStepOffset(0, '');
+        useHealthDataStore.getState().setSyncedServerBaseline(null, '');
         lastFetchedAtRef.current = 0;
       }
       // silent=true — don't show loading spinner on background polls,
@@ -286,6 +290,29 @@ export function useHealth(options: UseHealthOptions = {}) {
   const loadData = async (p: HealthPlatform, silent: boolean = false) => {
     if (!silent) setIsLoading(true);
     try {
+      // Wait for the step offset fetch to complete (max 3s) so we don't show
+      // 0 steps on fresh install/reinstall while the server fetch is in-flight.
+      // This solves the race condition where loadData runs before setAuth's
+      // fetchAndStoreTodayStepOffset has finished writing the offset to store.
+      if (!useHealthDataStore.getState().stepOffsetFetched) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, 3000); // Don't block more than 3s
+          const unsubscribe = useHealthDataStore.subscribe((state) => {
+            if (state.stepOffsetFetched) {
+              clearTimeout(timeout);
+              unsubscribe();
+              resolve();
+            }
+          });
+          // Re-check in case it was set between the if-check and subscribe
+          if (useHealthDataStore.getState().stepOffsetFetched) {
+            clearTimeout(timeout);
+            unsubscribe();
+            resolve();
+          }
+        });
+      }
+
       let result: HealthData;
       if (p === 'healthkit') {
         result = await fetchAllHealthKitData();
@@ -312,6 +339,27 @@ export function useHealth(options: UseHealthOptions = {}) {
           distance: Math.round(steps * STEP_LENGTH_KM * 100) / 100,
           activeMinutes: Math.round(steps / STEPS_PER_MINUTE),
         };
+
+        // Apply server baseline for all metrics (cross-device / reinstall continuity).
+        // Use max(local, server) so we never lose data that was already synced.
+        const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
+        if (syncedServerBaseline && syncedServerBaselineDate === today) {
+          result = {
+            steps: Math.max(result.steps, syncedServerBaseline.steps),
+            calories: Math.max(result.calories, syncedServerBaseline.calories),
+            distance: Math.max(result.distance, syncedServerBaseline.distance),
+            activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
+            heartRate: syncedServerBaseline.heartRate || result.heartRate,
+            heartRateMin: syncedServerBaseline.heartRateMin || result.heartRateMin,
+            heartRateMax: syncedServerBaseline.heartRateMax || result.heartRateMax,
+            bloodPressureSystolic: syncedServerBaseline.bloodPressureSystolic || result.bloodPressureSystolic,
+            bloodPressureDiastolic: syncedServerBaseline.bloodPressureDiastolic || result.bloodPressureDiastolic,
+            sleepHours: Math.max(result.sleepHours, syncedServerBaseline.sleepHours),
+            weight: syncedServerBaseline.weight || result.weight,
+            bloodGlucose: syncedServerBaseline.bloodGlucose || result.bloodGlucose,
+            hydration: Math.max(result.hydration, syncedServerBaseline.hydration),
+          };
+        }
       } else {
         // Health Connect path
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
@@ -326,6 +374,29 @@ export function useHealth(options: UseHealthOptions = {}) {
         const nativeSteps = await stepService.getCurrentSteps();
         if (nativeSteps > result.steps) {
           result = { ...result, steps: nativeSteps };
+        }
+
+        // Apply server baseline for all metrics (cross-device / reinstall continuity).
+        // After reinstall, loginTimestamp filters out pre-login HC data, but the
+        // server has the user's health data for today. Use max(local, server) to restore.
+        const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
+        const today = new Date().toISOString().split('T')[0];
+        if (syncedServerBaseline && syncedServerBaselineDate === today) {
+          result = {
+            steps: Math.max(result.steps, syncedServerBaseline.steps),
+            calories: Math.max(result.calories, syncedServerBaseline.calories),
+            distance: Math.max(result.distance, syncedServerBaseline.distance),
+            activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
+            heartRate: result.heartRate || syncedServerBaseline.heartRate,
+            heartRateMin: result.heartRateMin || syncedServerBaseline.heartRateMin,
+            heartRateMax: result.heartRateMax || syncedServerBaseline.heartRateMax,
+            bloodPressureSystolic: result.bloodPressureSystolic || syncedServerBaseline.bloodPressureSystolic,
+            bloodPressureDiastolic: result.bloodPressureDiastolic || syncedServerBaseline.bloodPressureDiastolic,
+            sleepHours: Math.max(result.sleepHours, syncedServerBaseline.sleepHours),
+            weight: result.weight || syncedServerBaseline.weight,
+            bloodGlucose: result.bloodGlucose || syncedServerBaseline.bloodGlucose,
+            hydration: Math.max(result.hydration, syncedServerBaseline.hydration),
+          };
         }
       }
 
@@ -357,10 +428,15 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Only for native_sensor mode — HC/HK handle their own step totals.
         let totalSteps = newSteps;
         if (platformRef.current === 'native_sensor') {
-          const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
+          const { syncedStepOffset, syncedStepOffsetDate, syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
           const today = new Date().toISOString().split('T')[0];
           const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
           totalSteps = newSteps + offset;
+
+          // Ensure steps never drop below the server baseline (reinstall continuity)
+          if (syncedServerBaseline && syncedServerBaselineDate === today) {
+            totalSteps = Math.max(totalSteps, syncedServerBaseline.steps);
+          }
         }
 
         setData(prev => {

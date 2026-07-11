@@ -1,4 +1,3 @@
-import { DAY_NAMES } from '../constants/tracker.constant';
 import { WeeklyStepEntry } from '../types/healthTypes';
 
 export const getBPStatus = (sys: number, dia: number) => {
@@ -34,10 +33,13 @@ export function toISODate(date: Date): string {
  */
 export function buildEmptyWeekData(): WeeklyStepEntry[] {
   const today = new Date();
+  const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (6 - i));
-    return { date: DAY_NAMES[d.getDay()], steps: 0 };
+    const dayNum = d.getDate();
+    const dayName = DAY_ABBR[d.getDay()];
+    return { date: `${dayNum} (${dayName})`, steps: 0 };
   });
 }
 

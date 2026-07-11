@@ -50,6 +50,7 @@ export const ShopRoutes = {
   CART: 'CartScreen',
   CHECKOUT: 'CheckoutScreen',
   ORDER_HISTORY: 'OrderHistoryScreen',
+  ORDER_TRACKING: 'OrderTrackingScreen',
   ADDRESSES: 'AddressesScreen',
   ADD_EDIT_ADDRESS: 'AddEditAddressScreen',
 } as const;

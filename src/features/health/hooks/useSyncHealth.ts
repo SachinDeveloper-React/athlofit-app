@@ -139,11 +139,15 @@ export function useSyncHealth() {
       // changed (e.g. after midnight) and progress needs to reflect the new day.
       queryClient.invalidateQueries({ queryKey: ['challenges'] });
 
-      // Only invalidate gamification/coin queries when the server actually awarded
-      // something — avoids unnecessary refetches on every 5-min sync.
+      // Always invalidate coin-data after a sync — even when no coins are
+      // awarded — because claimable reward state may have changed (e.g. hydration
+      // goal met makes hydration_daily claimable, or step validation changed state).
+      queryClient.invalidateQueries({ queryKey: ['coin-data'] });
+      queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
+
+      // Also refresh gamification if coins were awarded
       const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
       if (awardedCoins) {
-        queryClient.invalidateQueries({ queryKey: ['coin-data'] });
         queryClient.invalidateQueries({ queryKey: ['gamification'] });
       }
 

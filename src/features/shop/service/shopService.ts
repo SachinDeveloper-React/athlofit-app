@@ -85,9 +85,26 @@ export const shopService = {
   },
 
   // ── Cancel Order ─────────────────────────────────────────────────────────
-  cancelOrder: async (orderId: string) => {
+  cancelOrder: async (orderId: string, reason?: string, note?: string) => {
     const response = await api.patch<CancelOrderResponse>(
       `shop/orders/${orderId}/cancel`,
+      { reason, note },
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  // ── Confirm Delivery ──────────────────────────────────────────────────────
+  confirmDelivery: async (orderId: string) => {
+    const response = await api.patch<import('../types/shop.types').OrderDetailResponse>(
+      `shop/orders/${orderId}/confirm-delivery`,
+    );
+    return { success: response.success, message: response.message, data: response.data };
+  },
+
+  // ── Get Single Order (for tracking screen) ────────────────────────────────
+  getOrderById: async (orderId: string) => {
+    const response = await api.get<import('../types/shop.types').OrderDetailResponse>(
+      `shop/orders/${orderId}`,
     );
     return { success: response.success, message: response.message, data: response.data };
   },

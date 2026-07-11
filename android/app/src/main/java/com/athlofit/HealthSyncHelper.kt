@@ -132,17 +132,31 @@ object HealthSyncHelper {
             val activeMinutes = steps / 100
 
             // ── Heart rate ────────────────────────────────────────────────────
-            val bpms = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, fullFilter))
-                .records.flatMap { it.samples }.map { it.beatsPerMinute }
+            // Use recentFilter (last 24h+) instead of fullFilter (today only) to
+            // capture smartwatch data that spans midnight or syncs with older timestamps.
+            val hrRecords = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, recentFilter))
+                .records
+            val allBpms = hrRecords.flatMap { it.samples }.map { it.beatsPerMinute }
+
+            // Prefer today's samples for the display value, fall back to all recent
+            val todayBpms = hrRecords
+                .filter { it.startTime >= startOfDay }
+                .flatMap { it.samples }
+                .map { it.beatsPerMinute }
+            val bpms = if (todayBpms.isNotEmpty()) todayBpms else allBpms
+
             val heartRate    = if (bpms.isNotEmpty()) (bpms.sum() / bpms.size).toInt() else 0
             val heartRateMin = bpms.minOrNull()?.toInt() ?: 0
             val heartRateMax = bpms.maxOrNull()?.toInt() ?: 0
+            Log.d(TAG, "[$date] HR: ${hrRecords.size} records, ${allBpms.size} total samples, ${todayBpms.size} today samples, avg=$heartRate")
 
             // ── Blood pressure ────────────────────────────────────────────────
-            val latestBp = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
-                .records.lastOrNull()
+            val bpRecords = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
+                .records
+            val latestBp = bpRecords.lastOrNull()
             val systolic  = latestBp?.systolic?.inMillimetersOfMercury?.toInt() ?: 0
             val diastolic = latestBp?.diastolic?.inMillimetersOfMercury?.toInt() ?: 0
+            Log.d(TAG, "[$date] BP: ${bpRecords.size} records in recent range, latest=${if (latestBp != null) "$systolic/$diastolic" else "none"}")
 
             // ── Sleep ─────────────────────────────────────────────────────────
             val sleepMs = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, recentFilter))

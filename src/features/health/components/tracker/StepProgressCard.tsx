@@ -54,7 +54,7 @@ type Props = {
   steps: number;
   goal?: number;
   weekData: WeeklyStepEntry[];
-  todayIndex?: "Mon" |"Tue" |"Wed" |"Thu" |"Fri" |"Sat"|"Sun" ;
+  todayIndex?: string; // ISO date "YYYY-MM-DD" for today matching
   style?: ViewStyle;
   isWeekPending?: boolean;
   claimedToday?: boolean;
@@ -431,7 +431,7 @@ export const StepProgressCard = memo(
   }: Props) => {
     const { colors, radius } = useTheme();
 
-    const todayIdx = todayIndex ?? "Sun";
+    const todayIdx = todayIndex ?? "";
 
     const maxSteps = useMemo(
       () => Math.max(...weekData.map(d => d.steps), goal),
@@ -519,11 +519,11 @@ export const StepProgressCard = memo(
             <AppView style={styles.weekGrid}>
               {weekData.map((day, i) => (
                 <DayBar
-                  key={`${day.date}-${i}`}
+                  key={`${day.fullDate || day.date}-${i}`}
                   data={day}
                   currentGoal={goal}
                   maxSteps={maxSteps}
-                  isToday={day.date === todayIdx}
+                  isToday={day.fullDate === todayIdx}
                 />
               ))}
             </AppView>

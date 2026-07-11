@@ -29,5 +29,6 @@ export {
   Skeleton,
 } from './SkeletonLoader';
 export { default as SystemOverlay } from './common/SystemOverlay';
+export { default as ForceUpdateModal } from './common/ForceUpdateModal';
 export { ToastProvider, useToast } from './Toast';
 export { default as Typography } from './Typography';
