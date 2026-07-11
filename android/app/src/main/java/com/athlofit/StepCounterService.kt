@@ -505,19 +505,20 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     /**
-     * If dailySteps is 0 after service start/reset, queries Health Connect for
-     * today's accumulated steps and uses them as the initial dailySteps value.
-     * This handles the case where the user stopped the service, walked (tracked
-     * by Health Connect), and then restarted — without this, the service would
-     * show 0 and overwrite the actual steps.
+     * Queries Health Connect for today's accumulated steps and seeds the difference
+     * into rebootOffset if HC reports more steps than the sensor has counted.
+     * This handles the case where the service was killed/restarted and the user
+     * walked steps that HC tracked but the sensor service missed (e.g., walking
+     * before the app launched in the morning).
+     *
+     * The difference (hcSteps - dailySteps) is added to rebootOffset so the
+     * calculateSteps formula (cumulative - baseline) + rebootOffset correctly
+     * includes pre-service steps in all subsequent calculations.
      *
      * Runs on a background coroutine since Health Connect requires suspend calls.
      * Updates liveStepCount, notification, and widget once the seed value arrives.
      */
     private fun seedFromHealthConnectIfNeeded() {
-        // Only seed if service currently has 0 steps (freshly started/reset)
-        if (dailySteps > 0) return
-
         serviceScope.launch {
             try {
                 val client = HealthConnectClient.getOrCreate(this@StepCounterService)
@@ -547,8 +548,18 @@ class StepCounterService : Service(), SensorEventListener {
 
                 val hcSteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
 
-                if (hcSteps > 0 && dailySteps == 0) {
-                    Log.d(TAG, "seedFromHealthConnect — seeding with $hcSteps steps from Health Connect")
+                if (hcSteps > dailySteps) {
+                    // HC reports more steps than the sensor has counted since restart.
+                    // The difference is steps accumulated before the service started
+                    // (e.g., user walked before the app launched this morning).
+                    // Store the difference as rebootOffset so the calculateSteps formula
+                    // (cumulative - baseline) + rebootOffset preserves these steps
+                    // when the next sensor event arrives. Without this, the sensor
+                    // calculation would overwrite dailySteps with just the delta since
+                    // baseline, losing all steps accumulated before the service started.
+                    val missingSteps = hcSteps - dailySteps
+                    Log.d(TAG, "seedFromHealthConnect — seeding offset of $missingSteps steps (HC=$hcSteps, sensor=$dailySteps)")
+                    rebootOffset += missingSteps
                     dailySteps = hcSteps
                     liveStepCount = hcSteps
                     persistState()

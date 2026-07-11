@@ -150,8 +150,15 @@
       android:name=".BootReceiver"
       android:exported="true">
       <intent-filter>
+        <!-- Standard Android boot -->
         <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <!-- HTC / Vivo / iQOO quick boot -->
         <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+      </intent-filter>
+      <!-- Auto-start after app update so step service resumes immediately -->
+      <intent-filter>
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
       </intent-filter>
     </receiver>
 
