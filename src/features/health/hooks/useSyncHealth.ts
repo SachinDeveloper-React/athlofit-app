@@ -119,6 +119,19 @@ export function useSyncHealth() {
         setCoinsBalance(d.coinsBalance);
       }
 
+      // Sync coin block status from the sync response immediately.
+      // This ensures the CoinBlockedBanner appears/disappears instantly when the
+      // user's block status changes, without waiting for the gamification query.
+      // - If coinBlocked is present (user is blocked): write it to store → banner shows
+      // - If coinBlocked is absent/undefined (user not blocked): clear store → banner hides
+      // This handles both new blocks AND block expiry.
+      if (d?.coinBlocked) {
+        useGamificationStore.getState().syncWithService({ coinBlocked: d.coinBlocked });
+      } else if (useGamificationStore.getState().coinBlocked?.blocked) {
+        // Block status was previously set but server no longer returns it — block expired
+        useGamificationStore.getState().syncWithService({ coinBlocked: null });
+      }
+
       // Store bonus steps from server so the UI shows walked + bonus
       if (d?.bonusSteps !== undefined && d.bonusSteps > 0) {
         const today = new Date().toISOString().split('T')[0];
@@ -145,9 +158,9 @@ export function useSyncHealth() {
       queryClient.invalidateQueries({ queryKey: ['coin-data'] });
       queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
 
-      // Also refresh gamification if coins were awarded
+      // Refresh gamification if coins were awarded OR if cheat warning/block changed
       const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
-      if (awardedCoins) {
+      if (awardedCoins || d?.coinBlocked || d?.cheatWarning) {
         queryClient.invalidateQueries({ queryKey: ['gamification'] });
       }
 

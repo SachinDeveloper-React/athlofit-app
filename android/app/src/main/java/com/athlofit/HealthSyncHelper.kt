@@ -45,27 +45,23 @@ object HealthSyncHelper {
     ): Boolean {
         val client    = HealthConnectClient.getOrCreate(context)
         val weightKg  = prefs.getFloat("weightKg", 70.0f).toDouble()
-        val loginTs   = prefs.getLong("loginTimestamp", 0L)
         val zone      = ZoneId.systemDefault()
         val today     = LocalDate.now()
 
         // Determine the earliest date to sync — the login date or 7 days ago, whichever is later.
-        val loginDate = if (loginTs > 0L) {
-            Instant.ofEpochMilli(loginTs).atZone(zone).toLocalDate()
-        } else {
-            today
-        }
+        // FIX: Always sync from startOfDay for each day. The server has its own
+        // accountCreatedDate guard to reject pre-account syncs.
         val sevenDaysAgo = today.minusDays(6) // today + 6 previous days = 7 days
-        val startDate = if (loginDate.isAfter(sevenDaysAgo)) loginDate else sevenDaysAgo
+        val startDate = sevenDaysAgo
 
         var anySuccess = false
 
         // Sync each day from startDate to today
         var current = startDate
         while (!current.isAfter(today)) {
-            // For the login date, pass loginTs so steps start from login time.
-            // For all other days, use 0L (full day from midnight).
-            val tsForDay = if (current == loginDate && loginTs > 0L) loginTs else 0L
+            // FIX: Always pass 0L so each day reads from midnight (full day).
+            // loginTimestamp filtering is no longer needed client-side.
+            val tsForDay = 0L
             val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay)
             if (dayData != null && dayData.optInt("steps") > 0) {
                 val ok = postSync(token, dayData)
@@ -93,12 +89,10 @@ object HealthSyncHelper {
             val isToday    = date == LocalDate.now(zone)
             val endTime    = if (isToday) Instant.now() else endOfDay
 
-            // Apply login filter only on the first login day
-            val stepsStart = if (loginTs > 0L) {
-                val loginInstant = Instant.ofEpochMilli(loginTs)
-                if (loginInstant.isAfter(startOfDay) && loginInstant.isBefore(endTime))
-                    loginInstant else startOfDay
-            } else startOfDay
+            // Always read from startOfDay for steps — no loginTimestamp filtering.
+            // This ensures the background sync reports the same step count as
+            // the app, notification, and widget (all read from midnight).
+            val stepsStart = startOfDay
 
             val stepsFilter  = TimeRangeFilter.between(stepsStart, endTime)
             val fullFilter   = TimeRangeFilter.between(startOfDay, endTime)

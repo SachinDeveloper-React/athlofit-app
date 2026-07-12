@@ -16,7 +16,9 @@ const CoinBlockedBanner = memo(() => {
   const { colors, spacing, radius } = useTheme();
   const coinBlocked = useGamificationStore(s => s.coinBlocked);
 
+  // Don't show if not blocked or if block has expired (client-side expiry check)
   if (!coinBlocked?.blocked) return null;
+  if (coinBlocked.blockedUntil && new Date(coinBlocked.blockedUntil) <= new Date()) return null;
 
   const blockedDate = coinBlocked.blockedUntil
     ? new Date(coinBlocked.blockedUntil).toLocaleDateString(undefined, {

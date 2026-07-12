@@ -152,17 +152,10 @@ class StepNotificationService : Service() {
                 val now    = Instant.now()
                 val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
 
-                // Apply the same loginTimestamp filter used by the app UI and
-                // WidgetUpdateWorker. On the first login day the notification
-                // must show steps only from login time onward — not the full
-                // day — so it stays consistent with what the app displays.
-                val loginTs = prefs.getLong("loginTimestamp", 0L)
-                val stepsStart = if (loginTs > 0L) {
-                    val loginInstant = Instant.ofEpochMilli(loginTs)
-                    // Use loginTimestamp only if it falls within today.
-                    // On subsequent days loginTimestamp < midnight, so midnight wins.
-                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-                } else startOfDay
+                // FIX: Always use startOfDay to show ALL steps walked today,
+                // matching the phone's built-in pedometer and ensuring all
+                // surfaces (app, notification, widget) display the same count.
+                val stepsStart = startOfDay
 
                 val client = HealthConnectClient.getOrCreate(this@StepNotificationService)
 

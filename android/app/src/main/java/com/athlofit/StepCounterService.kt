@@ -542,13 +542,12 @@ class StepCounterService : Service(), SensorEventListener {
                 val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
                 val now = Instant.now()
 
-                // Apply loginTimestamp filter if available (same logic as notification service)
-                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-                val loginTs = widgetPrefs.getLong("loginTimestamp", 0L)
-                val stepsStart = if (loginTs > 0L) {
-                    val loginInstant = Instant.ofEpochMilli(loginTs)
-                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-                } else startOfDay
+                // Always read from startOfDay to capture ALL steps walked today.
+                // Previously filtered by loginTimestamp, but that caused mismatches:
+                // after re-login, pre-login steps were excluded from the notification
+                // and widget while the phone's built-in pedometer showed the full count.
+                // The server handles anti-cheat validation independently.
+                val stepsStart = startOfDay
 
                 val stepRecords = client.readRecords(
                     ReadRecordsRequest(
@@ -824,17 +823,9 @@ class StepCounterService : Service(), SensorEventListener {
                 val today = LocalDate.now(zone)
                 val startOfDay = today.atStartOfDay(zone).toInstant()
                 
-                // Use loginTimestamp as start if available (reading logic filters from login time)
-                // This ensures the written record falls within the reading query's time range.
-                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-                val loginTs = widgetPrefs.getLong("loginTimestamp", 0L)
-                val startTime = if (loginTs > 0L) {
-                    val loginInstant = Instant.ofEpochMilli(loginTs)
-                    // Use login time if it's today, otherwise use start of day
-                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-                } else {
-                    startOfDay
-                }
+                // Always write from startOfDay so the record is visible to all
+                // step queries (app, widget, notification all read from startOfDay).
+                val startTime = startOfDay
                 val endTime = Instant.now()
 
                 // startTime must be strictly before endTime

@@ -193,26 +193,22 @@ export async function runHealthSync(): Promise<void> {
   sevenDaysAgo.setDate(now.getDate() - 6); // today + 6 previous = 7 days
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  const loginDate = loginTimestamp ? startOf(new Date(loginTimestamp)) : startOf(now);
-  const syncStartDate = loginDate.getTime() > sevenDaysAgo.getTime() ? loginDate : sevenDaysAgo;
+  // FIX: Always sync from 7 days ago (or account start), regardless of loginTimestamp.
+  // loginTimestamp filtering is no longer needed client-side — the server handles
+  // the accountCreatedDate guard independently.
+  const syncStartDate = sevenDaysAgo;
 
   // Build the list of days to sync (from syncStartDate to today)
   const daysToSync: { dateStr: string; start: Date; end: Date }[] = [];
   const current = new Date(syncStartDate);
   while (current <= now) {
     const dateStr = toISODate(current);
-    const isLoginDay = loginTimestamp && toISODate(new Date(loginTimestamp)) === dateStr;
     const isToday = dateStr === toISODate(now);
 
-    // Start of the sync window for this day:
-    // - Login day: use login timestamp (not midnight)
-    // - Other days: use midnight
-    let dayStart: Date;
-    if (isLoginDay && loginTimestamp > startOf(current).getTime()) {
-      dayStart = new Date(loginTimestamp);
-    } else {
-      dayStart = startOf(new Date(current));
-    }
+    // Always use startOfDay for all days — no loginTimestamp filtering.
+    // This ensures the background sync reports the same step count as
+    // the app, notification, and widget.
+    const dayStart = startOf(new Date(current));
 
     // End of the sync window:
     // - Today: use now

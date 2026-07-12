@@ -339,4 +339,58 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             promise.resolve(false)
         }
     }
+
+    /**
+     * Sets a server step floor for the native service.
+     * After re-login, the server may have more steps for today than Health Connect
+     * or the native sensor can see (e.g., steps walked on another device, or HC
+     * data was cleared). This ensures the notification and widget never show fewer
+     * steps than what the server has already recorded.
+     *
+     * If serverSteps > current native dailySteps, the difference is added to
+     * rebootOffset so all subsequent sensor calculations include it.
+     */
+    @ReactMethod
+    fun setServerStepFloor(serverSteps: Int, promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val today = java.time.LocalDate.now().format(
+                java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+            )
+
+            // Get current native step count
+            val liveSteps = StepCounterService.liveStepCount
+            val currentSteps = if (liveSteps >= 0) liveSteps else {
+                val storedDate = prefs.getString("storedDate", "") ?: ""
+                if (storedDate == today) prefs.getInt("dailySteps", 0) else 0
+            }
+
+            if (serverSteps > currentSteps) {
+                // The server has more steps — inject the difference into rebootOffset
+                // so the native service (notification + widget) shows at least serverSteps.
+                val deficit = serverSteps - currentSteps
+                val currentOffset = prefs.getInt("rebootOffset", 0)
+                prefs.edit()
+                    .putInt("rebootOffset", currentOffset + deficit)
+                    .putInt("dailySteps", serverSteps)
+                    .apply()
+
+                // Update live count if service is running
+                if (liveSteps >= 0) {
+                    // Restart service to pick up the new offset
+                    StepCounterService.start(context)
+                }
+
+                Log.d(TAG, "setServerStepFloor — server=$serverSteps, native=$currentSteps, injected offset=$deficit")
+                promise.resolve(true)
+            } else {
+                Log.d(TAG, "setServerStepFloor — server=$serverSteps <= native=$currentSteps, no action needed")
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "setServerStepFloor failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
 }

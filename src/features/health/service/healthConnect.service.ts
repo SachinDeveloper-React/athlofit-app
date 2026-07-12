@@ -158,24 +158,23 @@ export const todayRange = () => {
 };
 
 /**
- * Get time range from login timestamp to now (for filtering historical data)
- * If no login timestamp, falls back to today's range
+ * Get time range for today's step reading.
+ *
+ * Previously this filtered from loginTimestamp to prevent historical data
+ * leaking into new accounts. However, this caused step count mismatches:
+ * - After re-login on the same day, steps walked before login were invisible
+ * - Notification/widget showed fewer steps than the phone's built-in pedometer
+ * - Different surfaces showed different step counts
+ *
+ * FIX: Always read from startOfDay. The server already guards against
+ * historical data injection via the accountCreatedDate check and anti-cheat
+ * rate validation. Client-side filtering is no longer needed and was causing
+ * more harm than good.
+ *
+ * @param _loginTimestamp — kept for API compat but no longer used for filtering
  */
-export const sinceLoginRange = (loginTimestamp: number | null) => {
-  if (!loginTimestamp) {
-    return todayRange();
-  }
-  
-  // Use the later of: login timestamp OR start of today
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const effectiveStart = Math.max(loginTimestamp, startOfDay.getTime());
-  
-  return {
-    operator: 'between' as const,
-    startTime: new Date(effectiveStart).toISOString(),
-    endTime: new Date().toISOString(),
-  };
+export const sinceLoginRange = (_loginTimestamp: number | null) => {
+  return todayRange();
 };
 
 export const lastNDays = (n: number) => ({

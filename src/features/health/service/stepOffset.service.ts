@@ -106,6 +106,22 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
         useHealthDataStore.getState().setSyncedStepOffset(offset, today);
         console.log(`[StepOffset] Server: ${record.steps}, native: ${currentNativeSteps}, offset: ${offset} for ${today}`);
       }
+
+      // Push server floor to native service so notification and widget also
+      // show at least the server's step count (covers re-login, cross-device,
+      // and scenarios where Health Connect data is unavailable).
+      await stepService.setServerStepFloor(record.steps);
+
+      // Immediately push server steps to the widget so it doesn't stay at 0
+      // while waiting for the 15-min background worker or the first sensor event.
+      // First ensure logged-out state is cleared, then push the step count.
+      try {
+        const { widgetService } = await import('../../../services/widgetService');
+        await widgetService.setLoggedOut(false); // ensure widget is in normal mode
+        const { useAuthStore } = await import('../../auth/store/authStore');
+        const goal = useAuthStore.getState().user?.dailyStepGoal || 10000;
+        await widgetService.updateWidget(record.steps, goal);
+      } catch { /* non-fatal */ }
     }
 
     useHealthDataStore.getState().setStepOffsetFetched(true);

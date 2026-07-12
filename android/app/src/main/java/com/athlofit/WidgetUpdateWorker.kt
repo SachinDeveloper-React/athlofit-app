@@ -98,11 +98,10 @@ class WidgetUpdateWorker(
             val startOfDay = today.atStartOfDay(zone).toInstant()
             val now        = Instant.now()
 
-            val loginTs = prefs.getLong("loginTimestamp", 0L)
-            val stepsStart = if (loginTs > 0L) {
-                val loginInstant = Instant.ofEpochMilli(loginTs)
-                if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-            } else startOfDay
+            // FIX: Always use startOfDay to show ALL steps walked today.
+            // Previously filtered by loginTimestamp which caused the widget to
+            // show fewer steps than the phone's built-in pedometer after re-login.
+            val stepsStart = startOfDay
 
             val stepRecords = client.readRecords(
                 ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(stepsStart, now))

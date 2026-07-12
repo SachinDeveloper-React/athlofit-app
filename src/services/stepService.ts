@@ -173,6 +173,28 @@ class StepService {
   }
 
   /**
+   * Sets a server step floor for the native service.
+   * After re-login, ensures the notification and widget never show fewer steps
+   * than the server's recorded count for today. If the server has more steps
+   * than the native sensor has counted, the difference is injected so all
+   * surfaces (app, notification, widget) display at least the server value.
+   *
+   * @param serverSteps The server's step count for today
+   * @returns true if the floor was applied (native < server), false otherwise
+   */
+  async setServerStepFloor(serverSteps: number): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.setServerStepFloor(serverSteps);
+    } catch (e) {
+      console.warn('[StepService] setServerStepFloor failed:', e);
+      return false;
+    }
+  }
+
+  /**
    * Returns the cached step source determined during initialize().
    */
   getSource(): StepSource {
