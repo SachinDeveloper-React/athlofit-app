@@ -3,6 +3,7 @@ import { Platform, AppState, AppStateStatus } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 import { useHealthDataStore } from '../store/healthDataStore';
 import { useHealthInitStore } from '../store/healthInitStore';
+import { getLocalToday } from '../../../utils/date';
 
 import {
   initializeHealthKit,
@@ -98,6 +99,11 @@ export function useHealth(options: UseHealthOptions = {}) {
   }, [isReady]);
 
   // ── Background / foreground handling ──────────────────────────────────────
+  // Track the last known date for AppState-based day-change detection
+  const lastKnownDateRef = useRef<string>(getLocalToday());
+  // Track the date we're on — used to detect day change during polling
+  const currentDateRef = useRef<string>(getLocalToday());
+
   useEffect(() => {
     if (!pauseInBackground) return;
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -109,6 +115,29 @@ export function useHealth(options: UseHealthOptions = {}) {
       if (!wasBackground && isBackground) {
         stopAutoRefresh();
       } else if (wasBackground && !isBackground) {
+        // ── Day-change guard: reset step data immediately if the day changed
+        // while the app was in the background. Covers phones where the midnight
+        // alarm was delayed/skipped by Doze or OEM battery optimizations.
+        const today = getLocalToday();
+        if (today !== lastKnownDateRef.current) {
+          lastKnownDateRef.current = today;
+          currentDateRef.current = today;
+          const freshData = { ...defaultHealthData };
+          setData(freshData);
+          setLastUpdated(new Date());
+          useHealthDataStore.getState().setData(freshData);
+          useHealthDataStore.getState().setSyncedStepOffset(0, '');
+          useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          lastFetchedAtRef.current = 0;
+
+          // Trigger native midnight reset in case the native alarm was also missed
+          if (Platform.OS === 'android') {
+            import('../../../services/stepService').then(({ stepService }) => {
+              stepService.triggerMidnightReset();
+            });
+          }
+        }
+
         if (isReadyRef.current) {
           // Already initialised — force refresh data (bypass staleness guard
           // since the user is returning to the app and expects fresh data)
@@ -128,6 +157,10 @@ export function useHealth(options: UseHealthOptions = {}) {
   }, [pauseInBackground, refreshInterval]);
 
   // ── Midnight reset: force-refresh health data when the day changes ────────
+  // Uses a state counter to re-trigger this effect after each midnight fires,
+  // ensuring multi-day sessions continuously schedule the next midnight reset.
+  const [midnightResetCount, setMidnightResetCount] = useState(0);
+
   useEffect(() => {
     const now = new Date();
     const midnight = new Date(now);
@@ -148,6 +181,11 @@ export function useHealth(options: UseHealthOptions = {}) {
       // Clear the server baseline — it was for yesterday
       useHealthDataStore.getState().setSyncedServerBaseline(null, '');
 
+      // Update day tracking refs
+      const today = getLocalToday();
+      lastKnownDateRef.current = today;
+      currentDateRef.current = today;
+
       // Trigger native service midnight reset (resets notification + widget)
       // This ensures reset even if AlarmManager alarm was delayed by Doze
       if (Platform.OS === 'android') {
@@ -163,21 +201,21 @@ export function useHealth(options: UseHealthOptions = {}) {
           loadData(platformRef.current);
         }, 3000);
       }
+
+      // Re-trigger this effect to schedule the next midnight reset
+      setMidnightResetCount(c => c + 1);
     }, msUntilMidnight);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [midnightResetCount]);
 
   // ── Auto-refresh timer ────────────────────────────────────────────────────
-  // Track the date we're on — used to detect day change during polling
-  const currentDateRef = useRef<string>(new Date().toISOString().split('T')[0]);
-
   const startAutoRefresh = useCallback(() => {
     if (refreshInterval <= 0) return;
     stopAutoRefresh();
     intervalRef.current = setInterval(() => {
       // Detect day change during polling (backup for midnight timer)
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalToday();
       if (today !== currentDateRef.current) {
         currentDateRef.current = today;
         // Day changed — reset data to 0 and force fresh fetch
@@ -324,7 +362,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Add synced step offset from server (cross-device continuity).
         // If the user walked on another device today, those steps carry over.
         const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalToday();
         const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
         const steps = nativeSensorSteps + offset;
 
@@ -380,7 +418,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         // After reinstall, loginTimestamp filters out pre-login HC data, but the
         // server has the user's health data for today. Use max(local, server) to restore.
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalToday();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
           result = {
             steps: Math.max(result.steps, syncedServerBaseline.steps),
@@ -407,6 +445,17 @@ export function useHealth(options: UseHealthOptions = {}) {
       useHealthDataStore.getState().setData(result);
       useHealthDataStore.getState().setLastFetchedAt(Date.now());
       lastFetchedAtRef.current = Date.now();
+
+      // Push fresh step count to notification + widget immediately.
+      // This ensures that when the app reads a higher value from Health Connect
+      // (e.g., 6000) but the native sensor is behind (e.g., 5500), the
+      // notification and widget update right away without waiting for the next
+      // sensor event or React re-render cycle.
+      if (Platform.OS === 'android' && result.steps > 0) {
+        import('../../../services/stepService').then(({ stepService }) => {
+          stepService.forceRefreshSteps(result.steps).catch(() => { /* non-fatal */ });
+        });
+      }
     } catch (e: any) {
       if (!silent) setError(e?.message ?? 'Failed to load health data');
     } finally {
@@ -429,7 +478,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         let totalSteps = newSteps;
         if (platformRef.current === 'native_sensor') {
           const { syncedStepOffset, syncedStepOffsetDate, syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
-          const today = new Date().toISOString().split('T')[0];
+          const today = getLocalToday();
           const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
           totalSteps = newSteps + offset;
 

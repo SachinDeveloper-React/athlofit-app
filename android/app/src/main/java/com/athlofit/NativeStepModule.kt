@@ -341,6 +341,34 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Forces an immediate update of the notification and widget with the given step count.
+     * Called from JS when the app comes to foreground and has a fresher step count
+     * (e.g., from Health Connect) than what the native sensor has accumulated.
+     *
+     * Only updates if the provided steps are higher than the current live value,
+     * preventing stale data from overwriting real-time sensor data.
+     *
+     * This solves the notification/widget delay issue: when the app reads 6000 steps
+     * from Health Connect but the notification still shows 5500 (because the sensor
+     * hasn't delivered new events), calling this method immediately propagates 6000
+     * to all surfaces.
+     *
+     * @param steps The fresh step count from Health Connect or server.
+     */
+    @ReactMethod
+    fun forceRefreshSteps(steps: Int, promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val applied = StepCounterService.pushStepUpdate(steps, context)
+            Log.d(TAG, "forceRefreshSteps — steps=$steps, applied=$applied")
+            promise.resolve(applied)
+        } catch (e: Exception) {
+            Log.e(TAG, "forceRefreshSteps failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    /**
      * Sets a server step floor for the native service.
      * After re-login, the server may have more steps for today than Health Connect
      * or the native sensor can see (e.g., steps walked on another device, or HC

@@ -65,6 +65,11 @@ class BootReceiver : BroadcastReceiver() {
         Log.d(TAG, "User logged in + sensor available + permission granted — starting StepCounterService")
         StepCounterService.start(context)
         StepServiceScheduler.schedule(context)
+
+        // Explicitly reschedule the midnight alarm after boot/update.
+        // The service does this in onStartCommand, but if the service start is delayed
+        // by OEM throttling, this ensures the alarm is registered early.
+        MidnightAlarmScheduler.schedule(context)
     }
 
     /**

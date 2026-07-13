@@ -100,18 +100,26 @@ const AppShell: React.FC = () => {
   useEffect(() => {
     const initConnectivity = connectivityMonitor.initialize().catch(() => {});
 
+    // Timeout helper — prevents splash from hanging indefinitely if Health
+    // Connect SDK binding dies or requestPermission() never resolves.
+    const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T | undefined> =>
+      Promise.race([
+        promise,
+        new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), ms)),
+      ]);
+
     const preCheckHealth = async () => {
       if (!isAuthenticated) return;
       try {
         if (Platform.OS === 'android') {
           const { isHealthConnectAvailable, initializeHealthConnect } =
             await import('../features/health/service/healthConnect.service');
-          const available = await isHealthConnectAvailable();
+          const available = await withTimeout(isHealthConnectAvailable(), 5000);
           if (available) {
             const { widgetService } = await import('../services/widgetService');
             await widgetService.setAppInitialising(true);
             try {
-              await initializeHealthConnect();
+              await withTimeout(initializeHealthConnect(), 10000);
             } finally {
               await widgetService.setAppInitialising(false);
             }
@@ -119,7 +127,7 @@ const AppShell: React.FC = () => {
         } else if (Platform.OS === 'ios') {
           const { initializeHealthKit } =
             await import('../features/health/service/healthkit.service');
-          await initializeHealthKit();
+          await withTimeout(initializeHealthKit(), 10000);
         }
       } catch {
         // Non-fatal — useHealth will retry when TrackerScreen mounts

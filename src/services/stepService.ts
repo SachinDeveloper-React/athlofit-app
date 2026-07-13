@@ -195,6 +195,29 @@ class StepService {
   }
 
   /**
+   * Forces an immediate update of the notification and widget with the given
+   * step count. Call this when the app has a fresher value (e.g., from Health
+   * Connect or the server) than what the native sensor has accumulated.
+   *
+   * Only applies if steps > current native live count, so it never overwrites
+   * a more recent sensor reading with a stale value.
+   *
+   * @param steps Fresh step count to push to notification and widget
+   * @returns true if the update was applied, false if native already had a higher value
+   */
+  async forceRefreshSteps(steps: number): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.forceRefreshSteps(steps);
+    } catch (e) {
+      console.warn('[StepService] forceRefreshSteps failed:', e);
+      return false;
+    }
+  }
+
+  /**
    * Returns the cached step source determined during initialize().
    */
   getSource(): StepSource {

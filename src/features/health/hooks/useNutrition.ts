@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { nutritionService } from '../service/nutrition.service';
+import { getLocalToday } from '../../../utils/date';
 import type {
   LogMealRequest,
   NutritionPreferences,
@@ -26,7 +27,7 @@ export const nutritionKeys = {
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-const todayISO = () => new Date().toISOString().split('T')[0];
+const todayISO = () => getLocalToday();
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 

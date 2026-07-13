@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import notifee, { AndroidImportance, AndroidColor } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { getTimezone } from '../../../utils/timezone';
+import { getLocalToday } from '../../../utils/date';
 import { healthService } from '../service/health.service';
 import { useGamificationStore } from '../store/gamificationStore';
 import type { HealthData } from '../types/healthTypes';
@@ -134,7 +135,7 @@ export function useSyncHealth() {
 
       // Store bonus steps from server so the UI shows walked + bonus
       if (d?.bonusSteps !== undefined && d.bonusSteps > 0) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalToday();
         const { useHealthDataStore } = require('../store/healthDataStore');
         useHealthDataStore.getState().setBonusSteps(d.bonusSteps, today);
       }

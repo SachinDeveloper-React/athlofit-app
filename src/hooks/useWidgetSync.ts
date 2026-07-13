@@ -1,7 +1,8 @@
 // src/hooks/useWidgetSync.ts
 import { useEffect, useRef, useCallback } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { widgetService } from '../services/widgetService';
+import { stepService } from '../services/stepService';
 
 interface UseWidgetSyncOptions {
   steps: number;
@@ -14,13 +15,14 @@ interface UseWidgetSyncOptions {
 }
 
 /**
- * Syncs the current step count to the home-screen widget.
+ * Syncs the current step count to the home-screen widget AND notification.
  *
  * Rules:
  *  - Never push 0 steps — the background worker may have already written a
  *    valid non-zero value; overwriting it with 0 on cold start looks broken.
  *  - Only push when the value actually changed since the last successful sync.
  *  - Re-push when the app comes to foreground (in case the widget was reset).
+ *  - Also pushes to the native notification so all surfaces stay in sync.
  */
 export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOptions) {
   const appState = useRef(AppState.currentState);
@@ -49,6 +51,13 @@ export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOpti
       lastSyncedSteps.current = s;
       lastSyncedGoal.current  = g;
     }
+
+    // Also push to the notification so it shows the same step count.
+    // forceRefreshSteps only applies if steps > current native value,
+    // so it never overwrites a more recent sensor reading.
+    if (Platform.OS === 'android' && s > 0) {
+      stepService.forceRefreshSteps(s).catch(() => { /* non-fatal */ });
+    }
   }, []);
 
   // Push whenever steps, goal, or enabled changes — but only if steps > 0
@@ -64,6 +73,10 @@ export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOpti
         appState.current.match(/inactive|background/) &&
         next === 'active'
       ) {
+        // Reset lastSynced so the push isn't skipped — the user is returning
+        // to the app and expects notification/widget to reflect current data.
+        lastSyncedSteps.current = null;
+        lastSyncedGoal.current = null;
         syncToWidget(stepsRef.current, goalRef.current);
       }
       appState.current = next;

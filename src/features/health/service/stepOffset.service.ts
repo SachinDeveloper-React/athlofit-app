@@ -7,6 +7,7 @@
 import { BASE_URL } from '../../../utils/api';
 import { useHealthDataStore } from '../store/healthDataStore';
 import { HealthData } from '../types/healthTypes';
+import { getLocalToday } from '../../../utils/date';
 
 /**
  * FIX #9: Clears the synced step offset if it belongs to a previous day.
@@ -20,7 +21,7 @@ import { HealthData } from '../types/healthTypes';
  */
 export function clearStaleStepOffset(): void {
   const { syncedStepOffset, syncedStepOffsetDate, syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalToday();
 
   if (syncedStepOffset > 0 && syncedStepOffsetDate && syncedStepOffsetDate !== today) {
     useHealthDataStore.getState().setSyncedStepOffset(0, '');
@@ -51,7 +52,15 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
   clearStaleStepOffset();
 
   try {
-    const response = await fetch(`${BASE_URL}health/today`, {
+    // Include device timezone so the server returns today's record based on
+    // the user's local day boundary, not the server's IST timezone.
+    const { getTimezone } = await import('../../../utils/timezone');
+    const timezone = getTimezone() || '';
+    const url = timezone
+      ? `${BASE_URL}health/today?timezone=${encodeURIComponent(timezone)}`
+      : `${BASE_URL}health/today`;
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -73,7 +82,7 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = getLocalToday(); // YYYY-MM-DD
 
     // Store the full server health baseline (calories, distance, activeMinutes,
     // heart rate, blood pressure, hydration, sleep, etc.) for cross-device/reinstall

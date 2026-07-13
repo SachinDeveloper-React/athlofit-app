@@ -1,6 +1,5 @@
 package com.athlofit
 
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -32,7 +31,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Calendar
 
 /**
  * StepCounterService
@@ -63,7 +61,6 @@ class StepCounterService : Service(), SensorEventListener {
         private const val PREFS_NAME = "StepCounterPrefs"
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
         private const val STEP_HISTORY_KEY = "stepHistory"
-        private const val MIDNIGHT_ALARM_REQUEST_CODE = 3001
 
         // Max report latency for sensor batching (10 seconds as per requirement 9.3)
         private const val MAX_REPORT_LATENCY_US = 10_000_000 // 10 seconds in microseconds
@@ -82,6 +79,88 @@ class StepCounterService : Service(), SensorEventListener {
         @Volatile
         var liveStepCount: Int = -1
             private set
+
+        /**
+         * Updates the live step count from an external source (e.g., JS layer pushing
+         * a fresher Health Connect value). Only applies if the new value is higher
+         * than the current count, preventing stale data from overwriting real-time sensor data.
+         * Also updates the notification and widget immediately.
+         *
+         * @param steps The step count to apply (only if > current liveStepCount).
+         * @param context Context for SharedPreferences and notification updates.
+         * @return true if the value was applied, false if current value is already higher.
+         */
+        fun pushStepUpdate(steps: Int, context: Context): Boolean {
+            if (steps <= liveStepCount && liveStepCount >= 0) return false
+            liveStepCount = steps
+
+            // Update widget SharedPreferences
+            val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+            val goal = widgetPrefs.getInt("goal", 10000)
+            widgetPrefs.edit()
+                .putInt("steps", steps)
+                .putLong("lastUpdated", System.currentTimeMillis())
+                .apply()
+
+            // Update notification
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            if (nm != null) {
+                val channel = android.app.NotificationChannel(
+                    "step_counter_live",
+                    "Live Step Counter",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Shows your live step count for today"
+                    setShowBadge(false)
+                }
+                nm.createNotificationChannel(channel)
+
+                val percentage = if (goal > 0) ((steps.toLong() * 100) / goal).toInt().coerceIn(0, 100) else 0
+                val stepsFormatted = String.format("%,d", steps)
+                val goalFormatted = String.format("%,d", goal)
+
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                    putExtra("screen", "steps")
+                }
+                val pendingIntent = launchIntent?.let {
+                    android.app.PendingIntent.getActivity(
+                        context, 0, it,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                    )
+                }
+
+                val notification = androidx.core.app.NotificationCompat.Builder(context, "step_counter_live")
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle("$stepsFormatted steps today")
+                    .setContentText("Goal: $goalFormatted \u2022 $percentage% complete")
+                    .setProgress(100, percentage, false)
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
+                    .setSilent(true)
+                    .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(pendingIntent)
+                    .build()
+
+                nm.notify(1001, notification)
+            }
+
+            // Trigger widget refresh broadcast
+            try {
+                val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(context)
+                val componentName = android.content.ComponentName(context, StepsWidgetProvider::class.java)
+                val ids = appWidgetManager.getAppWidgetIds(componentName)
+                if (ids.isNotEmpty()) {
+                    val intent = android.content.Intent(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+                        component = componentName
+                        putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                    }
+                    context.sendBroadcast(intent)
+                }
+            } catch (_: Exception) { /* non-fatal */ }
+
+            return true
+        }
 
         /**
          * Convenience method to start the service from any context.
@@ -691,42 +770,16 @@ class StepCounterService : Service(), SensorEventListener {
     // ── Midnight Alarm Scheduling ─────────────────────────────────────────────
 
     /**
-     * Schedules an inexact AlarmManager alarm targeting the next occurrence of
-     * midnight (00:00:00) local time as a fallback reset trigger.
-     * Uses setAndAllowWhileIdle for Doze compatibility.
+     * Schedules an exact AlarmManager alarm targeting the next occurrence of
+     * midnight (00:00:01) local time as a fallback reset trigger.
+     * Uses setExactAndAllowWhileIdle for precise midnight reset on OEM-aggressive
+     * devices (Xiaomi, Samsung, Huawei) where inexact alarms can be delayed 15+ min.
+     *
+     * Falls back to setAndAllowWhileIdle if exact alarm permission is not granted
+     * (Android 12+ requires SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM).
      */
     private fun scheduleMidnightAlarm() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-        if (alarmManager == null) {
-            Log.e(TAG, "AlarmManager is null — cannot schedule midnight alarm")
-            return
-        }
-
-        val intent = Intent(this, MidnightResetReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this,
-            MIDNIGHT_ALARM_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Calculate next midnight
-        val calendar = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        // Use setAndAllowWhileIdle for Doze compatibility (inexact but reliable)
-        alarmManager.setAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            calendar.timeInMillis,
-            pendingIntent
-        )
-
-        Log.d(TAG, "scheduleMidnightAlarm — alarm set for ${calendar.time}")
+        MidnightAlarmScheduler.schedule(this)
     }
 
     // ── Notification ─────────────────────────────────────────────────────────
@@ -737,10 +790,6 @@ class StepCounterService : Service(), SensorEventListener {
      * updates which could drain battery or cause visual flickering.
      */
     private fun maybeUpdateNotification() {
-        val now = System.currentTimeMillis()
-        if (now - lastNotificationUpdateTime < 5_000L) return
-        lastNotificationUpdateTime = now
-
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         nm.notify(NOTIF_ID, buildStepNotification(dailySteps))
     }

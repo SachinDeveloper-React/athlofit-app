@@ -8,7 +8,8 @@ import android.util.Log
 /**
  * MidnightResetReceiver
  *
- * BroadcastReceiver triggered by AlarmManager at midnight as a fallback reset trigger.
+ * BroadcastReceiver triggered by AlarmManager at midnight (00:00:01) as a
+ * fallback reset trigger for the step counter.
  *
  * Behavior:
  * - If StepCounterService is not running: starts it, which triggers handleDateChangeOnStart()
@@ -16,8 +17,8 @@ import android.util.Log
  * - If StepCounterService is already running: starts it with an EXTRA_MIDNIGHT_RESET intent
  *   extra, causing onStartCommand to call performMidnightReset directly.
  *
- * In both cases, calling startForegroundService invokes onStartCommand which handles
- * the reset appropriately based on the intent extra.
+ * After firing, reschedules the next midnight alarm via MidnightAlarmScheduler
+ * to ensure the alarm chain is never broken (even if the service fails to start).
  */
 class MidnightResetReceiver : BroadcastReceiver() {
 
@@ -28,14 +29,24 @@ class MidnightResetReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         Log.d(TAG, "Midnight alarm received — starting StepCounterService with midnight reset extra")
-        // Start the service with the midnight reset extra.
-        // If the service is not running, onStartCommand will call handleDateChangeOnStart()
-        // which detects the date change and performs the reset.
-        // If the service is already running, onStartCommand will see the extra and call
-        // performMidnightReset() directly for an immediate reset.
+
         val serviceIntent = Intent(context, StepCounterService::class.java).apply {
             putExtra(EXTRA_MIDNIGHT_RESET, true)
         }
-        context.startForegroundService(serviceIntent)
+
+        try {
+            context.startForegroundService(serviceIntent)
+        } catch (e: Exception) {
+            // On some OEMs (Xiaomi MIUI, Huawei EMUI), starting a foreground service
+            // from a BroadcastReceiver can throw if the app is in a restricted state.
+            // The service will detect the day change on the next sensor event via
+            // onSensorChanged's date check, or when the user opens the app.
+            Log.e(TAG, "Failed to start StepCounterService from midnight alarm: ${e.message}", e)
+        }
+
+        // Always reschedule the next midnight alarm as a safety net.
+        // Normally the service also reschedules in performMidnightReset(), but if the
+        // service failed to start above, this ensures the alarm chain isn't broken.
+        MidnightAlarmScheduler.schedule(context)
     }
 }

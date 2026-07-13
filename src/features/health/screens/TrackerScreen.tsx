@@ -22,6 +22,7 @@ import { useHealth } from '../hooks/useHealth';
 import { WeeklyStepEntry, type HealthData, defaultHealthData } from '../types/healthTypes';
 import { TabId, TABS } from '../constants/tracker.constant';
 import { useWeeklySteps } from '../hooks/useWeeklySteps';
+import { toISODate } from '../utils/healthFormatters';
 import { useGamification } from '../hooks/useGamification';
 import { useStreak } from '../hooks/useStreak';
 import { useGamificationStore } from '../store/gamificationStore';
@@ -117,7 +118,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={new Date().toISOString().split('T')[0]}
+        todayIndex={toISODate(new Date())}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,

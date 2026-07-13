@@ -38,6 +38,16 @@ interface HealthInitStore extends HealthInitState {
   reset: () => void;
 }
 
+// Timeout helper — prevents splash from hanging indefinitely if Health Connect
+// SDK binding dies or requestPermission() never resolves.
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Health init timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+
 export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
   isInitialized: false,
   platform: 'unavailable',
@@ -63,7 +73,7 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
           return;
         }
 
-        const ok = await initializeHealthKit();
+        const ok = await withTimeout(initializeHealthKit(), 10000);
         set({
           isInitialized: true,
           platform: ok ? 'healthkit' : 'unavailable',
@@ -87,7 +97,7 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
         }
 
         const { isHealthConnectAvailable, initializeHealthConnect, hasHealthConnectPermissions } = getHealthConnectService();
-        const available = await isHealthConnectAvailable();
+        const available = await withTimeout(isHealthConnectAvailable(), 5000);
         if (!available) {
           // Health Connect not installed — start native step service for background
           // counting but show the permission screen so the user can install HC or skip.
@@ -103,7 +113,7 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
         }
 
         // Health Connect is available — check if permissions already granted
-        const alreadyGranted = await hasHealthConnectPermissions();
+        const alreadyGranted = await withTimeout(hasHealthConnectPermissions(), 5000);
         if (alreadyGranted) {
           set({
             isInitialized: true,
@@ -128,7 +138,7 @@ export const useHealthInitStore = create<HealthInitStore>((set, get) => ({
 
         let ok = false;
         try {
-          ok = await initializeHealthConnect();
+          ok = await withTimeout(initializeHealthConnect(), 10000);
         } finally {
           await widgetService.setAppInitialising(false);
         }

@@ -3,6 +3,7 @@
 
 import { HistoryEntry } from '../types/hydration.type';
 import { BASE_URL as API_BASE_URL } from '../../../utils/api';
+import { getLocalToday } from '../../../utils/date';
 
 // Strip trailing slash so we can append paths cleanly
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');
@@ -12,7 +13,7 @@ export const hydrationService = {
    * Fetch today's hydration history from backend
    */
   async fetchTodayHistory(authToken: string): Promise<HistoryEntry[]> {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = getLocalToday(); // YYYY-MM-DD
 
     const res = await fetch(`${BASE_URL}/health/history?from=${today}&to=${today}&limit=1`, {
       method: 'GET',
@@ -47,7 +48,7 @@ export const hydrationService = {
     amount: number,
     source: HistoryEntry['source'] = 'manual',
   ): Promise<HistoryEntry> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
 
     const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
@@ -78,7 +79,7 @@ export const hydrationService = {
    * Reset today's hydration data on backend
    */
   async resetToday(authToken: string): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
 
     const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
@@ -107,7 +108,7 @@ export const hydrationService = {
   ): Promise<void> {
     if (entries.length === 0) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
     const totalHydration = entries.reduce((sum, e) => sum + e.amount, 0);
 
     const res = await fetch(`${BASE_URL}/health/sync`, {
