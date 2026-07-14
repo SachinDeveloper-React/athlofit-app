@@ -8,7 +8,7 @@ import android.util.Log
 /**
  * MidnightResetReceiver
  *
- * BroadcastReceiver triggered by AlarmManager at midnight (00:00:01) as a
+ * BroadcastReceiver triggered by AlarmManager at midnight (00:00:00) as a
  * fallback reset trigger for the step counter.
  *
  * Behavior:

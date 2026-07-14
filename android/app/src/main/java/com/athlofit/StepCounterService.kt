@@ -771,7 +771,7 @@ class StepCounterService : Service(), SensorEventListener {
 
     /**
      * Schedules an exact AlarmManager alarm targeting the next occurrence of
-     * midnight (00:00:01) local time as a fallback reset trigger.
+     * midnight (00:00:00) local time as a fallback reset trigger.
      * Uses setExactAndAllowWhileIdle for precise midnight reset on OEM-aggressive
      * devices (Xiaomi, Samsung, Huawei) where inexact alarms can be delayed 15+ min.
      *

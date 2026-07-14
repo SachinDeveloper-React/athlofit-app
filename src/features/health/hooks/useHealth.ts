@@ -165,11 +165,11 @@ export function useHealth(options: UseHealthOptions = {}) {
     const now = new Date();
     const midnight = new Date(now);
     midnight.setDate(midnight.getDate() + 1);
-    midnight.setHours(0, 0, 1, 0); // 1 second past midnight
+    midnight.setHours(0, 0, 0, 0); // exactly 12:00:00.000 AM
     const msUntilMidnight = midnight.getTime() - now.getTime();
 
     const timer = setTimeout(async () => {
-      // Reset cached data to zero immediately so the UI doesn't show stale steps
+      // Reset cached data to zero INSTANTLY so the UI shows 0 at midnight
       const freshData = { ...defaultHealthData };
       setData(freshData);
       setLastUpdated(new Date());
@@ -187,19 +187,15 @@ export function useHealth(options: UseHealthOptions = {}) {
       currentDateRef.current = today;
 
       // Trigger native service midnight reset (resets notification + widget)
-      // This ensures reset even if AlarmManager alarm was delayed by Doze
       if (Platform.OS === 'android') {
         const { stepService } = await import('../../../services/stepService');
         stepService.triggerMidnightReset();
       }
 
       if (isReadyRef.current) {
-        // Force a fresh fetch — bypass staleness guard so new day's data loads
+        // Force a fresh fetch immediately — no delay, load today's data now
         lastFetchedAtRef.current = 0;
-        // Small delay to allow native service and Health Connect to reset
-        setTimeout(() => {
-          loadData(platformRef.current);
-        }, 3000);
+        loadData(platformRef.current);
       }
 
       // Re-trigger this effect to schedule the next midnight reset
@@ -207,6 +203,55 @@ export function useHealth(options: UseHealthOptions = {}) {
     }, msUntilMidnight);
 
     return () => clearTimeout(timer);
+  }, [midnightResetCount]);
+
+  // ── Precision midnight guard ────────────────────────────────────────────────
+  // Polls every 500ms during the last 10 seconds before midnight to guarantee
+  // an instant reset at 12:00:00 AM even if setTimeout drifts due to JS event
+  // loop delays or Android Doze batching.
+  useEffect(() => {
+    const TEN_SECONDS = 10_000;
+    const POLL_MS = 500;
+
+    const schedulePrecisionGuard = () => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setDate(midnight.getDate() + 1);
+      midnight.setHours(0, 0, 0, 0);
+      const msUntilGuardStart = midnight.getTime() - now.getTime() - TEN_SECONDS;
+
+      // If we're already within 10s of midnight, start polling immediately
+      const delay = Math.max(0, msUntilGuardStart);
+
+      return setTimeout(() => {
+        const poller = setInterval(() => {
+          const today = getLocalToday();
+          if (today !== currentDateRef.current) {
+            clearInterval(poller);
+            // Day changed — perform instant reset
+            currentDateRef.current = today;
+            lastKnownDateRef.current = today;
+            const freshData = { ...defaultHealthData };
+            setData(freshData);
+            setLastUpdated(new Date());
+            useHealthDataStore.getState().setData(freshData);
+            useHealthDataStore.getState().setSyncedStepOffset(0, '');
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+            lastFetchedAtRef.current = 0;
+
+            if (isReadyRef.current) {
+              loadData(platformRef.current);
+            }
+          }
+        }, POLL_MS);
+
+        // Stop the poller after 30s (midnight should have passed by then)
+        setTimeout(() => clearInterval(poller), 30_000);
+      }, delay);
+    };
+
+    const guardTimer = schedulePrecisionGuard();
+    return () => clearTimeout(guardTimer);
   }, [midnightResetCount]);
 
   // ── Auto-refresh timer ────────────────────────────────────────────────────
@@ -221,6 +266,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Day changed — reset data to 0 and force fresh fetch
         const freshData = { ...defaultHealthData };
         setData(freshData);
+        setLastUpdated(new Date());
         useHealthDataStore.getState().setData(freshData);
         useHealthDataStore.getState().setSyncedStepOffset(0, '');
         useHealthDataStore.getState().setSyncedServerBaseline(null, '');

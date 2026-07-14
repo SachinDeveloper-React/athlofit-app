@@ -27,7 +27,7 @@ object MidnightAlarmScheduler {
     private const val MIDNIGHT_ALARM_REQUEST_CODE = 3001
 
     /**
-     * Schedules the next midnight alarm at 00:00:01 local time tomorrow.
+     * Schedules the next midnight alarm at exactly 00:00:00 local time tomorrow.
      * If an existing alarm is already scheduled, it is replaced (FLAG_UPDATE_CURRENT).
      */
     fun schedule(context: Context) {
@@ -45,12 +45,12 @@ object MidnightAlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Target 00:00:01 tomorrow to ensure the date has fully changed
+        // Target exactly 00:00:00 tomorrow for instant reset at midnight
         val calendar = Calendar.getInstance().apply {
             add(Calendar.DAY_OF_YEAR, 1)
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 1)
+            set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
 
