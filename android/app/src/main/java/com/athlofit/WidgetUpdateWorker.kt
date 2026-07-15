@@ -82,12 +82,21 @@ class WidgetUpdateWorker(
             return liveSteps
         }
 
-        // Fallback: try persisted value from StepCounterService
+        // Fallback: try persisted value from StepCounterService — but only if
+        // the stored date matches today. Otherwise the data is stale (yesterday's
+        // steps that weren't reset because the service was killed at midnight).
         val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-        val persistedSteps = stepPrefs.getInt("dailySteps", 0)
-        if (persistedSteps > 0) {
-            Log.d(TAG, "Using persisted sensor steps: $persistedSteps")
-            return persistedSteps
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDate == today) {
+            val persistedSteps = stepPrefs.getInt("dailySteps", 0)
+            if (persistedSteps > 0) {
+                Log.d(TAG, "Using persisted sensor steps: $persistedSteps (date=$storedDate)")
+                return persistedSteps
+            }
+        } else if (storedDate.isNotEmpty()) {
+            Log.d(TAG, "Persisted steps are stale (storedDate=$storedDate, today=$today) — skipping")
         }
 
         // Last resort: query Health Connect
@@ -116,7 +125,16 @@ class WidgetUpdateWorker(
             steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")
-            prefs.getInt("steps", 0)
+            // Only return cached widget steps if they were written today.
+            // Prevents showing yesterday's stale count when HC is unavailable.
+            val lastUpdated = prefs.getLong("lastUpdated", 0)
+            val isFromToday = if (lastUpdated > 0) {
+                val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = lastUpdated }
+                val nowCal = java.util.Calendar.getInstance()
+                updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                    updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+            } else false
+            if (isFromToday) prefs.getInt("steps", 0) else 0
         }
     }
 }

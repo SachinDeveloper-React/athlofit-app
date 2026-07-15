@@ -27,6 +27,7 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { makeStyles } from '../../../hooks/makeStyles';
 import { useDayDetail } from '../hooks/useDayDetail';
 import { getStepColor } from '../utils/stepColorUtils';
+import { useHealthDataStore } from '../store/healthDataStore';
 import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
 import { useNetworkStore } from '../../../store/networkStore';
@@ -285,8 +286,46 @@ const StepDetailScreen = memo(({ route }: Props) => {
   const { date } = route.params;
   const { colors, isDark } = useTheme();
   const s = useStyles();
-  const { data, isLoading, isFetching, dataUpdatedAt } = useDayDetail(date);
+  const { data: serverData, isLoading, isFetching, dataUpdatedAt } = useDayDetail(date);
   const isOnline = useNetworkStore(state => state.isOnline);
+
+  // ── Override with live local data when viewing today ──────────────────────
+  // The server may have stale data (from a sync before midnight reset or from
+  // a delayed sync cycle). The user expects to see their actual live steps.
+  const isToday = useMemo(() => {
+    const now = new Date();
+    const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return date === todayISO;
+  }, [date]);
+
+  // Always subscribe to live health data (hook rules), but only use it for today
+  const liveHealthData = useHealthDataStore(s => s.data);
+
+  const data = useMemo(() => {
+    if (!serverData) return serverData;
+    if (!isToday || !liveHealthData) return serverData;
+
+    // Use the higher of local vs server for each metric (local is always fresher for today)
+    const liveSteps = liveHealthData.steps ?? 0;
+    const steps = Math.max(liveSteps, serverData.steps ?? 0);
+    const dailyGoal = serverData.dailyGoal ?? 10000;
+    const goalMet = steps >= dailyGoal;
+    const progressPct = dailyGoal > 0 ? Math.min(100, Math.round((steps / dailyGoal) * 100)) : 0;
+
+    return {
+      ...serverData,
+      steps,
+      calories: Math.max(liveHealthData.calories ?? 0, serverData.calories ?? 0),
+      distance: Math.max(liveHealthData.distance ?? 0, serverData.distance ?? 0),
+      activeMinutes: Math.max(liveHealthData.activeMinutes ?? 0, serverData.activeMinutes ?? 0),
+      heartRate: liveHealthData.heartRate || serverData.heartRate || 0,
+      heartRateMin: liveHealthData.heartRateMin || serverData.heartRateMin || 0,
+      heartRateMax: liveHealthData.heartRateMax || serverData.heartRateMax || 0,
+      goalMet,
+      progressPct,
+      hasData: true,
+    };
+  }, [serverData, isToday, liveHealthData]);
 
   const { barColor } = useMemo(
     () => getStepColor(data?.steps ?? 0, data?.dailyGoal ?? 10000, colors.muted, false),

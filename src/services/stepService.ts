@@ -223,6 +223,56 @@ class StepService {
   getSource(): StepSource {
     return this.cachedSource;
   }
+
+  // ─── Battery Optimization ─────────────────────────────────────────────────
+
+  /**
+   * Checks if the app is exempt from Android's battery optimization (Doze mode).
+   * Returns true if already whitelisted or if check is not applicable (iOS).
+   */
+  async isIgnoringBatteryOptimizations(): Promise<boolean> {
+    if (!NativeStep) {
+      return true; // iOS — not applicable
+    }
+    try {
+      return await NativeStep.isIgnoringBatteryOptimizations();
+    } catch (e) {
+      console.warn('[StepService] isIgnoringBatteryOptimizations failed:', e);
+      return true; // Fail safe
+    }
+  }
+
+  /**
+   * Opens the system dialog to request battery optimization exemption.
+   * Shows Android's built-in "Allow app to run in background?" prompt.
+   */
+  async requestDisableBatteryOptimization(): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.requestDisableBatteryOptimization();
+    } catch (e) {
+      console.warn('[StepService] requestDisableBatteryOptimization failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Opens the system battery optimization settings page.
+   * Fallback for OEMs where the direct dialog doesn't work.
+   */
+  async openBatterySettings(): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.openBatterySettings();
+    } catch (e) {
+      console.warn('[StepService] openBatterySettings failed:', e);
+      return false;
+    }
+  }
 }
 
 export const stepService = new StepService();

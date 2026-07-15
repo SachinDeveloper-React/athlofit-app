@@ -28,6 +28,8 @@ interface UseHealthOptions {
   pauseInBackground?: boolean;
   /** User weight in kg for accurate calorie/distance derivation. Default 70. */
   weightKg?: number;
+  /** User gender for stride-based distance calculation. 'M'=0.78m, 'F'=0.70m. */
+  gender?: 'M' | 'F' | 'O' | null;
 }
 
 export function useHealth(options: UseHealthOptions = {}) {
@@ -39,12 +41,29 @@ export function useHealth(options: UseHealthOptions = {}) {
     refreshInterval = 90_000,
     pauseInBackground = true,
     weightKg = 70,
+    gender,
   } = options;
 
   // ── Cache hydration from MMKV store ──────────────────────────────────────
-  const cachedData = useHealthDataStore.getState().data;
-  const cachedLastUpdated = useHealthDataStore.getState().lastUpdated;
-  const hasCachedData = cachedData !== null && cachedData !== defaultHealthData;
+  // Check if cached data is from today. If it's from a previous day, discard it
+  // immediately to prevent yesterday's steps from showing on a new day when
+  // the app opens after being killed overnight (missed midnight reset).
+  const storeState = useHealthDataStore.getState();
+  const cachedLastFetchedAt = storeState.lastFetchedAt;
+  const isCacheFromToday = (() => {
+    if (!cachedLastFetchedAt) return false;
+    const fetchDate = new Date(cachedLastFetchedAt);
+    const today = new Date();
+    return (
+      fetchDate.getFullYear() === today.getFullYear() &&
+      fetchDate.getMonth() === today.getMonth() &&
+      fetchDate.getDate() === today.getDate()
+    );
+  })();
+
+  const cachedData = isCacheFromToday ? storeState.data : defaultHealthData;
+  const cachedLastUpdated = isCacheFromToday ? storeState.lastUpdated : null;
+  const hasCachedData = isCacheFromToday && cachedData !== null && cachedData !== defaultHealthData;
 
   // ── Pre-initialized state from splash/bootstrap ───────────────────────────
   const initState = useHealthInitStore.getState();
@@ -78,6 +97,16 @@ export function useHealth(options: UseHealthOptions = {}) {
     import('../service/stepOffset.service').then(({ clearStaleStepOffset }) => {
       clearStaleStepOffset();
     });
+
+    // If cached data was from a previous day, clear the persisted store now
+    // so stale steps never leak into the new day's display.
+    if (!isCacheFromToday) {
+      useHealthDataStore.getState().setData(defaultHealthData);
+      useHealthDataStore.getState().setSyncedStepOffset(0, '');
+      useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+      useHealthDataStore.getState().setStepOffsetFetched(false);
+      useHealthDataStore.getState().setBonusSteps(0, '');
+    }
 
     if (preInitialized) {
       // Already initialized during splash — skip setup, just load data
@@ -413,7 +442,8 @@ export function useHealth(options: UseHealthOptions = {}) {
         const steps = nativeSensorSteps + offset;
 
         const STEPS_PER_MINUTE = 100;
-        const STEP_LENGTH_KM = 0.76 / 1000; // average step length ~0.76m
+        const STRIDE_M = gender === 'F' ? 0.70 : 0.78; // gender-based stride
+        const STEP_LENGTH_KM = STRIDE_M / 1000;
         const CAL_PER_STEP = (weightKg * 0.57) / 1000; // rough calorie derivation
 
         result = {
@@ -448,7 +478,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Health Connect path
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
         const { fetchAllHealthConnectData } = getHealthConnectService();
-        result = await fetchAllHealthConnectData(weightKg, loginTimestamp);
+        result = await fetchAllHealthConnectData(weightKg, loginTimestamp, gender);
 
         // Overlay native step counter's live value for real-time accuracy.
         // Take the higher of HC and native sensor — the native service may have
@@ -519,12 +549,31 @@ export function useHealth(options: UseHealthOptions = {}) {
     (async () => {
       const { stepService } = await import('../../../services/stepService');
       unsubscribe = stepService.onStepUpdate((newSteps: number) => {
+        // ── Day-change guard: if a step event arrives after midnight but before
+        // the reset timer fires, detect it here and force an immediate reset.
+        // This prevents a queued sensor event with yesterday's count from
+        // briefly inflating today's display.
+        const today = getLocalToday();
+        if (today !== currentDateRef.current) {
+          currentDateRef.current = today;
+          lastKnownDateRef.current = today;
+          const freshData = { ...defaultHealthData };
+          setData(freshData);
+          setLastUpdated(new Date());
+          useHealthDataStore.getState().setData(freshData);
+          useHealthDataStore.getState().setSyncedStepOffset(0, '');
+          useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          lastFetchedAtRef.current = 0;
+          // Don't apply this stale event — it's from yesterday.
+          // The native service will emit 0 once its own reset fires.
+          return;
+        }
+
         // Add synced offset from server (steps from previous device today)
         // Only for native_sensor mode — HC/HK handle their own step totals.
         let totalSteps = newSteps;
         if (platformRef.current === 'native_sensor') {
           const { syncedStepOffset, syncedStepOffsetDate, syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
-          const today = getLocalToday();
           const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
           totalSteps = newSteps + offset;
 

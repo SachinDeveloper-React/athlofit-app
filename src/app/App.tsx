@@ -41,6 +41,7 @@ import {
 } from '../features/health/service/hydrationMidnightReset.service';
 import { setupNotifChannels } from '../features/health/hooks/useSyncHealth';
 import { SystemOverlay } from '../components';
+import BatteryOptimizationPrompt from '../components/BatteryOptimizationPrompt';
 import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { linking } from '../navigation/linkingConfig';
 import { useAuthStore } from '../features/auth/store/authStore';
@@ -217,6 +218,7 @@ const AppShell: React.FC = () => {
           <ToastProvider>
             <RootNavigator />
             <SystemOverlay />
+            <BatteryOptimizationPrompt />
           </ToastProvider>
         </NavigationContainer>
       </KeyboardWrapper>

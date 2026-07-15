@@ -421,4 +421,70 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             promise.resolve(false)
         }
     }
+
+    // ─── Battery Optimization ─────────────────────────────────────────────────
+
+    /**
+     * Checks if the app is exempt from battery optimization (Doze mode).
+     * Returns true if the app is already whitelisted, false otherwise.
+     */
+    @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            if (pm == null) {
+                promise.resolve(true) // Can't check — assume OK
+                return
+            }
+            promise.resolve(pm.isIgnoringBatteryOptimizations(context.packageName))
+        } catch (e: Exception) {
+            Log.e(TAG, "isIgnoringBatteryOptimizations failed: ${e.message}", e)
+            promise.resolve(true) // Fail safe — don't nag user
+        }
+    }
+
+    /**
+     * Opens the system dialog to request battery optimization exemption.
+     * This shows a system-level prompt (not a custom UI) asking the user to
+     * allow the app to run unrestricted in the background.
+     */
+    @ReactMethod
+    fun requestDisableBatteryOptimization(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+            ).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "requestDisableBatteryOptimization failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Opens the app's battery settings page directly (manufacturer-specific).
+     * Fallback when the direct dialog doesn't work on some OEMs.
+     */
+    @ReactMethod
+    fun openBatterySettings(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+            ).apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "openBatterySettings failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
 }

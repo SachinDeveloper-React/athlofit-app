@@ -210,12 +210,13 @@ const TrackerScreen = memo(() => {
   const userAvatarUrl = useAuthStore(state => state.user?.avatarUrl);
   const userName = useAuthStore(state => state.user?.name);
   const weightKg = useAuthStore(state => state.user?.weight);
+  const userGender = useAuthStore(state => state.user?.gender);
   const dailyStepGoal = useAuthStore(state => state.user?.dailyStepGoal);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const userId = useAuthStore(state => state.user?._id);
 
   const { platform, isReady, isLoading, data, error, refresh, retrySetup, skipToNativeSensor, lastUpdated } =
-    useHealth({ weightKg: Number(weightKg) || 70 });
+    useHealth({ weightKg: Number(weightKg) || 70, gender: userGender });
 
   // Bonus steps from admin/system — added on top of device steps
   const bonusSteps = useHealthDataStore(s => {

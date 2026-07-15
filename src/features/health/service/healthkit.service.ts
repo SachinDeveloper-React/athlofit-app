@@ -1,5 +1,6 @@
 import { NativeModules } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
+import { GenderForStride } from './healthConnect.service';
 
 // ─── Native Module ────────────────────────────────────────────────────────────
 // Custom native module that uses Promises (works with RN 0.84 New Architecture).
@@ -10,6 +11,10 @@ const isHealthKitAvailable = !!HK;
 
 // ─── Derivation helper (mirrors healthConnect.service.ts) ─────────────────────
 const STEPS_PER_MINUTE = 100;
+const STRIDE_MALE_M = 0.78;   // average male stride length in metres
+const STRIDE_FEMALE_M = 0.70; // average female stride length in metres
+const getStrideM = (gender?: GenderForStride): number =>
+  gender === 'F' ? STRIDE_FEMALE_M : STRIDE_MALE_M;
 const deriveActiveMinutes = (steps: number) =>
   Math.round(steps / STEPS_PER_MINUTE);
 
@@ -244,10 +249,12 @@ export const fetchAllHealthKitData = async (): Promise<HealthData> => {
 export const fetchHealthKitDataForRange = async (
   startDate: string,
   endDate: string,
+  weightKg = 70,
+  gender?: GenderForStride,
 ): Promise<HealthData> => {
   const steps = await getStepsForRange(startDate, endDate);
-  const calories = Math.round(steps * (70 * 0.57) / 1000);
-  const distance = Math.round(steps * (0.76 / 1000) * 100) / 100;
+  const calories = Math.round(steps * (weightKg * 0.57) / 1000);
+  const distance = Math.round(steps * (getStrideM(gender) / 1000) * 100) / 100;
   const activeMinutes = Math.round(steps / STEPS_PER_MINUTE);
 
   const [hr, bp, sleepHours, weight, bloodGlucose, hydration] =

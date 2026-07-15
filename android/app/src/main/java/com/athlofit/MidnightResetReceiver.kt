@@ -30,6 +30,27 @@ class MidnightResetReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         Log.d(TAG, "Midnight alarm received — starting StepCounterService with midnight reset extra")
 
+        // Immediately reset the widget to 0 steps. This ensures the widget shows
+        // "0 steps" at midnight even if the service fails to start (OEM restriction).
+        // The service will update it with the correct count once it starts.
+        val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+        val goal = widgetPrefs.getInt("goal", 10000)
+        StepsWidgetProvider.updateWidget(context, 0, goal)
+
+        // Also reset the notification step count in SharedPreferences so the
+        // notification shows 0 when the service restarts.
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            stepPrefs.edit()
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putString("storedDate", today)
+                .apply()
+            Log.d(TAG, "Reset StepCounterPrefs for new day: $storedDate → $today")
+        }
+
         val serviceIntent = Intent(context, StepCounterService::class.java).apply {
             putExtra(EXTRA_MIDNIGHT_RESET, true)
         }
@@ -39,8 +60,8 @@ class MidnightResetReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             // On some OEMs (Xiaomi MIUI, Huawei EMUI), starting a foreground service
             // from a BroadcastReceiver can throw if the app is in a restricted state.
-            // The service will detect the day change on the next sensor event via
-            // onSensorChanged's date check, or when the user opens the app.
+            // The widget is already reset above. The service will detect the day
+            // change on the next sensor event or when the user opens the app.
             Log.e(TAG, "Failed to start StepCounterService from midnight alarm: ${e.message}", e)
         }
 

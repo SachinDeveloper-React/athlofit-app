@@ -84,6 +84,15 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
 
     const today = getLocalToday(); // YYYY-MM-DD
 
+    // Safety check: if the server returned a record for a different date
+    // (possible if server/client clocks are slightly out of sync around midnight),
+    // discard it to prevent yesterday's steps from leaking into today.
+    if (record.date && record.date !== today) {
+      console.warn(`[StepOffset] Server returned record for ${record.date} but local today is ${today} — discarding`);
+      useHealthDataStore.getState().setStepOffsetFetched(true);
+      return;
+    }
+
     // Store the full server health baseline (calories, distance, activeMinutes,
     // heart rate, blood pressure, hydration, sleep, etc.) for cross-device/reinstall
     // continuity. useHealth will use max(local, baseline) for each metric.

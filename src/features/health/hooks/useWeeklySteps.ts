@@ -44,7 +44,7 @@ export function useWeeklySteps() {
     const now = new Date();
     const midnight = new Date(now);
     midnight.setDate(midnight.getDate() + 1);
-    midnight.setHours(0, 0, 1, 0); // 1 second past midnight
+    midnight.setHours(0, 0, 0, 0); // exactly midnight
     const msUntilMidnight = midnight.getTime() - now.getTime();
 
     const midnightTimer = setTimeout(checkDateChange, msUntilMidnight);

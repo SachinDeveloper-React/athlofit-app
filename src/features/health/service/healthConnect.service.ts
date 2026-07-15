@@ -24,18 +24,26 @@ import {
 } from 'react-native-health-connect';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
-// ─── Derivation constants (70 kg, 76 cm stride adult baseline) ────────────────
+// ─── Derivation constants ─────────────────────────────────────────────────────
 const DEFAULT_WEIGHT_KG = 70;
-const STRIDE_M = 0.76; // metres per step
+const STRIDE_MALE_M = 0.78;   // average male stride length in metres
+const STRIDE_FEMALE_M = 0.70; // average female stride length in metres
 const KCAL_PER_STEP = (kg: number) => (kg * 0.57) / 1000; // MET-based formula
 const STEPS_PER_MINUTE = 100; // average walking cadence
+
+export type GenderForStride = 'M' | 'F' | 'O' | null | undefined;
+
+/** Returns stride length in metres based on gender. Defaults to male (0.78m). */
+const getStrideM = (gender?: GenderForStride): number =>
+  gender === 'F' ? STRIDE_FEMALE_M : STRIDE_MALE_M;
 
 export const deriveFromSteps = (
   steps: number,
   weightKg = DEFAULT_WEIGHT_KG,
+  gender?: GenderForStride,
 ) => ({
   calories: Math.round(steps * KCAL_PER_STEP(weightKg)),
-  distanceKm: Math.round(steps * (STRIDE_M / 1000) * 100) / 100,
+  distanceKm: Math.round(steps * (getStrideM(gender) / 1000) * 100) / 100,
   activeMinutes: Math.round(steps / STEPS_PER_MINUTE),
 });
 
@@ -194,6 +202,7 @@ let _lastDerivedWriteSteps: number = 0;
 export const writeDerivedActivity = async (
   steps: number,
   weightKg = DEFAULT_WEIGHT_KG,
+  gender?: GenderForStride,
 ): Promise<void> => {
   if (steps <= 0) return;
 
@@ -214,6 +223,7 @@ export const writeDerivedActivity = async (
   const { calories, distanceKm, activeMinutes } = deriveFromSteps(
     steps,
     weightKg,
+    gender,
   );
 
   const sessionEnd = new Date(
@@ -353,6 +363,7 @@ export async function readStepsDeduped(
 export const fetchAllHealthConnectData = async (
   weightKg = DEFAULT_WEIGHT_KG,
   loginTimestamp: number | null = null,
+  gender?: GenderForStride,
 ): Promise<HealthData> => {
   try {
     // Use sinceLoginRange for steps to prevent syncing historical data to new accounts
@@ -416,7 +427,7 @@ export const fetchAllHealthConnectData = async (
     // ── Always derive calories / distance / activeMinutes from steps ────────
     // This ensures values are always consistent with current step count,
     // never stale from a previous session's written records.
-    const derived = deriveFromSteps(steps, weightKg);
+    const derived = deriveFromSteps(steps, weightKg, gender);
     const calories = derived.calories;
     const distance = derived.distanceKm;
     const activeMinutes = derived.activeMinutes;
@@ -493,7 +504,7 @@ export const fetchAllHealthConnectData = async (
 
     // Write derived records back so they persist in Health Connect
     // (fire-and-forget — don't await so it doesn't block the UI)
-    writeDerivedActivity(steps, weightKg).catch(e =>
+    writeDerivedActivity(steps, weightKg, gender).catch(e =>
       console.warn('writeDerivedActivity failed:', e),
     );
 

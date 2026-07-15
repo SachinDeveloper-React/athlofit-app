@@ -32,6 +32,7 @@ import {
   isHealthConnectAvailable,
   deriveFromSteps,
   readStepsDeduped,
+  GenderForStride,
 } from './healthConnect.service';
 import {
   showStepGoalNotification,
@@ -113,8 +114,10 @@ async function syncOneDayIOS(
   startTime: string,
   endTime: string,
   token: string,
+  weightKg: number,
+  gender?: GenderForStride,
 ): Promise<void> {
-  const data = await fetchHealthKitDataForRange(startTime, endTime);
+  const data = await fetchHealthKitDataForRange(startTime, endTime, weightKg, gender);
   if (data.steps === 0) return;
 
   const body = {
@@ -146,6 +149,7 @@ async function syncOneDayAndroid(
   endTime: string,
   token: string,
   weightKg: number,
+  gender?: GenderForStride,
 ): Promise<void> {
   // readStepsDeduped() reads individual records and picks the single
   // highest-count source. This prevents inflation from third-party apps
@@ -154,7 +158,7 @@ async function syncOneDayAndroid(
   const steps = await readStepsDeduped(startTime, endTime).catch(() => 0);
   if (steps === 0) return;
 
-  const derived = deriveFromSteps(steps, weightKg);
+  const derived = deriveFromSteps(steps, weightKg, gender);
 
   const body = {
     date: dateStr,
@@ -201,9 +205,30 @@ export async function runHealthSync(): Promise<void> {
   // Build the list of days to sync (from syncStartDate to today)
   const daysToSync: { dateStr: string; start: Date; end: Date }[] = [];
   const current = new Date(syncStartDate);
+  const todayStr = toISODate(now);
+
+  // Midnight sync guard: if we're within 5 minutes of midnight and the
+  // health data store still has stale (yesterday's) data, skip syncing today
+  // to prevent yesterday's steps from being written under today's date.
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  const lastFetchedAt = useHealthDataStore.getState().lastFetchedAt;
+  const isStaleData = lastFetchedAt ? (() => {
+    const fetchDate = new Date(lastFetchedAt);
+    return fetchDate.getDate() !== now.getDate() ||
+           fetchDate.getMonth() !== now.getMonth() ||
+           fetchDate.getFullYear() !== now.getFullYear();
+  })() : false;
+  const skipToday = minutesSinceMidnight < 5 && isStaleData;
+
   while (current <= now) {
     const dateStr = toISODate(current);
-    const isToday = dateStr === toISODate(now);
+    const isToday = dateStr === todayStr;
+
+    // Skip today if data hasn't been refreshed yet (midnight reset pending)
+    if (isToday && skipToday) {
+      current.setDate(current.getDate() + 1);
+      continue;
+    }
 
     // Always use startOfDay for all days — no loginTimestamp filtering.
     // This ensures the background sync reports the same step count as
@@ -224,12 +249,18 @@ export async function runHealthSync(): Promise<void> {
     const ready = await initializeHealthKit();
     if (!ready) return;
 
+    const { useAuthStore } = await import('../../auth/store/authStore');
+    const weightKg = useAuthStore.getState().user?.weight ?? 70;
+    const gender = useAuthStore.getState().user?.gender;
+
     for (const day of daysToSync) {
       await syncOneDayIOS(
         day.dateStr,
         day.start.toISOString(),
         day.end.toISOString(),
         token,
+        weightKg,
+        gender,
       );
     }
     return;
@@ -248,6 +279,7 @@ export async function runHealthSync(): Promise<void> {
 
   const { useAuthStore } = await import('../../auth/store/authStore');
   const weightKg = useAuthStore.getState().user?.weight ?? 70;
+  const gender = useAuthStore.getState().user?.gender;
 
   for (const day of daysToSync) {
     await syncOneDayAndroid(
@@ -256,6 +288,7 @@ export async function runHealthSync(): Promise<void> {
       day.end.toISOString(),
       token,
       weightKg,
+      gender,
     );
   }
 }

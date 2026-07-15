@@ -48,6 +48,14 @@ object HealthSyncHelper {
         val zone      = ZoneId.systemDefault()
         val today     = LocalDate.now()
 
+        // Midnight sync guard: if the native step service hasn't reset yet
+        // (storedDate is yesterday but clock is past midnight), skip syncing
+        // TODAY to prevent yesterday's stale steps from polluting today's record.
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", android.content.Context.MODE_PRIVATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val todayStr = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        val nativeResetPending = storedDate.isNotEmpty() && storedDate != todayStr
+
         // Determine the earliest date to sync — the login date or 7 days ago, whichever is later.
         // FIX: Always sync from startOfDay for each day. The server has its own
         // accountCreatedDate guard to reject pre-account syncs.
@@ -59,6 +67,14 @@ object HealthSyncHelper {
         // Sync each day from startDate to today
         var current = startDate
         while (!current.isAfter(today)) {
+            // Skip today if native reset is pending — prevents stale steps
+            // from yesterday being synced under today's date
+            if (current == today && nativeResetPending) {
+                Log.d(TAG, "[$current] Skipping — native midnight reset pending (storedDate=$storedDate)")
+                current = current.plusDays(1)
+                continue
+            }
+
             // FIX: Always pass 0L so each day reads from midnight (full day).
             // loginTimestamp filtering is no longer needed client-side.
             val tsForDay = 0L

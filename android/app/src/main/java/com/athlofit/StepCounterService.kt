@@ -467,6 +467,35 @@ class StepCounterService : Service(), SensorEventListener {
         // This prevents POSTing identical data every 15 min when the phone is on a desk.
         if (dailySteps == lastSyncedSteps && pendingSyncPayload.isEmpty()) return
 
+        // FIX: Date staleness guard — if storedDate doesn't match today, midnight
+        // reset hasn't happened yet. Skip sync to prevent yesterday's steps from
+        // being POSTed with today's date (race condition on OEMs that delay alarms).
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "maybeSync — skipping: storedDate=$storedDate != today=$today (midnight reset pending)")
+            return
+        }
+
+        // FIX: Discard stale pending payload from a previous day. If the pending
+        // payload contains a date that doesn't match today, it's leftover from a
+        // failed sync yesterday — drop it instead of sending stale data.
+        if (pendingSyncPayload.isNotEmpty()) {
+            try {
+                val pendingJson = JSONObject(pendingSyncPayload)
+                val pendingDate = pendingJson.optString("date", "")
+                if (pendingDate.isNotEmpty() && pendingDate != today) {
+                    Log.d(TAG, "maybeSync — discarding stale pending payload (date=$pendingDate, today=$today)")
+                    pendingSyncPayload = ""
+                    persistState()
+                }
+            } catch (e: Exception) {
+                // Malformed payload — discard it
+                Log.w(TAG, "maybeSync — discarding malformed pending payload", e)
+                pendingSyncPayload = ""
+                persistState()
+            }
+        }
+
         // Build a fresh payload for the current step data
         val payload = buildSyncPayload()
 
@@ -854,6 +883,16 @@ class StepCounterService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
         if (now - lastHcWriteTime < HC_WRITE_INTERVAL_MS) return
         if (dailySteps <= 0 || dailySteps == lastHcWrittenSteps) return
+
+        // Midnight sync guard: don't write to Health Connect if the stored date
+        // doesn't match today. This prevents stale yesterday's steps from being
+        // written under today's date during the brief window after midnight but
+        // before performMidnightReset() fires.
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "maybeWriteToHealthConnect — skipping, storedDate=$storedDate != today=$today (awaiting midnight reset)")
+            return
+        }
 
         lastHcWriteTime = now
         val stepsToWrite = dailySteps

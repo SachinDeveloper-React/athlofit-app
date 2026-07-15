@@ -78,7 +78,16 @@ class StepNotificationService : Service() {
         val goal  = prefs.getInt(KEY_GOAL, 10000)
         // Show the last known step count immediately (from WidgetUpdateWorker cache)
         // so the notification never flashes 0 while waiting for HC to respond.
-        val cachedSteps = prefs.getInt("steps", 0)
+        // But only if the cached steps are from today — prevent stale yesterday's data.
+        val widgetSteps = prefs.getInt("steps", 0)
+        val widgetLastUpdated = prefs.getLong("lastUpdated", 0)
+        val isWidgetFromToday = if (widgetLastUpdated > 0) {
+            val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = widgetLastUpdated }
+            val nowCal = java.util.Calendar.getInstance()
+            updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+        } else false
+        val cachedSteps = if (isWidgetFromToday) widgetSteps else 0
 
         try {
             startForeground(NOTIF_ID, buildNotification(cachedSteps, goal))
@@ -129,8 +138,12 @@ class StepNotificationService : Service() {
 
         // Fallback: StepCounterService is not running (liveStepCount == -1).
         // Try SharedPreferences from StepCounterService as next best source.
+        // Only use persisted steps if they are from today — prevents showing
+        // yesterday's count when the service was killed at midnight.
         val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-        val persistedSteps = stepPrefs.getInt("dailySteps", 0)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        val persistedSteps = if (storedDate == today) stepPrefs.getInt("dailySteps", 0) else 0
         if (persistedSteps > 0) {
             val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val goal = goalPrefs.getInt(KEY_GOAL, 10000)
