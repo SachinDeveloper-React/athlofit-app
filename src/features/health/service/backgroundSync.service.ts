@@ -91,6 +91,7 @@ async function postSync(token: string, body: object): Promise<any> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'X-Sync-Source': 'background', // Identifies this as a background sync for server-side stale data guard
       },
       body: JSON.stringify(body),
     });
@@ -220,12 +221,23 @@ export async function runHealthSync(): Promise<void> {
   })() : false;
   const skipToday = minutesSinceMidnight < 5 && isStaleData;
 
+  // Fresh-login guard: if the user logged in very recently (< 2 minutes ago)
+  // and the health data store hasn't been refreshed for today yet, skip syncing
+  // today. This prevents the background sync from pushing stale Health Connect
+  // data (which may include yesterday's cached records) before the foreground
+  // app has had a chance to do a proper fresh fetch.
+  const loginTs = loginTimestamp || 0;
+  const msSinceLogin = now.getTime() - loginTs;
+  const isFreshLogin = loginTs > 0 && msSinceLogin < 2 * 60 * 1000; // < 2 min
+  const skipTodayFreshLogin = isFreshLogin && !lastFetchedAt;
+
   while (current <= now) {
     const dateStr = toISODate(current);
     const isToday = dateStr === todayStr;
 
     // Skip today if data hasn't been refreshed yet (midnight reset pending)
-    if (isToday && skipToday) {
+    // or if this is a fresh login and foreground hasn't fetched yet
+    if (isToday && (skipToday || skipTodayFreshLogin)) {
       current.setDate(current.getDate() + 1);
       continue;
     }

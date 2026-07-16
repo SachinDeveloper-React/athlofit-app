@@ -210,6 +210,13 @@ export function useHealth(options: UseHealthOptions = {}) {
       // Clear the server baseline — it was for yesterday
       useHealthDataStore.getState().setSyncedServerBaseline(null, '');
 
+      // Clear Health Connect step cache to prevent stale yesterday's steps
+      // from being served on the next read after midnight
+      if (Platform.OS === 'android') {
+        const { resetStepCache } = require('../service/healthConnect.service');
+        resetStepCache();
+      }
+
       // Update day tracking refs
       const today = getLocalToday();
       lastKnownDateRef.current = today;

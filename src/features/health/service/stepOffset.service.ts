@@ -93,6 +93,31 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
       return;
     }
 
+    // ── Stale baseline guard ─────────────────────────────────────────────────
+    // After a DB reset + re-login, a background sync might slip through and
+    // create a server record with stale steps (from Health Connect's historical
+    // data). Detect this by checking if the record's step count is unreasonably
+    // high relative to time elapsed since login.
+    const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+    if (loginTimestamp && record.steps > 0) {
+      const msSinceLogin = Date.now() - loginTimestamp;
+      const minutesSinceLogin = msSinceLogin / 60000;
+      // Max plausible steps: ~180 steps/min (very fast walking/running)
+      // Plus a 500 step buffer for sensor batching delays
+      const maxPlausibleSteps = Math.max(500, Math.ceil(minutesSinceLogin * 180));
+
+      if (record.steps > maxPlausibleSteps && minutesSinceLogin < 30) {
+        // Steps are impossibly high for the time since login — this is stale data
+        // from a background sync that read Health Connect's historical records.
+        console.warn(
+          `[StepOffset] Rejecting stale server baseline: ${record.steps} steps, ` +
+          `only ${Math.round(minutesSinceLogin)}min since login (max plausible: ${maxPlausibleSteps})`
+        );
+        useHealthDataStore.getState().setStepOffsetFetched(true);
+        return;
+      }
+    }
+
     // Store the full server health baseline (calories, distance, activeMinutes,
     // heart rate, blood pressure, hydration, sleep, etc.) for cross-device/reinstall
     // continuity. useHealth will use max(local, baseline) for each metric.

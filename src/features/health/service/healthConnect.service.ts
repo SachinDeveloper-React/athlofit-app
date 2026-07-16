@@ -291,6 +291,13 @@ let _stepCacheValue: number = 0;
 let _stepCacheTime: number = 0;
 let _stepCacheKey: string = ''; // startTime+endTime fingerprint
 
+/** Reset the step cache — call on midnight reset to prevent stale data leaking. */
+export function resetStepCache(): void {
+  _stepCacheValue = 0;
+  _stepCacheTime = 0;
+  _stepCacheKey = '';
+}
+
 export async function readStepsDeduped(
   startTime: string,
   endTime: string,
@@ -321,9 +328,25 @@ export async function readStepsDeduped(
 
     if (!records.length) return 0;
 
+    // ── Midnight bleed guard ─────────────────────────────────────────────────
+    // Health Connect returns records that OVERLAP with the requested time range.
+    // A record with startTime 11:55 PM yesterday and endTime 12:05 AM today
+    // will be included in a today query. Filter out any records whose startTime
+    // is before our requested startTime — these are previous day records that
+    // bleed into today and should NOT be counted.
+    const requestedStart = new Date(startTime).getTime();
+    const filteredRecords = records.filter((r: any) => {
+      const recStart = new Date(r.startTime).getTime();
+      // Only count records that started ON or AFTER our requested start time.
+      // This eliminates cross-midnight records from the previous day.
+      return recStart >= requestedStart;
+    });
+
+    if (!filteredRecords.length) return 0;
+
     // Group step totals by data origin (package name)
     const totals: Record<string, number> = {};
-    for (const r of records) {
+    for (const r of filteredRecords) {
       const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
       totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
     }
