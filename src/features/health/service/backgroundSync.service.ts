@@ -121,6 +121,20 @@ async function syncOneDayIOS(
   const data = await fetchHealthKitDataForRange(startTime, endTime, weightKg, gender);
   if (data.steps === 0) return;
 
+  // ── Post-midnight stale data guard (iOS) ───────────────────────────────────
+  const now = new Date();
+  const todayStr = toISODate(now);
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  if (dateStr === todayStr && minutesSinceMidnight < 5) {
+    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
+    if (data.steps > maxPlausible) {
+      console.warn(
+        `[BackgroundSync] iOS: Skipping stale today sync: ${data.steps} steps at ${minutesSinceMidnight}min after midnight`
+      );
+      return;
+    }
+  }
+
   const body = {
     ...data,
     date: dateStr,
@@ -158,6 +172,25 @@ async function syncOneDayAndroid(
   // Health Connect. aggregate() sums all sources and over-counts.
   const steps = await readStepsDeduped(startTime, endTime).catch(() => 0);
   if (steps === 0) return;
+
+  // ── Post-midnight stale data guard ─────────────────────────────────────────
+  // If syncing today and it's within the first 5 minutes after midnight,
+  // validate that the step count is plausible for the elapsed time.
+  // On some devices, Health Connect returns yesterday's cached/batched steps
+  // under today's time range shortly after midnight.
+  const now = new Date();
+  const todayStr = toISODate(now);
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  if (dateStr === todayStr && minutesSinceMidnight < 5) {
+    // Max plausible: ~180 steps/min * minutes since midnight + 100 buffer
+    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
+    if (steps > maxPlausible) {
+      console.warn(
+        `[BackgroundSync] Skipping stale today sync: ${steps} steps at ${minutesSinceMidnight}min after midnight (max plausible: ${maxPlausible})`
+      );
+      return;
+    }
+  }
 
   const derived = deriveFromSteps(steps, weightKg, gender);
 

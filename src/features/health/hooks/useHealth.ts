@@ -132,6 +132,14 @@ export function useHealth(options: UseHealthOptions = {}) {
   const lastKnownDateRef = useRef<string>(getLocalToday());
   // Track the date we're on — used to detect day change during polling
   const currentDateRef = useRef<string>(getLocalToday());
+  // Track when midnight reset occurred — native sensor events are ignored for
+  // a brief window after reset to prevent stale yesterday's count from leaking.
+  const midnightResetAtRef = useRef<number>(0);
+  // ── Midnight reset gate ────────────────────────────────────────────────────
+  // After midnight reset, ALL step updates are blocked until the native sensor
+  // confirms it has properly reset (reports 0 or a very low count < 50).
+  // This guarantees: first show 0, then only forward real new-day steps.
+  const midnightResetPendingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!pauseInBackground) return;
@@ -151,6 +159,9 @@ export function useHealth(options: UseHealthOptions = {}) {
         if (today !== lastKnownDateRef.current) {
           lastKnownDateRef.current = today;
           currentDateRef.current = today;
+          if (Platform.OS === 'android') {
+            midnightResetPendingRef.current = true; // Gate: block stale step updates
+          }
           const freshData = { ...defaultHealthData };
           setData(freshData);
           setLastUpdated(new Date());
@@ -221,11 +232,31 @@ export function useHealth(options: UseHealthOptions = {}) {
       const today = getLocalToday();
       lastKnownDateRef.current = today;
       currentDateRef.current = today;
+      midnightResetAtRef.current = Date.now();
+      // Gate only on Android — iOS HealthKit handles day boundaries correctly
+      // and has no native step sensor to confirm reset.
+      if (Platform.OS === 'android') {
+        midnightResetPendingRef.current = true; // Gate: block all step updates until reset confirmed
+      }
+
+      // Safety timeout: if native sensor doesn't confirm reset within 2 minutes,
+      // auto-open the gate. This handles edge cases where the sensor service
+      // crashes or stops sending events after midnight.
+      setTimeout(() => {
+        if (midnightResetPendingRef.current) {
+          console.warn('[useHealth] Midnight reset gate auto-opened after 2min timeout');
+          midnightResetPendingRef.current = false;
+        }
+      }, 2 * 60_000);
 
       // Trigger native service midnight reset (resets notification + widget)
       if (Platform.OS === 'android') {
         const { stepService } = await import('../../../services/stepService');
-        stepService.triggerMidnightReset();
+        await stepService.triggerMidnightReset();
+        // Give the native sensor service time to fully reset its counter
+        // before we read from it again. Without this delay, getCurrentSteps()
+        // returns yesterday's accumulated count.
+        await new Promise<void>(r => setTimeout(r, 1000));
       }
 
       if (isReadyRef.current) {
@@ -267,6 +298,9 @@ export function useHealth(options: UseHealthOptions = {}) {
             // Day changed — perform instant reset
             currentDateRef.current = today;
             lastKnownDateRef.current = today;
+            if (Platform.OS === 'android') {
+              midnightResetPendingRef.current = true; // Gate: block stale step updates
+            }
             const freshData = { ...defaultHealthData };
             setData(freshData);
             setLastUpdated(new Date());
@@ -299,6 +333,9 @@ export function useHealth(options: UseHealthOptions = {}) {
       const today = getLocalToday();
       if (today !== currentDateRef.current) {
         currentDateRef.current = today;
+        if (Platform.OS === 'android') {
+          midnightResetPendingRef.current = true; // Gate: block stale step updates
+        }
         // Day changed — reset data to 0 and force fresh fetch
         const freshData = { ...defaultHealthData };
         setData(freshData);
@@ -441,6 +478,12 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { stepService } = await import('../../../services/stepService');
         const nativeSensorSteps = await stepService.getCurrentSteps();
 
+        // Check if this reading can confirm the midnight gate is resolved
+        if (midnightResetPendingRef.current && nativeSensorSteps <= 50) {
+          midnightResetPendingRef.current = false;
+          console.log(`[useHealth] loadData (native_sensor): Midnight reset confirmed at ${nativeSensorSteps}`);
+        }
+
         // Add synced step offset from server (cross-device continuity).
         // If the user walked on another device today, those steps carry over.
         const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
@@ -491,10 +534,26 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Take the higher of HC and native sensor — the native service may have
         // just restarted (showing 0 or a low value) while HC has accumulated
         // steps from before the service was running.
+        // GUARD: If midnight reset is pending (gate closed), don't trust native
+        // sensor — it may still report yesterday's count. Wait for reset confirmation.
         const { stepService } = await import('../../../services/stepService');
         const nativeSteps = await stepService.getCurrentSteps();
-        if (nativeSteps > result.steps) {
-          result = { ...result, steps: nativeSteps };
+
+        if (midnightResetPendingRef.current) {
+          if (nativeSteps <= 50) {
+            // Native sensor confirmed reset — open the gate
+            midnightResetPendingRef.current = false;
+            console.log(`[useHealth] loadData: Midnight reset confirmed, native at ${nativeSteps}`);
+            // Use native steps only if they're actually higher than HC
+            if (nativeSteps > result.steps) {
+              result = { ...result, steps: nativeSteps };
+            }
+          }
+          // If gate is still pending (native > 50), don't overlay — keep HC value
+        } else {
+          if (nativeSteps > result.steps) {
+            result = { ...result, steps: nativeSteps };
+          }
         }
 
         // Apply server baseline for all metrics (cross-device / reinstall continuity).
@@ -519,6 +578,15 @@ export function useHealth(options: UseHealthOptions = {}) {
             hydration: Math.max(result.hydration, syncedServerBaseline.hydration),
           };
         }
+      }
+
+      // ── Final midnight gate ─────────────────────────────────────────────────
+      // If midnight reset is still pending (native sensor hasn't confirmed reset),
+      // force steps to 0 regardless of what HC or server baseline returned.
+      // This guarantees: user sees 0 first, then only real new-day steps.
+      if (midnightResetPendingRef.current && result.steps > 50) {
+        console.log(`[useHealth] loadData: Gate pending, forcing steps from ${result.steps} to 0`);
+        result = { ...result, steps: 0, calories: 0, distance: 0, activeMinutes: 0 };
       }
 
       setData(result);
@@ -564,6 +632,8 @@ export function useHealth(options: UseHealthOptions = {}) {
         if (today !== currentDateRef.current) {
           currentDateRef.current = today;
           lastKnownDateRef.current = today;
+          midnightResetAtRef.current = Date.now();
+          midnightResetPendingRef.current = true; // Gate: block subsequent stale events
           const freshData = { ...defaultHealthData };
           setData(freshData);
           setLastUpdated(new Date());
@@ -574,6 +644,22 @@ export function useHealth(options: UseHealthOptions = {}) {
           // Don't apply this stale event — it's from yesterday.
           // The native service will emit 0 once its own reset fires.
           return;
+        }
+
+        // ── Post-midnight stale event guard ──────────────────────────────────
+        // After midnight reset, ALL step updates are blocked until the native
+        // sensor confirms it has properly reset (reports ≤ 50 steps).
+        // Once confirmed, the gate opens and normal updates resume.
+        if (midnightResetPendingRef.current) {
+          if (newSteps <= 50) {
+            // Native sensor has confirmed reset — open the gate
+            midnightResetPendingRef.current = false;
+            console.log(`[useHealth] Midnight reset confirmed: native sensor at ${newSteps} steps`);
+          } else {
+            // Still reporting yesterday's count — ignore
+            console.log(`[useHealth] Blocking stale native event: ${newSteps} steps (waiting for reset confirmation)`);
+            return;
+          }
         }
 
         // Add synced offset from server (steps from previous device today)
