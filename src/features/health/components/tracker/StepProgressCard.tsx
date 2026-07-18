@@ -462,6 +462,21 @@ export const StepProgressCard = memo(
           onEditGoal={onEditGoal}
         />
 
+        {/* View Step Sources — debugging link */}
+        <TouchableOpacity
+          style={styles.viewSourcesBtn}
+          activeOpacity={0.7}
+          onPress={() => {
+            navigate(RootRoutes.HEALTH_NAVIGATOR, {
+              screen: HealthRoutes.STEP_SOURCES,
+            });
+          }}
+        >
+          <AppText variant="caption2" style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+            View Step Sources
+          </AppText>
+        </TouchableOpacity>
+
         {/* Bonus steps indicator */}
         {todayBonusSteps > 0 && (
           <AppView style={styles.bonusBadge}>
@@ -680,6 +695,13 @@ speedoContainer: {
   editBtn: {
     marginLeft: 4,
     padding: 0,
+  },
+
+  viewSourcesBtn: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 4,
   },
 
   // Claim Coins Button

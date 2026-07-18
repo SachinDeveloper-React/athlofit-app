@@ -52,12 +52,10 @@ export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOpti
       lastSyncedGoal.current  = g;
     }
 
-    // Also push to the notification so it shows the same step count.
-    // forceRefreshSteps only applies if steps > current native value,
-    // so it never overwrites a more recent sensor reading.
-    if (Platform.OS === 'android' && s > 0) {
-      stepService.forceRefreshSteps(s).catch(() => { /* non-fatal */ });
-    }
+    // FIX: Removed forceRefreshSteps call. Feeding HC/server-derived step
+    // counts back into the native service's liveStepCount caused a circular
+    // inflation loop. The native sensor service manages its own notification
+    // updates directly from the hardware pedometer.
   }, []);
 
   // Push whenever steps, goal, or enabled changes — but only if steps > 0

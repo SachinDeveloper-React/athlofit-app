@@ -91,8 +91,12 @@ class StepCounterService : Service(), SensorEventListener {
          * @return true if the value was applied, false if current value is already higher.
          */
         fun pushStepUpdate(steps: Int, context: Context): Boolean {
+            // FIX: Do NOT update liveStepCount here. liveStepCount should ONLY be
+            // set by the hardware sensor (onSensorChanged). Updating it from
+            // Health Connect or server values creates a circular inflation loop:
+            //   HC/server value → liveStepCount → getCurrentSteps() → fed back to HC
+            // Instead, only update the notification and widget DISPLAY.
             if (steps <= liveStepCount && liveStepCount >= 0) return false
-            liveStepCount = steps
 
             // Update widget SharedPreferences
             val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
@@ -395,7 +399,14 @@ class StepCounterService : Service(), SensorEventListener {
         maybeUpdateNotification()
         maybeEmitEvent()
         updateWidget()
-        maybeWriteToHealthConnect()
+        // FIX: Disabled maybeWriteToHealthConnect(). Writing steps to Health Connect
+        // under our own package creates a circular inflation loop:
+        //   native sensor → write to HC as "com.athlofit.athlofit" → readStepsDeduped
+        //   picks up our written data → inflated value → compounds each cycle.
+        // The platform sensor (com.android.healthconnect.phone / com.google.android.gms)
+        // already writes steps to Health Connect automatically. Other apps can read
+        // those. We don't need to duplicate the write.
+        // maybeWriteToHealthConnect()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {

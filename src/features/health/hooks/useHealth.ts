@@ -508,8 +508,22 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Use max(local, server) so we never lose data that was already synced.
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
+          // FIX: Inflation guard — if server baseline steps are more than 2x
+          // the local native sensor result, the server likely has inflated data.
+          const serverStepsTrusted = (
+            result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+          ) ? result.steps : syncedServerBaseline.steps;
+
+          if (serverStepsTrusted !== syncedServerBaseline.steps) {
+            console.warn(
+              `[useHealth] Inflation guard (native_sensor): server baseline ${syncedServerBaseline.steps} is ` +
+              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
+            );
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          }
+
           result = {
-            steps: Math.max(result.steps, syncedServerBaseline.steps),
+            steps: Math.max(result.steps, serverStepsTrusted),
             calories: Math.max(result.calories, syncedServerBaseline.calories),
             distance: Math.max(result.distance, syncedServerBaseline.distance),
             activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
@@ -562,8 +576,24 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         const today = getLocalToday();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
+          // FIX: Inflation guard — if server baseline steps are more than 2x
+          // the local HC/native result, the server likely has inflated data from
+          // the circular write bug. Don't use inflated server steps as a floor.
+          const serverStepsTrusted = (
+            result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+          ) ? result.steps : syncedServerBaseline.steps;
+
+          if (serverStepsTrusted !== syncedServerBaseline.steps) {
+            console.warn(
+              `[useHealth] Inflation guard: server baseline ${syncedServerBaseline.steps} is ` +
+              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
+            );
+            // Clear the inflated baseline so it doesn't persist
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          }
+
           result = {
-            steps: Math.max(result.steps, syncedServerBaseline.steps),
+            steps: Math.max(result.steps, serverStepsTrusted),
             calories: Math.max(result.calories, syncedServerBaseline.calories),
             distance: Math.max(result.distance, syncedServerBaseline.distance),
             activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
@@ -597,16 +627,13 @@ export function useHealth(options: UseHealthOptions = {}) {
       useHealthDataStore.getState().setLastFetchedAt(Date.now());
       lastFetchedAtRef.current = Date.now();
 
-      // Push fresh step count to notification + widget immediately.
-      // This ensures that when the app reads a higher value from Health Connect
-      // (e.g., 6000) but the native sensor is behind (e.g., 5500), the
-      // notification and widget update right away without waiting for the next
-      // sensor event or React re-render cycle.
-      if (Platform.OS === 'android' && result.steps > 0) {
-        import('../../../services/stepService').then(({ stepService }) => {
-          stepService.forceRefreshSteps(result.steps).catch(() => { /* non-fatal */ });
-        });
-      }
+      // FIX: Removed forceRefreshSteps() call here. Previously this fed the
+      // HC-read step count back into the native service's liveStepCount, creating
+      // a circular inflation loop. The native StepCounterService updates the
+      // notification and widget directly from the hardware sensor — no need to
+      // push values from the JS layer.
+      // The widget/notification will be slightly behind HC for a few seconds,
+      // but that's far better than 3x step inflation.
     } catch (e: any) {
       if (!silent) setError(e?.message ?? 'Failed to load health data');
     } finally {

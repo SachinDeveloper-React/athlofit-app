@@ -21,6 +21,7 @@ export const HealthRoutes = {
   TRACKER: 'TrackerScreen',
   STEPS: 'StepsScreen',
   STEP_DETAIL: 'StepDetailScreen',
+  STEP_SOURCES: 'StepSourcesScreen',
   CALORIES: 'CaloriesScreen',
   HEART_RATE: 'HeartRateScreen',
   BLOOD_PRESSURE: 'BloodPressureScreen',

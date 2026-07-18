@@ -119,8 +119,73 @@ export const initializeHealthConnect = async (): Promise<boolean> => {
   await sleep(300);
   const granted = await requestPermission(PERMISSIONS);
   // Accept if at least 80% of permissions were granted
-  return granted.length >= PERMISSIONS.length * 0.8;
+  const success = granted.length >= PERMISSIONS.length * 0.8;
+
+  // FIX: Clean up any stale step records written by our app to Health Connect.
+  // The native StepCounterService previously wrote steps under our package name,
+  // which caused a circular inflation loop. Delete those records so affected
+  // users immediately get correct step counts.
+  if (success) {
+    cleanupOwnStepRecords().catch(e =>
+      console.warn('[HealthConnect] cleanup own step records failed:', e)
+    );
+  }
+
+  return success;
 };
+
+/**
+ * Deletes all StepsRecord entries written by our own app (com.athlofit.athlofit)
+ * from Health Connect for today. This fixes the inflation issue for users who
+ * already have stale/inflated records from the old write behavior.
+ *
+ * Safe to call multiple times — no-ops if no records exist.
+ */
+async function cleanupOwnStepRecords(): Promise<void> {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const { records } = await readRecords('Steps', {
+      timeRangeFilter: {
+        operator: 'between' as const,
+        startTime: startOfDay.toISOString(),
+        endTime: now.toISOString(),
+      },
+    });
+
+    if (!records || records.length === 0) return;
+
+    const OWN_PACKAGE = 'com.athlofit.athlofit';
+    const ownRecordIds: string[] = [];
+
+    for (const r of records) {
+      const origin = (r as any).metadata?.dataOrigin ?? '';
+      const id = (r as any).metadata?.id;
+      if (origin === OWN_PACKAGE && id) {
+        ownRecordIds.push(id);
+      }
+    }
+
+    if (ownRecordIds.length === 0) {
+      console.log('[HealthConnect] No own step records to clean up');
+      return;
+    }
+
+    // Delete our own step records using time range (deleteRecordsByTimeRange
+    // deletes ALL records of that type within the range that our app owns)
+    await deleteRecordsByTimeRange('Steps', {
+      operator: 'between' as const,
+      startTime: startOfDay.toISOString(),
+      endTime: now.toISOString(),
+    });
+
+    console.log(`[HealthConnect] Cleaned up ${ownRecordIds.length} own step records from Health Connect`);
+  } catch (e) {
+    console.warn('[HealthConnect] cleanupOwnStepRecords error:', e);
+  }
+}
 
 // ─── Retry helper ─────────────────────────────────────────────────────────────
 //
@@ -351,11 +416,103 @@ export async function readStepsDeduped(
       totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
     }
 
-    console.log('[HealthConnect] Steps by origin:', totals);
+    console.log('[HealthConnect] Steps by origin (raw):', totals);
 
-    // Return the highest single-source total — this matches what Samsung Health
-    // shows and what the native Kotlin worker reports.
-    const result = Math.max(...Object.values(totals));
+    // ── FIX: Exclude our own app's package from the origin totals ────────────
+    // The native StepCounterService previously wrote steps to Health Connect
+    // under our package name (com.athlofit.athlofit). Exclude to prevent
+    // circular inflation.
+    const OWN_PACKAGE = 'com.athlofit.athlofit';
+    const externalTotals: Record<string, number> = {};
+    for (const [origin, steps] of Object.entries(totals)) {
+      if (origin !== OWN_PACKAGE) {
+        externalTotals[origin] = steps;
+      }
+    }
+
+    console.log('[HealthConnect] Steps by origin (excluding self):', externalTotals);
+
+    // If no external sources exist, fall back to our own written value
+    // (this handles cases where Health Connect only has our app's data)
+    const originsToUse = Object.keys(externalTotals).length > 0 ? externalTotals : totals;
+
+    // ── Time-aware deduplication ─────────────────────────────────────────────
+    // Problem: "max single source" works for Samsung devices where Samsung Health
+    // and platform sensor record the SAME walk (duplicates). But it fails for
+    // phone + watch scenarios where the watch records DIFFERENT time periods
+    // (complementary data). We need both: dedup overlapping + sum non-overlapping.
+    //
+    // Approach: Divide the day into time slots. For each slot, take the max
+    // across all origins (dedup). Then sum across all slots (complement).
+    // This correctly handles:
+    //   - Samsung phone: Samsung Health + platform sensor both record same walk → deduped
+    //   - Phone + Watch: phone records morning, watch records evening → summed
+    //
+    const externalRecords = filteredRecords.filter((r: any) => {
+      const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+      return origin !== OWN_PACKAGE;
+    });
+
+    let result: number;
+
+    if (externalRecords.length === 0) {
+      // Fallback: only own records exist
+      result = Math.max(...Object.values(originsToUse), 0);
+    } else if (Object.keys(originsToUse).length <= 1) {
+      // Single external source — no dedup needed, just sum its records
+      result = Math.max(...Object.values(originsToUse), 0);
+    } else {
+      // Multiple external sources — use time-slot deduplication
+      // Divide day into 30-min slots, take max per slot across origins, then sum slots
+      const SLOT_MS = 30 * 60 * 1000; // 30 minutes
+      const dayStart = new Date(startTime).getTime();
+      const dayEnd = new Date(endTime).getTime();
+      const numSlots = Math.ceil((dayEnd - dayStart) / SLOT_MS) || 1;
+
+      // For each slot, track steps per origin
+      const slotMaxes: number[] = new Array(numSlots).fill(0);
+
+      for (const r of externalRecords) {
+        const recStart = new Date((r as any).startTime).getTime();
+        const recEnd = new Date((r as any).endTime).getTime();
+        const count = (r as any).count ?? 0;
+        if (count <= 0) continue;
+
+        // Determine which slot(s) this record spans
+        const startSlot = Math.max(0, Math.floor((recStart - dayStart) / SLOT_MS));
+        const endSlot = Math.min(numSlots - 1, Math.floor((recEnd - dayStart) / SLOT_MS));
+
+        if (startSlot === endSlot) {
+          // Record fits in one slot — add to that slot's max tracking
+          slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
+        } else {
+          // Record spans multiple slots — distribute proportionally
+          const duration = recEnd - recStart;
+          if (duration <= 0) {
+            slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
+          } else {
+            for (let s = startSlot; s <= endSlot; s++) {
+              const slotStart = dayStart + s * SLOT_MS;
+              const slotEnd = slotStart + SLOT_MS;
+              const overlapStart = Math.max(recStart, slotStart);
+              const overlapEnd = Math.min(recEnd, slotEnd);
+              const overlapFraction = (overlapEnd - overlapStart) / duration;
+              const slotSteps = Math.round(count * overlapFraction);
+              slotMaxes[s] = Math.max(slotMaxes[s], slotSteps);
+            }
+          }
+        }
+      }
+
+      const timeAwareTotal = slotMaxes.reduce((sum, v) => sum + v, 0);
+
+      // Safety: also compute simple max-source as a floor.
+      // Time-aware should always be >= max-source, but use max as safety net.
+      const maxSource = Math.max(...Object.values(originsToUse), 0);
+      result = Math.max(timeAwareTotal, maxSource);
+
+      console.log('[HealthConnect] Time-aware dedup:', timeAwareTotal, 'max-source:', maxSource, 'final:', result);
+    }
 
     // FIX #5: Store in cache
     _stepCacheValue = result;

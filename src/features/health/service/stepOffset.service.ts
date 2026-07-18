@@ -143,6 +143,24 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
     if (typeof record.steps === 'number' && record.steps > 0) {
       const { stepService } = await import('../../../services/stepService');
       const currentNativeSteps = await stepService.getCurrentSteps();
+
+      // ── FIX: Inflation guard ───────────────────────────────────────────────
+      // If the server's step count is more than 2x the native sensor's reading,
+      // the server likely has inflated data from the previous circular write bug.
+      // In that case, don't trust the server steps for offset/floor calculations.
+      // The cleanup in initializeHealthConnect() will delete stale HC records,
+      // and the next sync will push correct values to the server.
+      const isLikelyInflated = currentNativeSteps > 100 && record.steps > currentNativeSteps * 2;
+      if (isLikelyInflated) {
+        console.warn(
+          `[StepOffset] Inflation guard: server=${record.steps}, native=${currentNativeSteps}. ` +
+          `Server is ${(record.steps / currentNativeSteps).toFixed(1)}x native — likely inflated. ` +
+          `Skipping offset and floor injection.`
+        );
+        useHealthDataStore.getState().setStepOffsetFetched(true);
+        return;
+      }
+
       const offset = Math.max(0, record.steps - currentNativeSteps);
 
       if (offset > 0) {
