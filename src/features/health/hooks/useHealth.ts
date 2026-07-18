@@ -565,8 +565,21 @@ export function useHealth(options: UseHealthOptions = {}) {
           }
           // If gate is still pending (native > 50), don't overlay — keep HC value
         } else {
+          // FIX: Detect inflated native sensor. If native is more than 2x HC,
+          // the native service has a persisted inflated value from the old bug.
+          // Correct it instead of using it.
           if (nativeSteps > result.steps) {
-            result = { ...result, steps: nativeSteps };
+            if (result.steps > 100 && nativeSteps > result.steps * 2) {
+              // Native is inflated — correct it to the HC value
+              console.warn(
+                `[useHealth] Native sensor inflated: ${nativeSteps} vs HC ${result.steps}. Correcting native.`
+              );
+              stepService.correctInflatedSteps(result.steps).catch(() => { /* non-fatal */ });
+              // Don't use inflated native value — keep HC result
+            } else {
+              // Normal case: native is slightly ahead of HC (real-time sensor vs batch read)
+              result = { ...result, steps: nativeSteps };
+            }
           }
         }
 

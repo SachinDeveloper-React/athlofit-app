@@ -184,10 +184,11 @@ class StepNotificationService : Service() {
 
                 val stepsByOrigin = stepRecords
                     .groupBy { it.metadata.dataOrigin.packageName }
+                    .filterKeys { it != packageName }
                     .mapValues { (_, records) -> records.sumOf { it.count } }
 
                 val todaySteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-                Log.d(TAG, "Steps by origin: $stepsByOrigin → using $todaySteps")
+                Log.d(TAG, "Steps by origin (excluding self): $stepsByOrigin → using $todaySteps")
 
                 // Health Connect batches step data — it may not have flushed
                 // today's steps yet (common early in the morning or after reboot).

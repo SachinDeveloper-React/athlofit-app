@@ -118,10 +118,11 @@ class WidgetUpdateWorker(
 
             val stepsByOrigin = stepRecords
                 .groupBy { it.metadata.dataOrigin.packageName }
+                .filterKeys { it != applicationContext.packageName }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
             val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "Steps by origin (HC fallback): $stepsByOrigin → using $steps")
+            Log.d(TAG, "Steps by origin (HC fallback, excluding self): $stepsByOrigin → using $steps")
             steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")

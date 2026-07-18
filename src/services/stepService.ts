@@ -218,10 +218,45 @@ class StepService {
   }
 
   /**
+   * Corrects inflated native step count caused by the circular HC write bug.
+   * If the native service has a persisted dailySteps significantly higher than
+   * the actual Health Connect platform sensor reading, this resets the inflated
+   * rebootOffset so the native service reports the correct value.
+   *
+   * @param correctSteps The actual correct step count (from HC external sources)
+   * @returns true if correction was applied
+   */
+  async correctInflatedSteps(correctSteps: number): Promise<boolean> {
+    if (!NativeStep) {
+      return false;
+    }
+    try {
+      return await NativeStep.correctInflatedSteps(correctSteps);
+    } catch (e) {
+      console.warn('[StepService] correctInflatedSteps failed:', e);
+      return false;
+    }
+  }
+
+  /**
    * Returns the cached step source determined during initialize().
    */
   getSource(): StepSource {
     return this.cachedSource;
+  }
+
+  /**
+   * Returns the native step service debug log for production debugging.
+   */
+  async getDebugLog(): Promise<string> {
+    if (!NativeStep) {
+      return '(NativeStep not available)';
+    }
+    try {
+      return await NativeStep.getStepDebugLog();
+    } catch (e) {
+      return `Error: ${e}`;
+    }
   }
 
   // ─── Battery Optimization ─────────────────────────────────────────────────

@@ -233,6 +233,23 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
 
     /**
      * Checks whether the hardware TYPE_STEP_COUNTER sensor is available on the device.
+     */
+    /**
+     * Returns the debug log from StepCounterService for production debugging.
+     */
+    @ReactMethod
+    fun getStepDebugLog(promise: Promise) {
+        try {
+            val prefs = reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val log = prefs.getString("stepDebugLog", "(no logs)") ?: "(no logs)"
+            promise.resolve(log)
+        } catch (e: Exception) {
+            promise.resolve("Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Checks whether the hardware TYPE_STEP_COUNTER sensor is available on the device.
      * Returns true if the sensor is present, false otherwise.
      */
     @ReactMethod
@@ -380,6 +397,24 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun setServerStepFloor(serverSteps: Int, promise: Promise) {
+        // FIX: Disabled. This function injected large values into rebootOffset
+        // which caused permanent step inflation. Cross-device continuity is now
+        // handled entirely by the JS layer (stepOffset.service.ts + server baseline).
+        // The native service should only report actual hardware sensor steps.
+        Log.d(TAG, "setServerStepFloor — DISABLED (inflation fix). serverSteps=$serverSteps ignored.")
+        promise.resolve(false)
+    }
+
+    /**
+     * Corrects inflated step count caused by the circular write bug.
+     * If the native service's dailySteps is significantly higher than the actual
+     * Health Connect platform sensor reading, reset the inflated rebootOffset
+     * so the native service reports the correct value.
+     *
+     * @param correctSteps The actual correct step count (from HC platform sensor)
+     */
+    @ReactMethod
+    fun correctInflatedSteps(correctSteps: Int, promise: Promise) {
         try {
             val context = reactApplicationContext
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -387,37 +422,42 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
             )
 
-            // Get current native step count
-            val liveSteps = StepCounterService.liveStepCount
-            val currentSteps = if (liveSteps >= 0) liveSteps else {
-                val storedDate = prefs.getString("storedDate", "") ?: ""
-                if (storedDate == today) prefs.getInt("dailySteps", 0) else 0
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            if (storedDate != today) {
+                Log.d(TAG, "correctInflatedSteps — storedDate=$storedDate != today, skipping")
+                promise.resolve(false)
+                return
             }
 
-            if (serverSteps > currentSteps) {
-                // The server has more steps — inject the difference into rebootOffset
-                // so the native service (notification + widget) shows at least serverSteps.
-                val deficit = serverSteps - currentSteps
+            val currentDailySteps = prefs.getInt("dailySteps", 0)
+
+            // Only correct if current is more than 2x the correct value
+            if (correctSteps > 0 && currentDailySteps > correctSteps * 2) {
+                val excessOffset = currentDailySteps - correctSteps
                 val currentOffset = prefs.getInt("rebootOffset", 0)
+                val newOffset = Math.max(0, currentOffset - excessOffset)
+
                 prefs.edit()
-                    .putInt("rebootOffset", currentOffset + deficit)
-                    .putInt("dailySteps", serverSteps)
+                    .putInt("rebootOffset", newOffset)
+                    .putInt("dailySteps", correctSteps)
                     .apply()
 
-                // Update live count if service is running
-                if (liveSteps >= 0) {
-                    // Restart service to pick up the new offset
-                    StepCounterService.start(context)
-                }
+                // Update live count immediately
+                StepCounterService.setLiveStepCountCorrected(correctSteps)
 
-                Log.d(TAG, "setServerStepFloor — server=$serverSteps, native=$currentSteps, injected offset=$deficit")
+                // Restart the service so it reloads corrected values from SharedPrefs.
+                // Without this, the running service's in-memory dailySteps/rebootOffset
+                // remain inflated, and the next onSensorChanged would re-inflate liveStepCount.
+                StepCounterService.start(context)
+
+                Log.d(TAG, "correctInflatedSteps — corrected from $currentDailySteps to $correctSteps (removed offset: $excessOffset), service restarted")
                 promise.resolve(true)
             } else {
-                Log.d(TAG, "setServerStepFloor — server=$serverSteps <= native=$currentSteps, no action needed")
+                Log.d(TAG, "correctInflatedSteps — no correction needed (daily=$currentDailySteps, correct=$correctSteps)")
                 promise.resolve(false)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "setServerStepFloor failed: ${e.message}", e)
+            Log.e(TAG, "correctInflatedSteps failed: ${e.message}", e)
             promise.resolve(false)
         }
     }

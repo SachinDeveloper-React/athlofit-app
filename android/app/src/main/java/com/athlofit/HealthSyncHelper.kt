@@ -131,10 +131,11 @@ object HealthSyncHelper {
 
             val stepsByOrigin = stepRecords
                 .groupBy { it.metadata.dataOrigin.packageName }
+                .filterKeys { it != "com.athlofit.athlofit" }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
             val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "[$date] Steps by origin: $stepsByOrigin → using $steps")
+            Log.d(TAG, "[$date] Steps by origin (excluding self): $stepsByOrigin → using $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()

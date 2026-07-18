@@ -45,6 +45,7 @@ const StepSourcesScreen: React.FC = () => {
   const [finalSteps, setFinalSteps] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [debugLog, setDebugLog] = useState<string>('');
 
   const loadSources = useCallback(async () => {
     try {
@@ -129,6 +130,9 @@ const StepSourcesScreen: React.FC = () => {
         console.warn('[StepSources] Native sensor read failed:', e);
       }
 
+      // ── Detect inflated native sensor ─────────────────────────────────────
+      const isNativeInflated = healthConnectSteps > 100 && nativeSensorSteps > healthConnectSteps * 2;
+
       // ── 3. Server Baseline (from GET /health/today on login) ──────────────
       const serverBaseline = store.syncedServerBaseline;
       const serverBaselineDate = store.syncedServerBaselineDate;
@@ -163,10 +167,12 @@ const StepSourcesScreen: React.FC = () => {
         {
           id: 'native_sensor',
           label: 'Native Step Sensor',
-          description: 'Hardware pedometer (TYPE_STEP_COUNTER)',
+          description: isNativeInflated
+            ? '⚠️ INFLATED — will be auto-corrected to HC value on next load'
+            : 'Hardware pedometer (TYPE_STEP_COUNTER)',
           steps: nativeSensorSteps,
           isActive: nativeSensorSteps > 0,
-          color: '#2196F3',
+          color: isNativeInflated ? '#FF5722' : '#2196F3',
         },
         {
           id: 'server_baseline',
@@ -200,6 +206,13 @@ const StepSourcesScreen: React.FC = () => {
       console.warn('[StepSources] loadSources error:', e);
     } finally {
       setLoading(false);
+
+      // Load native service debug log
+      try {
+        const { stepService } = await import('../../../services/stepService');
+        const log = await stepService.getDebugLog();
+        setDebugLog(log);
+      } catch { setDebugLog('(failed to load)'); }
     }
   }, []);
 
@@ -391,6 +404,28 @@ const StepSourcesScreen: React.FC = () => {
             multiline
           />
         </View>
+
+        {/* Native Service Debug Log */}
+        {debugLog ? (
+          <>
+            <AppText variant="headline" weight="semiBold" style={{ marginTop: 24, marginBottom: 12 }}>
+              Native Service Log
+            </AppText>
+            <View style={[styles.debugCard, { backgroundColor: cardBg, borderColor }]}>
+              <AppText
+                variant="caption2"
+                style={{
+                  color: colors.foreground,
+                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  fontSize: 9,
+                  lineHeight: 14,
+                }}
+              >
+                {debugLog}
+              </AppText>
+            </View>
+          </>
+        ) : null}
 
         <View style={{ height: 40 }} />
       </ScrollView>
