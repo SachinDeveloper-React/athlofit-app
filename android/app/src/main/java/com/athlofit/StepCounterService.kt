@@ -275,8 +275,11 @@ class StepCounterService : Service(), SensorEventListener {
         createNotificationChannel()
         try {
             // Show cached steps so notification never displays zero while awaiting first sensor event
+            // FIX: Only use cached steps if they're from today — prevents showing yesterday's count
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val cachedSteps = prefs.getInt("dailySteps", 0)
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val cachedSteps = if (storedDate == todayStr) prefs.getInt("dailySteps", 0) else 0
             startForeground(NOTIF_ID, buildStepNotification(cachedSteps))
             lastNotificationUpdateTime = System.currentTimeMillis()
         } catch (e: Exception) {
@@ -378,6 +381,11 @@ class StepCounterService : Service(), SensorEventListener {
 
         val cumulative = event.values[0].toLong()
         lastCumulative = cumulative
+
+        // Persist lastCumulative so midnight reset can use it even after service restart
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putLong("lastCumulative", cumulative)
+            .apply()
 
         // Check if the day has changed since last event — handles the case where
         // the midnight alarm fires late or doesn't fire at all (Doze mode).
@@ -491,6 +499,8 @@ class StepCounterService : Service(), SensorEventListener {
         lastSyncTime = prefs.getLong("lastSyncTime", 0L)
         lastSyncedSteps = prefs.getInt("lastSyncedSteps", -1)
         pendingSyncPayload = prefs.getString("pendingSyncPayload", "") ?: ""
+        // Restore lastCumulative so midnight reset works even after service restart
+        lastCumulative = prefs.getLong("lastCumulative", 0L)
 
         // FIX: One-time FULL reset of all step state from the inflation bug.
         // Resets rebootOffset, dailySteps, AND baseline so the sensor starts fresh.
@@ -508,6 +518,77 @@ class StepCounterService : Service(), SensorEventListener {
                 .putInt("dailySteps", 0)
                 .putLong("baseline", 0L)
                 .putBoolean("inflationFixV2", true)
+                .apply()
+        }
+
+        // FIX V3: The baseline from yesterday persisted across midnight because
+        // performMidnightReset didn't fire (lastCumulative was 0 on service restart).
+        // If storedDate is not today, baseline is stale — reset it.
+        // Now uses persisted lastCumulative for proper baseline if available.
+        val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            val newBaseline = if (lastCumulative > 0L) lastCumulative else 0L
+            debugLog(this, "FIX_V3: Stale date ($storedDate != $today). baseline=$baseline → $newBaseline, lastCum=$lastCumulative")
+            baseline = newBaseline
+            dailySteps = 0
+            rebootOffset = 0
+            storedDate = today
+            if (newBaseline == 0L) hasReceivedFirstEvent = false
+            persistState()
+        }
+
+        // FIX V4: One-time baseline reset for users who already have today's date
+        // but with a stale baseline from yesterday (the date got updated but baseline didn't).
+        val fixV4 = prefs.getBoolean("inflationFixV4", false)
+        if (!fixV4) {
+            debugLog(this, "FIX_V4: One-time baseline reset (baseline=$baseline, daily=$dailySteps)")
+            baseline = 0L
+            dailySteps = 0
+            rebootOffset = 0
+            hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", 0L)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV4", true)
+                .apply()
+        }
+
+        // FIX V5: Same as V4 but for users who already applied V4 on July 20.
+        // Their baseline was set to 26702 (correct for July 20) but persisted into July 21.
+        // Force re-initialization from current sensor cumulative.
+        val fixV5 = prefs.getBoolean("inflationFixV5", false)
+        if (!fixV5) {
+            debugLog(this, "FIX_V5: Force baseline reinit (baseline=$baseline, daily=$dailySteps, lastCum=$lastCumulative)")
+            val newBase = if (lastCumulative > 0L) lastCumulative else 0L
+            baseline = newBase
+            dailySteps = 0
+            rebootOffset = 0
+            if (newBase == 0L) hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", newBase)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV5", true)
+                .apply()
+        }
+
+        // FIX V6: Final one-time fix for users who already ran V5 but still have
+        // stale baseline (because V5 ran with lastCumulative=0 or wrong value).
+        // This time: always reset baseline to 0 and let first sensor event set it fresh.
+        // This guarantees clean slate for ALL affected users regardless of prior state.
+        val fixV6 = prefs.getBoolean("inflationFixV6", false)
+        if (!fixV6) {
+            debugLog(this, "FIX_V6: Final baseline reset (baseline=$baseline, daily=$dailySteps, lastCum=$lastCumulative)")
+            baseline = 0L
+            dailySteps = 0
+            rebootOffset = 0
+            hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", 0L)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV6", true)
                 .apply()
         }
 
@@ -763,12 +844,19 @@ class StepCounterService : Service(), SensorEventListener {
 
         dailySteps = 0
         rebootOffset = 0
-        // Set baseline to last known cumulative sensor value
-        // If no sensor event has been received yet, keep existing baseline
+        // Set baseline to last known cumulative sensor value.
+        // If no sensor event has been received yet (lastCumulative == 0),
+        // reset baseline to 0 so the first sensor event reinitializes it
+        // to the current cumulative. This prevents the old baseline from
+        // persisting across midnight and inflating next day's step count.
         if (lastCumulative > 0L) {
             baseline = lastCumulative
+        } else {
+            baseline = 0L
+            hasReceivedFirstEvent = false // Force reinitialization on next event
         }
         storedDate = today
+        debugLog(this, "MIDNIGHT_RESET: baseline=$baseline, lastCum=$lastCumulative, date=$today")
 
         // Update live step count immediately so JS reads 0 right after midnight
         liveStepCount = 0

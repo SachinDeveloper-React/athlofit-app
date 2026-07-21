@@ -74,29 +74,32 @@ class WidgetUpdateWorker(
     }
 
     private suspend fun readTodaySteps(prefs: android.content.SharedPreferences): Int {
+        // FIX: Check stored date before trusting liveStepCount.
+        // After midnight but before first sensor event, liveStepCount has yesterday's value.
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "Midnight reset pending (storedDate=$storedDate, today=$today) — returning 0")
+            return 0
+        }
+
         // Prefer the live in-memory step count from StepCounterService (real-time).
-        // This ensures the widget matches the notification and app UI exactly.
         val liveSteps = StepCounterService.liveStepCount
         if (liveSteps >= 0) {
             Log.d(TAG, "Using live sensor steps: $liveSteps")
             return liveSteps
         }
 
-        // Fallback: try persisted value from StepCounterService — but only if
-        // the stored date matches today. Otherwise the data is stale (yesterday's
-        // steps that weren't reset because the service was killed at midnight).
-        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
-        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
-
+        // Fallback: try persisted value from StepCounterService
+        // storedDate already verified as today above
         if (storedDate == today) {
             val persistedSteps = stepPrefs.getInt("dailySteps", 0)
             if (persistedSteps > 0) {
                 Log.d(TAG, "Using persisted sensor steps: $persistedSteps (date=$storedDate)")
                 return persistedSteps
             }
-        } else if (storedDate.isNotEmpty()) {
-            Log.d(TAG, "Persisted steps are stale (storedDate=$storedDate, today=$today) — skipping")
         }
 
         // Last resort: query Health Connect

@@ -623,7 +623,7 @@ speedoContainer: {
   weekGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    // paddingHorizontal: 20,
   },
 
   // Day bar
@@ -670,7 +670,7 @@ speedoContainer: {
     textAlign: 'center',
   },
   dayName: {
-    fontSize: 11,
+    fontSize: 8,
     opacity: 0.7,
   },
   dayNameToday: {

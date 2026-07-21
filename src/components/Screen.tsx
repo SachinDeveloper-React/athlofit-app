@@ -11,6 +11,7 @@ import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import AppView from './AppView';
+import { SyncIndicator } from './SyncIndicator';
 
 type Props = {
   children: React.ReactNode;
@@ -129,8 +130,11 @@ const Screen = memo(
               {header ? (
                 <View collapsable={false} style={{ zIndex: 10 }}>
                   {header}
+                  <SyncIndicator />
                 </View>
-              ) : null}
+              ) : (
+                <SyncIndicator />
+              )}
 
               {/* Main content — padded, with top spacing below header */}
               <View style={[pad, { paddingTop: header ? spacing[3] : 0 }, contentContainerStyle]}>{children}</View>
@@ -138,7 +142,8 @@ const Screen = memo(
           ) : (
             <AppView style={[{ flex: 1 }, contentContainerStyle]}>
               {header ?? null}
-              <AppView style={[{ flex: 1, paddingTop: header ? spacing[3] : 0 }, pad]}>
+              <SyncIndicator />
+              <AppView style={[{ flex: 1 }, pad]}>
                 {children}
               </AppView>
             </AppView>

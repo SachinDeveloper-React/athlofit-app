@@ -647,6 +647,16 @@ export function useHealth(options: UseHealthOptions = {}) {
       // push values from the JS layer.
       // The widget/notification will be slightly behind HC for a few seconds,
       // but that's far better than 3x step inflation.
+      //
+      // UPDATE: Re-enabled for widget/notification display sync ONLY.
+      // pushStepUpdate no longer changes liveStepCount (inflation loop broken).
+      // This ensures widget/notification show HC value after reboot when native
+      // sensor has fewer steps than HC (reboot resets the hardware counter).
+      if (Platform.OS === 'android' && result.steps > 0) {
+        import('../../../services/stepService').then(({ stepService }) => {
+          stepService.forceRefreshSteps(result.steps).catch(() => { /* non-fatal */ });
+        });
+      }
     } catch (e: any) {
       if (!silent) setError(e?.message ?? 'Failed to load health data');
     } finally {

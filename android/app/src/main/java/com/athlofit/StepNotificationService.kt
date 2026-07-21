@@ -119,10 +119,27 @@ class StepNotificationService : Service() {
     // ── Step fetch via aggregate() ────────────────────────────────────────────
 
     private fun fetchAndRefresh() {
-        // Always prefer the live in-memory step count from StepCounterService.
-        // This works on ALL API levels (including 34+) since we now start the
-        // native sensor service everywhere. It updates on every sensor event,
-        // giving true real-time accuracy without Health Connect's batching delay.
+        // FIX: Check if the stored date matches today before using liveStepCount.
+        // After midnight but before the first sensor event, liveStepCount still has
+        // yesterday's value. Return 0 in that case.
+        val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            // Midnight reset pending — show 0 instead of stale yesterday's count
+            val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val goal = goalPrefs.getInt(KEY_GOAL, 10000)
+            if (lastSteps != 0) {
+                lastSteps = 0
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildNotification(0, goal))
+                Log.d(TAG, "Notification reset to 0 (midnight reset pending)")
+            }
+            return
+        }
+
+        // Prefer the live in-memory step count from StepCounterService.
         val liveSteps = StepCounterService.liveStepCount
         if (liveSteps >= 0) {
             val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -138,11 +155,7 @@ class StepNotificationService : Service() {
 
         // Fallback: StepCounterService is not running (liveStepCount == -1).
         // Try SharedPreferences from StepCounterService as next best source.
-        // Only use persisted steps if they are from today — prevents showing
-        // yesterday's count when the service was killed at midnight.
-        val stepPrefs = getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
-        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        // storedDate already verified as today above.
         val persistedSteps = if (storedDate == today) stepPrefs.getInt("dailySteps", 0) else 0
         if (persistedSteps > 0) {
             val goalPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -193,9 +206,17 @@ class StepNotificationService : Service() {
                 // Health Connect batches step data — it may not have flushed
                 // today's steps yet (common early in the morning or after reboot).
                 // Fall back to the cached value from WidgetUpdateWorker if HC
-                // returns 0 but the cache has a non-zero value.
+                // returns 0 but the cache has a non-zero value from today.
                 val cachedSteps = prefs.getInt("steps", 0)
-                val steps = if (todaySteps == 0 && cachedSteps > 0) cachedSteps else todaySteps
+                val cachedLastUpdated = prefs.getLong("lastUpdated", 0)
+                val isCachedFromToday = if (cachedLastUpdated > 0) {
+                    val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = cachedLastUpdated }
+                    val nowCal = java.util.Calendar.getInstance()
+                    updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                        updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+                } else false
+                val safeCachedSteps = if (isCachedFromToday) cachedSteps else 0
+                val steps = if (todaySteps == 0 && safeCachedSteps > 0) safeCachedSteps else todaySteps
 
                 Log.d(TAG, "Steps — HC aggregate: $todaySteps, cached: $cachedSteps, showing: $steps")
 

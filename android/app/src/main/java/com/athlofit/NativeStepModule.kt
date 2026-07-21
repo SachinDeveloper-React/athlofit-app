@@ -204,6 +204,19 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
             )
 
+            // Check if the service's stored date matches today.
+            // If not, the midnight reset hasn't fired yet — return 0 to prevent
+            // showing yesterday's steps after midnight.
+            val prefs = reactApplicationContext.getSharedPreferences(
+                PREFS_NAME, Context.MODE_PRIVATE
+            )
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            if (storedDate.isNotEmpty() && storedDate != today) {
+                // Midnight reset pending — return 0 instead of stale liveStepCount
+                promise.resolve(0)
+                return
+            }
+
             // Prefer live in-memory value (updates instantly on every sensor event)
             val liveSteps = StepCounterService.liveStepCount
             if (liveSteps >= 0) {
@@ -212,17 +225,7 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             }
 
             // Fallback to SharedPreferences (service not running)
-            val prefs = reactApplicationContext.getSharedPreferences(
-                PREFS_NAME, Context.MODE_PRIVATE
-            )
-
-            // Check if stored data is from today — if not, return 0
-            val storedDate = prefs.getString("storedDate", "") ?: ""
-            if (storedDate != today) {
-                promise.resolve(0)
-                return
-            }
-
+            // storedDate already checked above, so we know it's today
             val steps = prefs.getInt("dailySteps", 0)
             // Ensure non-negative
             promise.resolve(if (steps < 0) 0 else steps)
