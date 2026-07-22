@@ -43,12 +43,18 @@ class MidnightResetReceiver : BroadcastReceiver() {
         val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
         val storedDate = stepPrefs.getString("storedDate", "") ?: ""
         if (storedDate.isNotEmpty() && storedDate != today) {
+            // Read lastCumulative so we can set baseline correctly.
+            // baseline = lastCumulative ensures the next sensor event calculates
+            // (cumulative - baseline) = 0 + new steps, not yesterday's total.
+            val lastCumulative = stepPrefs.getLong("lastCumulative", 0L)
+            val newBaseline = if (lastCumulative > 0L) lastCumulative else stepPrefs.getLong("baseline", 0L)
             stepPrefs.edit()
                 .putInt("dailySteps", 0)
                 .putInt("rebootOffset", 0)
+                .putLong("baseline", newBaseline)
                 .putString("storedDate", today)
                 .apply()
-            Log.d(TAG, "Reset StepCounterPrefs for new day: $storedDate → $today")
+            Log.d(TAG, "Reset StepCounterPrefs for new day: $storedDate → $today, baseline=$newBaseline, lastCum=$lastCumulative")
         }
 
         val serviceIntent = Intent(context, StepCounterService::class.java).apply {

@@ -299,8 +299,11 @@ class StepCounterService : Service(), SensorEventListener {
             if (storedDate.isNotEmpty() && storedDate != today) {
                 handleMultiDayGap(storedDate, today)
             } else {
-                // storedDate already matches today (unlikely at midnight) — just reschedule
-                scheduleMidnightAlarm()
+                // storedDate already matches today because MidnightResetReceiver
+                // updated SharedPrefs before starting the service. Still perform
+                // a full midnight reset to ensure liveStepCount=0, emit 0 to JS,
+                // and re-confirm baseline=lastCumulative in memory.
+                performMidnightReset()
             }
         } else {
             // Normal start: detect date change and perform midnight reset if needed
@@ -484,6 +487,7 @@ class StepCounterService : Service(), SensorEventListener {
             .putLong("lastSyncTime", lastSyncTime)
             .putInt("lastSyncedSteps", lastSyncedSteps)
             .putString("pendingSyncPayload", pendingSyncPayload)
+            .putLong("lastCumulative", lastCumulative)
             .apply()
     }
 
