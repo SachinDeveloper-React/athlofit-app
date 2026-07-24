@@ -197,11 +197,13 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
     /**
      * Start the persistent step-count foreground notification.
      * Call this on login (after notification permission is granted).
+     * Delegates to StepCounterService which handles both native sensor
+     * and Health Connect polling modes.
      */
     @ReactMethod
     fun startStepNotification(promise: Promise) {
         try {
-            StepNotificationService.start(reactApplicationContext)
+            StepCounterService.start(reactApplicationContext)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("STEP_NOTIF_START_ERROR", e.message, e)
@@ -215,7 +217,7 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun stopStepNotification(promise: Promise) {
         try {
-            StepNotificationService.stop(reactApplicationContext)
+            StepCounterService.stop(reactApplicationContext)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("STEP_NOTIF_STOP_ERROR", e.message, e)

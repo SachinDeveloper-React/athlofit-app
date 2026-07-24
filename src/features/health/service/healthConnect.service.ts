@@ -233,21 +233,48 @@ export const todayRange = () => {
 /**
  * Get time range for today's step reading.
  *
- * Previously this filtered from loginTimestamp to prevent historical data
- * leaking into new accounts. However, this caused step count mismatches:
- * - After re-login on the same day, steps walked before login were invisible
- * - Notification/widget showed fewer steps than the phone's built-in pedometer
- * - Different surfaces showed different step counts
+ * ALWAYS filters from loginTimestamp when login was today.
+ * This ensures that after any login (new or existing account), only steps
+ * walked AFTER login are read from Health Connect.
  *
- * FIX: Always read from startOfDay. The server already guards against
- * historical data injection via the accountCreatedDate check and anti-cheat
- * rate validation. Client-side filtering is no longer needed and was causing
- * more harm than good.
+ * Steps from before login are handled separately via the server baseline
+ * (syncedServerBaseline / syncedStepOffset) which is fetched on login and
+ * added on top of the local Health Connect reading.
  *
- * @param _loginTimestamp — kept for API compat but no longer used for filtering
+ * Formula: displayed_steps = server_steps_before_login + HC_steps_after_login
+ *
+ * Next-day onwards: loginTimestamp is from a previous day, so todayRange()
+ * is used, returning full-day steps (which is correct — user has been logged
+ * in since yesterday, all of today's steps belong to them).
+ *
+ * @param loginTimestamp — epoch ms when user logged in this session
+ * @param _accountCreatedAt — unused, kept for API compat
  */
-export const sinceLoginRange = (_loginTimestamp: number | null) => {
-  return todayRange();
+export const sinceLoginRange = (
+  loginTimestamp: number | null,
+  _accountCreatedAt?: string | null,
+) => {
+  if (!loginTimestamp) return todayRange();
+
+  const now = new Date();
+  const loginDate = new Date(loginTimestamp);
+
+  // Only filter from loginTimestamp if login was today
+  const isLoginToday =
+    loginDate.getFullYear() === now.getFullYear() &&
+    loginDate.getMonth() === now.getMonth() &&
+    loginDate.getDate() === now.getDate();
+
+  if (!isLoginToday) return todayRange();
+
+  // Login was today — read steps only from login time onwards.
+  // Steps from earlier today are already on the server and will be added
+  // via syncedServerBaseline / syncedStepOffset.
+  return {
+    operator: 'between' as const,
+    startTime: loginDate.toISOString(),
+    endTime: now.toISOString(),
+  };
 };
 
 export const lastNDays = (n: number) => ({
@@ -544,10 +571,11 @@ export const fetchAllHealthConnectData = async (
   weightKg = DEFAULT_WEIGHT_KG,
   loginTimestamp: number | null = null,
   gender?: GenderForStride,
+  accountCreatedAt?: string | null,
 ): Promise<HealthData> => {
   try {
     // Use sinceLoginRange for steps to prevent syncing historical data to new accounts
-    const stepsTimeRange = sinceLoginRange(loginTimestamp);
+    const stepsTimeRange = sinceLoginRange(loginTimestamp, accountCreatedAt);
     
     const [
       stepsResult,

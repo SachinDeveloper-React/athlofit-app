@@ -246,6 +246,26 @@ class StepService {
   }
 
   /**
+   * Returns the current ACTIVITY_RECOGNITION permission status.
+   * - 'granted': permission is granted, native sensor can run
+   * - 'denied': user denied the permission
+   * - 'not_required': device doesn't need it (API < 29)
+   * On iOS or if the native module is unavailable, returns 'not_required'.
+   */
+  async getActivityPermissionStatus(): Promise<'granted' | 'denied' | 'not_required'> {
+    if (!NativeStep || Platform.OS !== 'android') {
+      return 'not_required';
+    }
+    try {
+      const status = await NativeStep.getPermissionStatus();
+      return status as 'granted' | 'denied' | 'not_required';
+    } catch (e) {
+      console.warn('[StepService] getActivityPermissionStatus failed:', e);
+      return 'not_required';
+    }
+  }
+
+  /**
    * Returns the native step service debug log for production debugging.
    */
   async getDebugLog(): Promise<string> {

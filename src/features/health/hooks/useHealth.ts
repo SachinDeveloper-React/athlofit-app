@@ -3,6 +3,7 @@ import { Platform, AppState, AppStateStatus } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 import { useHealthDataStore } from '../store/healthDataStore';
 import { useHealthInitStore } from '../store/healthInitStore';
+import { useAuthStore } from '../../auth/store/authStore';
 import { getLocalToday } from '../../../utils/date';
 
 import {
@@ -472,7 +473,59 @@ export function useHealth(options: UseHealthOptions = {}) {
 
       let result: HealthData;
       if (p === 'healthkit') {
-        result = await fetchAllHealthKitData();
+        const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
+        const accountCreatedAt = useAuthStore.getState().user?.createdAt ?? null;
+        result = await fetchAllHealthKitData(loginTimestamp, accountCreatedAt);
+
+        // Apply server baseline for cross-device / reinstall continuity (iOS).
+        // Since we now read HealthKit from loginTimestamp, pre-login steps are
+        // only available from the server baseline.
+        const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
+        const today = getLocalToday();
+        if (syncedServerBaseline && syncedServerBaselineDate === today) {
+          const serverStepsTrusted = (
+            result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+          ) ? result.steps : syncedServerBaseline.steps;
+
+          if (serverStepsTrusted !== syncedServerBaseline.steps) {
+            console.warn(
+              `[useHealth] Inflation guard (healthkit): server baseline ${syncedServerBaseline.steps} is ` +
+              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
+            );
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          }
+
+          // If login was today, HC/HK steps are post-login only — add server baseline.
+          // If login was yesterday, HK returns full day — use max.
+          const loginTs = useHealthDataStore.getState().loginTimestamp;
+          const isLoginToday = loginTs ? (() => {
+            const ld = new Date(loginTs);
+            const now = new Date();
+            return ld.getFullYear() === now.getFullYear() &&
+                   ld.getMonth() === now.getMonth() &&
+                   ld.getDate() === now.getDate();
+          })() : false;
+
+          const combinedSteps = isLoginToday
+            ? serverStepsTrusted + result.steps
+            : Math.max(result.steps, serverStepsTrusted);
+
+          result = {
+            steps: combinedSteps,
+            calories: Math.max(result.calories, syncedServerBaseline.calories),
+            distance: Math.max(result.distance, syncedServerBaseline.distance),
+            activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
+            heartRate: result.heartRate || syncedServerBaseline.heartRate,
+            heartRateMin: result.heartRateMin || syncedServerBaseline.heartRateMin,
+            heartRateMax: result.heartRateMax || syncedServerBaseline.heartRateMax,
+            bloodPressureSystolic: result.bloodPressureSystolic || syncedServerBaseline.bloodPressureSystolic,
+            bloodPressureDiastolic: result.bloodPressureDiastolic || syncedServerBaseline.bloodPressureDiastolic,
+            sleepHours: Math.max(result.sleepHours, syncedServerBaseline.sleepHours),
+            weight: result.weight || syncedServerBaseline.weight,
+            bloodGlucose: result.bloodGlucose || syncedServerBaseline.bloodGlucose,
+            hydration: Math.max(result.hydration, syncedServerBaseline.hydration),
+          };
+        }
       } else if (p === 'native_sensor') {
         // Native sensor only — get steps and derive other metrics
         const { stepService } = await import('../../../services/stepService');
@@ -542,7 +595,8 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Health Connect path
         const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
         const { fetchAllHealthConnectData } = getHealthConnectService();
-        result = await fetchAllHealthConnectData(weightKg, loginTimestamp, gender);
+        const accountCreatedAt = useAuthStore.getState().user?.createdAt ?? null;
+        result = await fetchAllHealthConnectData(weightKg, loginTimestamp, gender, accountCreatedAt);
 
         // Overlay native step counter's live value for real-time accuracy.
         // Take the higher of HC and native sensor — the native service may have
@@ -584,8 +638,12 @@ export function useHealth(options: UseHealthOptions = {}) {
         }
 
         // Apply server baseline for all metrics (cross-device / reinstall continuity).
-        // After reinstall, loginTimestamp filters out pre-login HC data, but the
-        // server has the user's health data for today. Use max(local, server) to restore.
+        // After login, loginTimestamp filters HC data to post-login steps only.
+        // The server baseline has the user's cumulative steps for today (including
+        // steps from before login). We ADD post-login steps to the server baseline
+        // to get the correct total for the login day.
+        // On subsequent days (loginTimestamp is yesterday), HC returns full-day
+        // steps and server baseline is 0 or stale, so max() works correctly.
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         const today = getLocalToday();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
@@ -605,8 +663,24 @@ export function useHealth(options: UseHealthOptions = {}) {
             useHealthDataStore.getState().setSyncedServerBaseline(null, '');
           }
 
+          // Determine if we're reading HC from loginTimestamp (login was today).
+          // If so, HC steps are only post-login — add them to server baseline.
+          // If not (login was yesterday / loginTimestamp null), HC has full day — use max.
+          const loginTs = useHealthDataStore.getState().loginTimestamp;
+          const isLoginToday = loginTs ? (() => {
+            const ld = new Date(loginTs);
+            const now = new Date();
+            return ld.getFullYear() === now.getFullYear() &&
+                   ld.getMonth() === now.getMonth() &&
+                   ld.getDate() === now.getDate();
+          })() : false;
+
+          const combinedSteps = isLoginToday
+            ? serverStepsTrusted + result.steps  // Server (before login) + HC (after login)
+            : Math.max(result.steps, serverStepsTrusted); // Full day — take max
+
           result = {
-            steps: Math.max(result.steps, serverStepsTrusted),
+            steps: combinedSteps,
             calories: Math.max(result.calories, syncedServerBaseline.calories),
             distance: Math.max(result.distance, syncedServerBaseline.distance),
             activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),

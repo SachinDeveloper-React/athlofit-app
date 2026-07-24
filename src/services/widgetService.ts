@@ -262,8 +262,7 @@ class WidgetService {
    * Call this on login (after POST_NOTIFICATIONS permission is granted).
    *
    * When the native step counter is active, the StepCounterService already
-   * manages its own foreground notification, so we skip the legacy
-   * StepNotificationService to avoid duplicate notifications.
+   * manages its own foreground notification, so we skip to avoid duplicate starts.
    */
   async startStepNotification(): Promise<boolean> {
     if (!this.module) return false;
@@ -286,7 +285,7 @@ class WidgetService {
    * Call this on logout.
    *
    * When the native step counter is active, the StepCounterService manages
-   * its own lifecycle, so we skip the legacy StepNotificationService stop call.
+   * its own lifecycle, so we skip to avoid duplicate stops.
    */
   async stopStepNotification(): Promise<boolean> {
     if (!this.module) return false;

@@ -13,7 +13,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.health.connect.client.HealthConnectClient
@@ -24,6 +26,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,9 +57,6 @@ class StepCounterService : Service(), SensorEventListener {
     companion object {
         private const val TAG = "StepCounterService"
         private const val CHANNEL_ID = "step_counter_live"
-        // Use the same notification ID as StepNotificationService so only one
-        // notification is visible. StepNotificationService handles the display;
-        // this service just needs a foreground notification to stay alive.
         private const val NOTIF_ID = 1001
         private const val PREFS_NAME = "StepCounterPrefs"
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
@@ -258,6 +258,27 @@ class StepCounterService : Service(), SensorEventListener {
     /** Coroutine scope for Health Connect writes (requires suspend functions). */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // ── Health Connect polling mode (when native sensor is unavailable) ───────
+
+    /** Whether service is running in HC-only polling mode (no native sensor). */
+    private var isHcPollingMode: Boolean = false
+
+    /** Handler for periodic HC polling in HC-only mode. */
+    private val hcHandler = Handler(Looper.getMainLooper())
+
+    /** Last step count from HC poll (to avoid redundant notification updates). */
+    private var lastHcPollSteps: Int = -1
+
+    /** HC polling interval: 10 seconds for near-real-time notification updates. */
+    private val HC_POLL_INTERVAL_MS = 10_000L
+
+    private val hcPollRunnable = object : Runnable {
+        override fun run() {
+            pollHealthConnectAndUpdateNotification()
+            hcHandler.postDelayed(this, HC_POLL_INTERVAL_MS)
+        }
+    }
+
     // ── System references ─────────────────────────────────────────────────────
 
     private var sensorManager: SensorManager? = null
@@ -317,10 +338,14 @@ class StepCounterService : Service(), SensorEventListener {
         if (sensorManager == null) {
             val registered = registerSensorListener()
             if (!registered) {
-                Log.e(TAG, "Failed to register sensor listener — stopping service")
-                emitSensorFailure()
-                stopSelf()
-                return START_NOT_STICKY
+                // Native sensor unavailable — switch to Health Connect polling mode.
+                // This replaces the old StepNotificationService (which had a dataSync
+                // foreground type that was subject to Android 15+ 6-hour timeout).
+                // StepCounterService uses foregroundServiceType="health" which has no timeout.
+                Log.d(TAG, "Native sensor unavailable — switching to Health Connect polling mode")
+                isHcPollingMode = true
+                pollHealthConnectAndUpdateNotification()
+                hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
             }
         }
 
@@ -331,6 +356,12 @@ class StepCounterService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy — persisting state and unregistering sensor")
+        // Stop HC polling if active
+        if (isHcPollingMode) {
+            hcHandler.removeCallbacks(hcPollRunnable)
+        }
+        // Cancel coroutine scope
+        serviceScope.cancel()
         // Persist current state before shutdown
         persistState()
         // Unregister sensor listener
@@ -1102,6 +1133,94 @@ class StepCounterService : Service(), SensorEventListener {
                 Log.d(TAG, "Wrote $stepsToWrite steps to Health Connect (deleted old records first)")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to write steps to Health Connect: ${e.message}", e)
+            }
+        }
+    }
+
+    // ── Health Connect Polling (HC-only mode) ───────────────────────────────
+
+    /**
+     * Polls Health Connect for today's steps and updates the notification.
+     * Used when the native sensor is unavailable (HC-only devices, API 34+).
+     * Replicates the single-source deduplication logic from the former
+     * StepNotificationService to avoid inflated counts from multiple apps.
+     */
+    private fun pollHealthConnectAndUpdateNotification() {
+        // Check midnight reset state first
+        val stepPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val storedDateVal = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDateVal.isNotEmpty() && storedDateVal != today) {
+            // Midnight reset pending — show 0
+            if (lastHcPollSteps != 0) {
+                lastHcPollSteps = 0
+                liveStepCount = 0
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildStepNotification(0))
+                updateWidget()
+                NativeStepModule.emitStepUpdate(0, forceEmit = true)
+                Log.d(TAG, "HC poll: notification reset to 0 (midnight reset pending)")
+            }
+            return
+        }
+
+        serviceScope.launch {
+            try {
+                val zone = ZoneId.systemDefault()
+                val now = Instant.now()
+                val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+
+                val client = HealthConnectClient.getOrCreate(this@StepCounterService)
+
+                // readRecords + single-source dedup — pick the highest-count source
+                // (excluding our own package) to avoid inflation from multiple apps.
+                val stepRecords = client.readRecords(
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        TimeRangeFilter.between(startOfDay, now),
+                    )
+                ).records
+
+                val stepsByOrigin = stepRecords
+                    .groupBy { it.metadata.dataOrigin.packageName }
+                    .filterKeys { it != packageName }
+                    .mapValues { (_, records) -> records.sumOf { it.count } }
+
+                val todaySteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+
+                // Fallback to widget cache if HC returns 0 (common early morning / after reboot)
+                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
+                val cachedSteps = widgetPrefs.getInt("steps", 0)
+                val cachedLastUpdated = widgetPrefs.getLong("lastUpdated", 0)
+                val isCachedFromToday = if (cachedLastUpdated > 0) {
+                    val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = cachedLastUpdated }
+                    val nowCal = java.util.Calendar.getInstance()
+                    updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                        updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+                } else false
+                val safeCachedSteps = if (isCachedFromToday) cachedSteps else 0
+                val steps = if (todaySteps == 0 && safeCachedSteps > 0) safeCachedSteps else todaySteps
+
+                if (steps != lastHcPollSteps) {
+                    lastHcPollSteps = steps
+                    liveStepCount = steps
+                    val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    nm.notify(NOTIF_ID, buildStepNotification(steps))
+                    updateWidget()
+                    NativeStepModule.emitStepUpdate(steps)
+                    Log.d(TAG, "HC poll: notification updated — $steps steps (origins: $stepsByOrigin)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "HC poll failed: ${e.message} — using cached value")
+                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
+                val cachedSteps = widgetPrefs.getInt("steps", 0)
+                if (cachedSteps != lastHcPollSteps) {
+                    lastHcPollSteps = cachedSteps
+                    liveStepCount = cachedSteps
+                    val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    nm.notify(NOTIF_ID, buildStepNotification(cachedSteps))
+                }
             }
         }
     }

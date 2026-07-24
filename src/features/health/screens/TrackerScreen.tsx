@@ -41,6 +41,7 @@ import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
 import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
+import ActivityPermissionBanner from '../components/tracker/ActivityPermissionBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -489,6 +490,7 @@ const TrackerScreen = memo(() => {
         >
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
           <CoinBlockedBanner />
+          <ActivityPermissionBanner platform={platform} isReady={isReady} />
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
             goal={dailyStepGoal || 8000}
