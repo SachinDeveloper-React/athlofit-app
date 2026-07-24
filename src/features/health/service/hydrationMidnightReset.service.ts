@@ -10,6 +10,7 @@ import notifee, {
   TimestampTrigger,
   TriggerType,
   AndroidImportance,
+  AlarmType,
 } from '@notifee/react-native';
 import { AppState, AppStateStatus } from 'react-native';
 import { useHydrationStore } from '../store/hydrationStore';
@@ -66,7 +67,7 @@ export const scheduleMidnightReset = async (): Promise<void> => {
     timestamp: nextMidnight().getTime(),
     repeatFrequency: RepeatFrequency.DAILY,
     alarmManager: {
-      allowWhileIdle: true,
+      type: AlarmType.SET_EXACT_AND_ALLOW_WHILE_IDLE,
     },
   };
 

@@ -45,27 +45,39 @@ object HealthSyncHelper {
     ): Boolean {
         val client    = HealthConnectClient.getOrCreate(context)
         val weightKg  = prefs.getFloat("weightKg", 70.0f).toDouble()
-        val loginTs   = prefs.getLong("loginTimestamp", 0L)
         val zone      = ZoneId.systemDefault()
         val today     = LocalDate.now()
 
+        // Midnight sync guard: if the native step service hasn't reset yet
+        // (storedDate is yesterday but clock is past midnight), skip syncing
+        // TODAY to prevent yesterday's stale steps from polluting today's record.
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", android.content.Context.MODE_PRIVATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val todayStr = today.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        val nativeResetPending = storedDate.isNotEmpty() && storedDate != todayStr
+
         // Determine the earliest date to sync — the login date or 7 days ago, whichever is later.
-        val loginDate = if (loginTs > 0L) {
-            Instant.ofEpochMilli(loginTs).atZone(zone).toLocalDate()
-        } else {
-            today
-        }
+        // FIX: Always sync from startOfDay for each day. The server has its own
+        // accountCreatedDate guard to reject pre-account syncs.
         val sevenDaysAgo = today.minusDays(6) // today + 6 previous days = 7 days
-        val startDate = if (loginDate.isAfter(sevenDaysAgo)) loginDate else sevenDaysAgo
+        val startDate = sevenDaysAgo
 
         var anySuccess = false
 
         // Sync each day from startDate to today
         var current = startDate
         while (!current.isAfter(today)) {
-            // For the login date, pass loginTs so steps start from login time.
-            // For all other days, use 0L (full day from midnight).
-            val tsForDay = if (current == loginDate && loginTs > 0L) loginTs else 0L
+            // Skip today if native reset is pending — prevents stale steps
+            // from yesterday being synced under today's date
+            if (current == today && nativeResetPending) {
+                Log.d(TAG, "[$current] Skipping — native midnight reset pending (storedDate=$storedDate)")
+                current = current.plusDays(1)
+                continue
+            }
+
+            // FIX: Always pass 0L so each day reads from midnight (full day).
+            // loginTimestamp filtering is no longer needed client-side.
+            val tsForDay = 0L
             val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay)
             if (dayData != null && dayData.optInt("steps") > 0) {
                 val ok = postSync(token, dayData)
@@ -93,12 +105,10 @@ object HealthSyncHelper {
             val isToday    = date == LocalDate.now(zone)
             val endTime    = if (isToday) Instant.now() else endOfDay
 
-            // Apply login filter only on the first login day
-            val stepsStart = if (loginTs > 0L) {
-                val loginInstant = Instant.ofEpochMilli(loginTs)
-                if (loginInstant.isAfter(startOfDay) && loginInstant.isBefore(endTime))
-                    loginInstant else startOfDay
-            } else startOfDay
+            // Always read from startOfDay for steps — no loginTimestamp filtering.
+            // This ensures the background sync reports the same step count as
+            // the app, notification, and widget (all read from midnight).
+            val stepsStart = startOfDay
 
             val stepsFilter  = TimeRangeFilter.between(stepsStart, endTime)
             val fullFilter   = TimeRangeFilter.between(startOfDay, endTime)
@@ -121,10 +131,11 @@ object HealthSyncHelper {
 
             val stepsByOrigin = stepRecords
                 .groupBy { it.metadata.dataOrigin.packageName }
+                .filterKeys { it != "com.athlofit.athlofit" }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
             val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "[$date] Steps by origin: $stepsByOrigin → using $steps")
+            Log.d(TAG, "[$date] Steps by origin (excluding self): $stepsByOrigin → using $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()
@@ -132,17 +143,31 @@ object HealthSyncHelper {
             val activeMinutes = steps / 100
 
             // ── Heart rate ────────────────────────────────────────────────────
-            val bpms = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, fullFilter))
-                .records.flatMap { it.samples }.map { it.beatsPerMinute }
+            // Use recentFilter (last 24h+) instead of fullFilter (today only) to
+            // capture smartwatch data that spans midnight or syncs with older timestamps.
+            val hrRecords = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, recentFilter))
+                .records
+            val allBpms = hrRecords.flatMap { it.samples }.map { it.beatsPerMinute }
+
+            // Prefer today's samples for the display value, fall back to all recent
+            val todayBpms = hrRecords
+                .filter { it.startTime >= startOfDay }
+                .flatMap { it.samples }
+                .map { it.beatsPerMinute }
+            val bpms = if (todayBpms.isNotEmpty()) todayBpms else allBpms
+
             val heartRate    = if (bpms.isNotEmpty()) (bpms.sum() / bpms.size).toInt() else 0
             val heartRateMin = bpms.minOrNull()?.toInt() ?: 0
             val heartRateMax = bpms.maxOrNull()?.toInt() ?: 0
+            Log.d(TAG, "[$date] HR: ${hrRecords.size} records, ${allBpms.size} total samples, ${todayBpms.size} today samples, avg=$heartRate")
 
             // ── Blood pressure ────────────────────────────────────────────────
-            val latestBp = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
-                .records.lastOrNull()
+            val bpRecords = client.readRecords(ReadRecordsRequest(BloodPressureRecord::class, recentFilter))
+                .records
+            val latestBp = bpRecords.lastOrNull()
             val systolic  = latestBp?.systolic?.inMillimetersOfMercury?.toInt() ?: 0
             val diastolic = latestBp?.diastolic?.inMillimetersOfMercury?.toInt() ?: 0
+            Log.d(TAG, "[$date] BP: ${bpRecords.size} records in recent range, latest=${if (latestBp != null) "$systolic/$diastolic" else "none"}")
 
             // ── Sleep ─────────────────────────────────────────────────────────
             val sleepMs = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, recentFilter))

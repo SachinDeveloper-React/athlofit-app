@@ -32,6 +32,7 @@ import {
   isHealthConnectAvailable,
   deriveFromSteps,
   readStepsDeduped,
+  GenderForStride,
 } from './healthConnect.service';
 import {
   showStepGoalNotification,
@@ -90,6 +91,7 @@ async function postSync(token: string, body: object): Promise<any> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'X-Sync-Source': 'background', // Identifies this as a background sync for server-side stale data guard
       },
       body: JSON.stringify(body),
     });
@@ -113,9 +115,25 @@ async function syncOneDayIOS(
   startTime: string,
   endTime: string,
   token: string,
+  weightKg: number,
+  gender?: GenderForStride,
 ): Promise<void> {
-  const data = await fetchHealthKitDataForRange(startTime, endTime);
+  const data = await fetchHealthKitDataForRange(startTime, endTime, weightKg, gender);
   if (data.steps === 0) return;
+
+  // ── Post-midnight stale data guard (iOS) ───────────────────────────────────
+  const now = new Date();
+  const todayStr = toISODate(now);
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  if (dateStr === todayStr && minutesSinceMidnight < 5) {
+    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
+    if (data.steps > maxPlausible) {
+      console.warn(
+        `[BackgroundSync] iOS: Skipping stale today sync: ${data.steps} steps at ${minutesSinceMidnight}min after midnight`
+      );
+      return;
+    }
+  }
 
   const body = {
     ...data,
@@ -146,6 +164,7 @@ async function syncOneDayAndroid(
   endTime: string,
   token: string,
   weightKg: number,
+  gender?: GenderForStride,
 ): Promise<void> {
   // readStepsDeduped() reads individual records and picks the single
   // highest-count source. This prevents inflation from third-party apps
@@ -154,7 +173,26 @@ async function syncOneDayAndroid(
   const steps = await readStepsDeduped(startTime, endTime).catch(() => 0);
   if (steps === 0) return;
 
-  const derived = deriveFromSteps(steps, weightKg);
+  // ── Post-midnight stale data guard ─────────────────────────────────────────
+  // If syncing today and it's within the first 5 minutes after midnight,
+  // validate that the step count is plausible for the elapsed time.
+  // On some devices, Health Connect returns yesterday's cached/batched steps
+  // under today's time range shortly after midnight.
+  const now = new Date();
+  const todayStr = toISODate(now);
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  if (dateStr === todayStr && minutesSinceMidnight < 5) {
+    // Max plausible: ~180 steps/min * minutes since midnight + 100 buffer
+    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
+    if (steps > maxPlausible) {
+      console.warn(
+        `[BackgroundSync] Skipping stale today sync: ${steps} steps at ${minutesSinceMidnight}min after midnight (max plausible: ${maxPlausible})`
+      );
+      return;
+    }
+  }
+
+  const derived = deriveFromSteps(steps, weightKg, gender);
 
   const body = {
     date: dateStr,
@@ -193,26 +231,54 @@ export async function runHealthSync(): Promise<void> {
   sevenDaysAgo.setDate(now.getDate() - 6); // today + 6 previous = 7 days
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  const loginDate = loginTimestamp ? startOf(new Date(loginTimestamp)) : startOf(now);
-  const syncStartDate = loginDate.getTime() > sevenDaysAgo.getTime() ? loginDate : sevenDaysAgo;
+  // FIX: Always sync from 7 days ago (or account start), regardless of loginTimestamp.
+  // loginTimestamp filtering is no longer needed client-side — the server handles
+  // the accountCreatedDate guard independently.
+  const syncStartDate = sevenDaysAgo;
 
   // Build the list of days to sync (from syncStartDate to today)
   const daysToSync: { dateStr: string; start: Date; end: Date }[] = [];
   const current = new Date(syncStartDate);
+  const todayStr = toISODate(now);
+
+  // Midnight sync guard: if we're within 5 minutes of midnight and the
+  // health data store still has stale (yesterday's) data, skip syncing today
+  // to prevent yesterday's steps from being written under today's date.
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  const lastFetchedAt = useHealthDataStore.getState().lastFetchedAt;
+  const isStaleData = lastFetchedAt ? (() => {
+    const fetchDate = new Date(lastFetchedAt);
+    return fetchDate.getDate() !== now.getDate() ||
+           fetchDate.getMonth() !== now.getMonth() ||
+           fetchDate.getFullYear() !== now.getFullYear();
+  })() : false;
+  const skipToday = minutesSinceMidnight < 5 && isStaleData;
+
+  // Fresh-login guard: if the user logged in very recently (< 2 minutes ago)
+  // and the health data store hasn't been refreshed for today yet, skip syncing
+  // today. This prevents the background sync from pushing stale Health Connect
+  // data (which may include yesterday's cached records) before the foreground
+  // app has had a chance to do a proper fresh fetch.
+  const loginTs = loginTimestamp || 0;
+  const msSinceLogin = now.getTime() - loginTs;
+  const isFreshLogin = loginTs > 0 && msSinceLogin < 2 * 60 * 1000; // < 2 min
+  const skipTodayFreshLogin = isFreshLogin && !lastFetchedAt;
+
   while (current <= now) {
     const dateStr = toISODate(current);
-    const isLoginDay = loginTimestamp && toISODate(new Date(loginTimestamp)) === dateStr;
-    const isToday = dateStr === toISODate(now);
+    const isToday = dateStr === todayStr;
 
-    // Start of the sync window for this day:
-    // - Login day: use login timestamp (not midnight)
-    // - Other days: use midnight
-    let dayStart: Date;
-    if (isLoginDay && loginTimestamp > startOf(current).getTime()) {
-      dayStart = new Date(loginTimestamp);
-    } else {
-      dayStart = startOf(new Date(current));
+    // Skip today if data hasn't been refreshed yet (midnight reset pending)
+    // or if this is a fresh login and foreground hasn't fetched yet
+    if (isToday && (skipToday || skipTodayFreshLogin)) {
+      current.setDate(current.getDate() + 1);
+      continue;
     }
+
+    // Always use startOfDay for all days — no loginTimestamp filtering.
+    // This ensures the background sync reports the same step count as
+    // the app, notification, and widget.
+    const dayStart = startOf(new Date(current));
 
     // End of the sync window:
     // - Today: use now
@@ -228,12 +294,18 @@ export async function runHealthSync(): Promise<void> {
     const ready = await initializeHealthKit();
     if (!ready) return;
 
+    const { useAuthStore } = await import('../../auth/store/authStore');
+    const weightKg = useAuthStore.getState().user?.weight ?? 70;
+    const gender = useAuthStore.getState().user?.gender;
+
     for (const day of daysToSync) {
       await syncOneDayIOS(
         day.dateStr,
         day.start.toISOString(),
         day.end.toISOString(),
         token,
+        weightKg,
+        gender,
       );
     }
     return;
@@ -252,6 +324,7 @@ export async function runHealthSync(): Promise<void> {
 
   const { useAuthStore } = await import('../../auth/store/authStore');
   const weightKg = useAuthStore.getState().user?.weight ?? 70;
+  const gender = useAuthStore.getState().user?.gender;
 
   for (const day of daysToSync) {
     await syncOneDayAndroid(
@@ -260,6 +333,7 @@ export async function runHealthSync(): Promise<void> {
       day.end.toISOString(),
       token,
       weightKg,
+      gender,
     );
   }
 }

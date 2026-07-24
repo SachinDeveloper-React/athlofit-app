@@ -26,7 +26,7 @@ type Props = {
   goal?: number;
   weekData: WeeklyStepEntry[];
   isWeekPending?: boolean;
-  todayIndex?: "Mon" |"Tue" |"Wed" |"Thu" |"Fri" |"Sat"|"Sun" ;
+  todayIndex?: string; // ISO date "YYYY-MM-DD" for today matching
   metricRows: MetricRow[];
   stats: {
     heartRate: number;

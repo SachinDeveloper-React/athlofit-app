@@ -59,6 +59,7 @@ export function useStepsGoal(initialSteps = 8000): UseStepsGoalReturn {
         updateUser({
           pendingStepGoal: data.pendingStepGoal,
           pendingGoalEffectiveDate: data.pendingGoalEffectiveDate,
+          lastStepGoalChangeDate: data.lastStepGoalChangeDate,
         });
       }
       queryClient.invalidateQueries({ queryKey: ['gamification'] });

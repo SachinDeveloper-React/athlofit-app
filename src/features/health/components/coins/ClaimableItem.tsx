@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../../../hooks/useTheme';
 import AppText from '../../../../components/AppText';
@@ -6,6 +6,7 @@ import { useClaimReward } from '../../hooks/useGamification';
 import { ClaimableReward } from '../../types/gamification.type';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { makeStyles } from '../../../../hooks/makeStyles';
+import { useToast } from '../../../../components/Toast';
 
 interface Props {
   item: ClaimableReward;
@@ -43,7 +44,16 @@ const useStyles = makeStyles(({ colors, spacing, radius, shadow }) => ({
 const ClaimableItem = ({ item }: Props) => {
   const { colors, spacing, radius } = useTheme();
   const styles = useStyles();
-  const { mutate: claim, isPending } = useClaimReward();
+  const toast = useToast();
+  const { mutate: claim, isPending, isError, error } = useClaimReward();
+
+  // Show toast when claim fails (e.g. coin blocked, already claimed)
+  useEffect(() => {
+    if (isError && error) {
+      const message = (error as any)?.message || 'Failed to claim reward. Please try again.';
+      toast.error(message);
+    }
+  }, [isError, error]);
 
   const progress = Math.min(item.currentValue / item.threshold, 1);
   const isReady = progress >= 1 && !item.isClaimed;

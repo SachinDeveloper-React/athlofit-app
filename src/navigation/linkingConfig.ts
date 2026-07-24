@@ -109,6 +109,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
           CartScreen:         'cart',
           CheckoutScreen:     'checkout',
           OrderHistoryScreen: 'orders',
+          OrderTrackingScreen: 'orders/:orderId/tracking',
           AddressesScreen:    'addresses',
           AddEditAddressScreen: {
             path: 'addresses/:addressId',

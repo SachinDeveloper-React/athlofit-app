@@ -1,12 +1,13 @@
 // ─── HydrationScreen ──────────────────────────────────────────────────────────
 
 import React, { useState, useCallback } from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { Alert, TouchableOpacity, View } from 'react-native';
 import { AppText, AppView, Header, Screen } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { withOpacity } from '../../../utils/withOpacity';
 
 import { useHydration } from '../hooks/useHydration';
+import { useCoinData } from '../hooks/useGamification';
 import { StatsCard } from '../components/hydration/StatsCard';
 import { AmountDisplay } from '../components/hydration/AmountDisplay';
 import { WaterGlass } from '../components/hydration/WaterGlass';
@@ -95,6 +96,37 @@ const HydrationScreen = (_props: Props) => {
     s => s.scheduledTimes.length,
   );
   const isOnline = useNetworkStore(state => state.isOnline);
+
+  // Check if user has earned coins from hydration (for reset warning)
+  const { data: coinData } = useCoinData();
+  const hydrationReward = coinData?.claimable?.find(c => c.id === 'hydration_daily');
+  const hasEarnedHydrationCoins = hydrationReward?.isClaimed === true;
+
+  // Wrap resetDay with a confirmation alert when coins were earned
+  const handleReset = useCallback(() => {
+    if (hasEarnedHydrationCoins) {
+      Alert.alert(
+        'Reset Water Intake?',
+        'You earned coins from hydration today. If you reset, those coins (including challenge rewards) will be deducted from your balance.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Reset Anyway', style: 'destructive', onPress: resetDay },
+        ],
+      );
+    } else if (consumed >= dailyGoal) {
+      // Goal met but not yet claimed — still warn about challenge reversion
+      Alert.alert(
+        'Reset Water Intake?',
+        'Your hydration challenges will be reverted. Are you sure?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Reset', style: 'destructive', onPress: resetDay },
+        ],
+      );
+    } else {
+      resetDay();
+    }
+  }, [hasEarnedHydrationCoins, consumed, dailyGoal, resetDay]);
 
   const handleEditGoal = useCallback(() => {
     navigate('HealthStack', { screen: 'EditHydrationGoalScreen' });
@@ -186,7 +218,7 @@ const HydrationScreen = (_props: Props) => {
       </TouchableOpacity>
 
       {/* Quick add + reset */}
-      <QuickAddButtons onAdd={addWater} onReset={resetDay} />
+      <QuickAddButtons onAdd={addWater} onReset={handleReset} />
 
       {/* History list from backend */}
       <HistoryList history={history} isLoading={isLoading} />

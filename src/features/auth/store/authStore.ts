@@ -41,13 +41,22 @@ export const useAuthStore = create<AuthState>()(
         // Set login timestamp to filter historical Health Connect data
         import('../../health/store/healthDataStore').then(({ useHealthDataStore }) => {
           useHealthDataStore.getState().setLoginTimestamp(loginTs);
+          // Reset step offset state for this new login session — the fetch
+          // will mark it as ready once it completes, preventing useHealth from
+          // reading a stale 0 offset before the server responds.
+          useHealthDataStore.getState().setStepOffsetFetched(false);
         });
 
         // Fetch today's synced steps from server (cross-device step continuity).
         // If the user was walking on another device earlier today, their steps
         // carry over to this device as a starting offset.
         import('../../health/service/stepOffset.service').then(({ fetchAndStoreTodayStepOffset }) => {
-          fetchAndStoreTodayStepOffset(tokens.accessToken).catch(() => {});
+          fetchAndStoreTodayStepOffset(tokens.accessToken).catch(() => {
+            // Ensure the flag is set even if the import/call chain fails unexpectedly
+            import('../../health/store/healthDataStore').then(({ useHealthDataStore }) => {
+              useHealthDataStore.getState().setStepOffsetFetched(true);
+            });
+          });
         });
 
         // Sync login timestamp to native widget + start background auto-update + EOD alarm
@@ -72,17 +81,19 @@ export const useAuthStore = create<AuthState>()(
 
         // Auto-calculate and save BMI if user has both height and weight
         if (user.weight && user.weight > 0 && user.height && user.height > 0) {
+          const weightVal = user.weight;
+          const heightVal = user.height;
           import('../../health/service/bmi.service').then(({ bmiService }) => {
             bmiService.getHistory(1).then(history => {
-              const heightM = user.height / 100;
+              const heightM = heightVal / 100;
               // Skip if the latest record already has the same weight and height
               if (history.length > 0) {
                 const last = history[0];
-                if (last.weight === user.weight && Math.abs(last.height - heightM) < 0.01) {
+                if (last.weight === weightVal && Math.abs(last.height - heightM) < 0.01) {
                   return; // No change — skip
                 }
               }
-              bmiService.save({ weight: user.weight, height: heightM }).catch(() => {});
+              bmiService.save({ weight: weightVal, height: heightM }).catch(() => {});
             }).catch(() => {});
           });
         }
@@ -152,17 +163,19 @@ export const useAuthStore = create<AuthState>()(
 
             // Auto-calculate and save BMI if user has both height and weight
             if (res.data?.weight && res.data.weight > 0 && res.data?.height && res.data.height > 0) {
+              const weightVal = res.data.weight;
+              const heightVal = res.data.height;
               import('../../health/service/bmi.service').then(({ bmiService }) => {
                 bmiService.getHistory(1).then(history => {
-                  const heightM = res.data.height / 100;
+                  const heightM = heightVal / 100;
                   // Skip if the latest record already has the same weight and height
                   if (history.length > 0) {
                     const last = history[0];
-                    if (last.weight === res.data.weight && Math.abs(last.height - heightM) < 0.01) {
+                    if (last.weight === weightVal && Math.abs(last.height - heightM) < 0.01) {
                       return; // No change — skip
                     }
                   }
-                  bmiService.save({ weight: res.data.weight, height: heightM }).catch(() => {});
+                  bmiService.save({ weight: weightVal, height: heightM }).catch(() => {});
                 }).catch(() => {});
               });
             }
@@ -207,6 +220,11 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           setIsLoggingOut(false);
         }
+
+        // Stop the native step counter service (dismisses its foreground notification)
+        import('../../../services/stepService').then(({ stepService }) => {
+          stepService.stop();
+        });
 
         // Stop widget background updates, cancel EOD alarm, and clear login timestamp + token
         import('../../../services/widgetService').then(({ widgetService }) => {

@@ -118,6 +118,17 @@ const toDayLabel = (isoDate) => {
 };
 
 /**
+ * Returns a formatted label like "10 (Fri)" from "YYYY-MM-DD".
+ * This includes the day-of-month number and abbreviated day name.
+ */
+const toDateWithDayLabel = (isoDate) => {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dayName = days[new Date(y, m - 1, d).getDay()];
+  return `${d} (${dayName})`;
+};
+
+/**
  * Number of whole days between two ISO date strings (currDate - prevDate).
  * Positive if currDate is after prevDate.
  */
@@ -130,4 +141,28 @@ const daysBetween = (prevDate, currDate) => {
   return Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-module.exports = { todayISO, resolveClientDate, isConsecutiveDay, buildDateRange, toDayLabel, daysBetween };
+/**
+ * Returns the current hour (0-23) in IST, regardless of server timezone.
+ */
+const currentHourIST = () => {
+  return parseInt(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    hour12: false,
+  }).format(new Date()), 10);
+};
+
+/**
+ * Returns the ISO week key (e.g. "2026-W28") based on IST date.
+ */
+const isoWeekKeyIST = () => {
+  const dateStr = todayISO(); // IST date
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
+  return `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+};
+
+module.exports = { todayISO, resolveClientDate, isConsecutiveDay, buildDateRange, toDayLabel, toDateWithDayLabel, daysBetween, currentHourIST, isoWeekKeyIST };

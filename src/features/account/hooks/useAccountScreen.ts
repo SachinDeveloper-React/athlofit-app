@@ -11,7 +11,10 @@ import { useOrders } from '../../shop/hooks/useShop';
 
 export const useAccountScreen = () => {
   const profile = useAuthStore(s => s.user);
-  const stats = useHealth();
+  const stats = useHealth({
+    weightKg: Number(profile?.weight) || 70,
+    gender: profile?.gender,
+  });
 
   // Live coin balance from Zustand (synced by TrackerScreen.fetchGamification)
   const coinsBalance = useGamificationStore(s => s.coinsBalance);

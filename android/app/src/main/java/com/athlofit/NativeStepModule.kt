@@ -204,6 +204,19 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
             )
 
+            // Check if the service's stored date matches today.
+            // If not, the midnight reset hasn't fired yet — return 0 to prevent
+            // showing yesterday's steps after midnight.
+            val prefs = reactApplicationContext.getSharedPreferences(
+                PREFS_NAME, Context.MODE_PRIVATE
+            )
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            if (storedDate.isNotEmpty() && storedDate != today) {
+                // Midnight reset pending — return 0 instead of stale liveStepCount
+                promise.resolve(0)
+                return
+            }
+
             // Prefer live in-memory value (updates instantly on every sensor event)
             val liveSteps = StepCounterService.liveStepCount
             if (liveSteps >= 0) {
@@ -212,22 +225,29 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             }
 
             // Fallback to SharedPreferences (service not running)
-            val prefs = reactApplicationContext.getSharedPreferences(
-                PREFS_NAME, Context.MODE_PRIVATE
-            )
-
-            // Check if stored data is from today — if not, return 0
-            val storedDate = prefs.getString("storedDate", "") ?: ""
-            if (storedDate != today) {
-                promise.resolve(0)
-                return
-            }
-
+            // storedDate already checked above, so we know it's today
             val steps = prefs.getInt("dailySteps", 0)
             // Ensure non-negative
             promise.resolve(if (steps < 0) 0 else steps)
         } catch (e: Exception) {
             promise.reject("GET_STEPS_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Checks whether the hardware TYPE_STEP_COUNTER sensor is available on the device.
+     */
+    /**
+     * Returns the debug log from StepCounterService for production debugging.
+     */
+    @ReactMethod
+    fun getStepDebugLog(promise: Promise) {
+        try {
+            val prefs = reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val log = prefs.getString("stepDebugLog", "(no logs)") ?: "(no logs)"
+            promise.resolve(log)
+        } catch (e: Exception) {
+            promise.resolve("Error: ${e.message}")
         }
     }
 
@@ -336,6 +356,177 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             promise.resolve(true)
         } catch (e: Exception) {
             Log.e(TAG, "triggerMidnightReset failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Forces an immediate update of the notification and widget with the given step count.
+     * Called from JS when the app comes to foreground and has a fresher step count
+     * (e.g., from Health Connect) than what the native sensor has accumulated.
+     *
+     * Only updates if the provided steps are higher than the current live value,
+     * preventing stale data from overwriting real-time sensor data.
+     *
+     * This solves the notification/widget delay issue: when the app reads 6000 steps
+     * from Health Connect but the notification still shows 5500 (because the sensor
+     * hasn't delivered new events), calling this method immediately propagates 6000
+     * to all surfaces.
+     *
+     * @param steps The fresh step count from Health Connect or server.
+     */
+    @ReactMethod
+    fun forceRefreshSteps(steps: Int, promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val applied = StepCounterService.pushStepUpdate(steps, context)
+            Log.d(TAG, "forceRefreshSteps — steps=$steps, applied=$applied")
+            promise.resolve(applied)
+        } catch (e: Exception) {
+            Log.e(TAG, "forceRefreshSteps failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Sets a server step floor for the native service.
+     * After re-login, the server may have more steps for today than Health Connect
+     * or the native sensor can see (e.g., steps walked on another device, or HC
+     * data was cleared). This ensures the notification and widget never show fewer
+     * steps than what the server has already recorded.
+     *
+     * If serverSteps > current native dailySteps, the difference is added to
+     * rebootOffset so all subsequent sensor calculations include it.
+     */
+    @ReactMethod
+    fun setServerStepFloor(serverSteps: Int, promise: Promise) {
+        // FIX: Disabled. This function injected large values into rebootOffset
+        // which caused permanent step inflation. Cross-device continuity is now
+        // handled entirely by the JS layer (stepOffset.service.ts + server baseline).
+        // The native service should only report actual hardware sensor steps.
+        Log.d(TAG, "setServerStepFloor — DISABLED (inflation fix). serverSteps=$serverSteps ignored.")
+        promise.resolve(false)
+    }
+
+    /**
+     * Corrects inflated step count caused by the circular write bug.
+     * If the native service's dailySteps is significantly higher than the actual
+     * Health Connect platform sensor reading, reset the inflated rebootOffset
+     * so the native service reports the correct value.
+     *
+     * @param correctSteps The actual correct step count (from HC platform sensor)
+     */
+    @ReactMethod
+    fun correctInflatedSteps(correctSteps: Int, promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val today = java.time.LocalDate.now().format(
+                java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+            )
+
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            if (storedDate != today) {
+                Log.d(TAG, "correctInflatedSteps — storedDate=$storedDate != today, skipping")
+                promise.resolve(false)
+                return
+            }
+
+            val currentDailySteps = prefs.getInt("dailySteps", 0)
+
+            // Only correct if current is more than 2x the correct value
+            if (correctSteps > 0 && currentDailySteps > correctSteps * 2) {
+                val excessOffset = currentDailySteps - correctSteps
+                val currentOffset = prefs.getInt("rebootOffset", 0)
+                val newOffset = Math.max(0, currentOffset - excessOffset)
+
+                prefs.edit()
+                    .putInt("rebootOffset", newOffset)
+                    .putInt("dailySteps", correctSteps)
+                    .apply()
+
+                // Update live count immediately
+                StepCounterService.setLiveStepCountCorrected(correctSteps)
+
+                // Restart the service so it reloads corrected values from SharedPrefs.
+                // Without this, the running service's in-memory dailySteps/rebootOffset
+                // remain inflated, and the next onSensorChanged would re-inflate liveStepCount.
+                StepCounterService.start(context)
+
+                Log.d(TAG, "correctInflatedSteps — corrected from $currentDailySteps to $correctSteps (removed offset: $excessOffset), service restarted")
+                promise.resolve(true)
+            } else {
+                Log.d(TAG, "correctInflatedSteps — no correction needed (daily=$currentDailySteps, correct=$correctSteps)")
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "correctInflatedSteps failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    // ─── Battery Optimization ─────────────────────────────────────────────────
+
+    /**
+     * Checks if the app is exempt from battery optimization (Doze mode).
+     * Returns true if the app is already whitelisted, false otherwise.
+     */
+    @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            if (pm == null) {
+                promise.resolve(true) // Can't check — assume OK
+                return
+            }
+            promise.resolve(pm.isIgnoringBatteryOptimizations(context.packageName))
+        } catch (e: Exception) {
+            Log.e(TAG, "isIgnoringBatteryOptimizations failed: ${e.message}", e)
+            promise.resolve(true) // Fail safe — don't nag user
+        }
+    }
+
+    /**
+     * Opens the system dialog to request battery optimization exemption.
+     * This shows a system-level prompt (not a custom UI) asking the user to
+     * allow the app to run unrestricted in the background.
+     */
+    @ReactMethod
+    fun requestDisableBatteryOptimization(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+            ).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "requestDisableBatteryOptimization failed: ${e.message}", e)
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Opens the app's battery settings page directly (manufacturer-specific).
+     * Fallback when the direct dialog doesn't work on some OEMs.
+     */
+    @ReactMethod
+    fun openBatterySettings(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+            ).apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "openBatterySettings failed: ${e.message}", e)
             promise.resolve(false)
         }
     }

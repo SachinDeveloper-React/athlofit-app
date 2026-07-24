@@ -2,8 +2,10 @@ const HealthActivity = require('../models/HealthActivity.model');
 const BmiRecord      = require('../models/BmiRecord.model');
 const Gamification   = require('../models/Gamification.model');
 const User           = require('../models/User.model');
+const Challenge      = require('../models/Challenge.model');
+const UserChallenge  = require('../models/UserChallenge.model');
 const { success, error } = require('../utils/response');
-const { buildDateRange, toDayLabel, todayISO, isConsecutiveDay, resolveClientDate } = require('../utils/date');
+const { buildDateRange, toDayLabel, toDateWithDayLabel, todayISO, isConsecutiveDay, resolveClientDate } = require('../utils/date');
 const { syncChallengeProgress } = require('./challenge.controller');
 const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
@@ -52,7 +54,7 @@ const getWeeklySteps = async (req, res, next) => {
 
     // Build response matching WeeklyStepEntry[] in app
     const data = dates.map(date => ({
-      date: toDayLabel(date),       // "Mon", "Tue" etc.
+      date: toDateWithDayLabel(date),       // "10 (Fri)", "11 (Sat)" etc.
       fullDate: date,
       steps: recordMap[date]?.steps ?? 0,
       bonusSteps: recordMap[date]?.bonusSteps ?? 0,
@@ -125,14 +127,71 @@ const syncHealthData = async (req, res, next) => {
       });
     }
 
+    // ── Guard: reject stale background syncs after DB reset / fresh login ────
+    // When the DB is wiped (no HealthActivity record for today) and a background
+    // sync arrives with a high step count shortly after login, it's almost certainly
+    // stale Health Connect data from a previous session. Reject if:
+    //   1. No existing record for today (fresh start)
+    //   2. The sync is from a background source (X-Sync-Source header)
+    //   3. The user's last login was recent (within 10 minutes)
+    //   4. Steps are unreasonably high for the time elapsed since login
+    const syncSource = req.headers['x-sync-source'] || 'foreground';
+    const isBackgroundSync = syncSource === 'background';
+
     const dailyGoal = req.user.dailyStepGoal || 10000;
 
     // ── FIX #2: Server-side step validation / anti-cheat ─────────────────────
     // Validate the incoming step count against rate-of-change limits and
     // previous known values. Flags or rejects suspicious submissions.
     const existing = await HealthActivity.findOne({ user: req.user._id, date: today });
+
+    // ── Guard: reject stale syncs for brand-new accounts on their first day ──
+    // If the account was just created today and this is the very first sync
+    // (no existing record), validate that steps are plausible for the time
+    // elapsed since account creation. This catches cases where the client
+    // pushes pre-login historical Health Connect data on the creation day.
+    let incomingSteps = steps;
+    if (!existing && accountCreatedDate === today && steps > 0) {
+      const accountCreatedMs = new Date(req.user.createdAt).getTime();
+      const msSinceCreation = Date.now() - accountCreatedMs;
+      const minutesSinceCreation = msSinceCreation / 60000;
+      // Allow ~180 steps/min (brisk walk) + 200 buffer for sensor batching
+      const maxPlausibleForNewAccount = Math.max(500, Math.ceil(minutesSinceCreation * 180) + 200);
+
+      if (steps > maxPlausibleForNewAccount) {
+        console.warn(
+          `[HealthSync] Clamping new-account first sync for user ${req.user._id}: ` +
+          `${steps} steps, only ${Math.round(minutesSinceCreation)}min since account creation ` +
+          `(max plausible: ${maxPlausibleForNewAccount})`
+        );
+        // Clamp instead of rejecting — the user may have some legitimate steps
+        incomingSteps = maxPlausibleForNewAccount;
+      }
+    }
+
+    // ── Guard: reject stale background syncs after DB reset / fresh login ────
+    // When no record exists for today and a background sync arrives with
+    // implausibly high steps, reject it as stale Health Connect data.
+    if (!existing && isBackgroundSync && steps > 0) {
+      const lastLoginAt = req.user.lastLoginAt || req.user.updatedAt || req.user.createdAt;
+      const msSinceLogin = Date.now() - new Date(lastLoginAt).getTime();
+      const minutesSinceLogin = msSinceLogin / 60000;
+      const maxPlausibleSteps = Math.max(500, Math.ceil(minutesSinceLogin * 180));
+
+      if (steps > maxPlausibleSteps) {
+        console.warn(
+          `[HealthSync] Rejected stale background sync for user ${req.user._id}: ` +
+          `${steps} steps, only ${Math.round(minutesSinceLogin)}min since login (max plausible: ${maxPlausibleSteps})`
+        );
+        return success(res, 'Skipped — stale background sync after fresh login', {
+          skipped: true,
+          reason: 'stale_background_sync',
+        });
+      }
+    }
+
     const stepValidation = validateSteps({
-      incomingSteps: steps,
+      incomingSteps: incomingSteps,
       existingSteps: existing?.steps || 0,
       bonusSteps: existing?.bonusSteps || 0,
       lastSyncAt: existing?.updatedAt || null,
@@ -142,17 +201,18 @@ const syncHealthData = async (req, res, next) => {
     // Use the clamped (safe) step value instead of raw client input
     const validatedSteps = stepValidation.clampedSteps;
 
-    // ── Record cheat flag if validation flagged the submission ────────────────
-    if (stepValidation.flagged && stepValidation.reason) {
-      // Fire-and-forget: don't block the sync response
-      recordCheatFlag({
+    // ── Anti-cheat: record flag if step submission was suspicious ─────────────
+    // Only flags device-originated step cheats (not bonus/admin steps).
+    let cheatPenaltyResult = null;
+    if (stepValidation.flagged) {
+      cheatPenaltyResult = await recordCheatFlag({
         userId: req.user._id,
         reason: stepValidation.reason,
-        incomingSteps: steps ?? 0,
-        clampedSteps: stepValidation.clampedSteps,
+        incomingSteps: steps,
+        clampedSteps: validatedSteps,
         existingSteps: existing?.steps || 0,
         date: today,
-      }).catch(() => {}); // non-fatal
+      });
     }
 
     const isGoalMet = goalMet ?? (validatedSteps >= dailyGoal);
@@ -231,8 +291,6 @@ const syncHealthData = async (req, res, next) => {
       await _updateStreak(req.user._id, today, gam);
     }
 
-    // Always update lastActiveDate when syncing today's data
-    // (tracks that the user was active today, regardless of goal completion)
     // FIX #3: Use resolveClientDate for "actualToday" — respects the user's timezone
     let actualToday = resolveClientDate(timezone);
 
@@ -249,9 +307,12 @@ const syncHealthData = async (req, res, next) => {
     // Coins are ONLY awarded for today's actual date — never for past-day background syncs.
     // With client timezone, we no longer need the 24-hour tolerance hack.
     const isTodaySync = (today === actualToday);
-    if (isTodaySync && gam.lastActiveDate !== actualToday) {
-      gam.lastActiveDate = actualToday;
-    }
+    // BUG-FIX: Do NOT set lastActiveDate here unconditionally.
+    // lastActiveDate must only be set when the step goal is met (handled by
+    // _updateStreak above). Setting it on every sync — even when the goal hasn't
+    // been reached — causes _updateStreak to see isSameDay=true on the later
+    // sync that DOES meet the goal, skipping the streak increment entirely.
+    // This was the root cause of streaks staying at 0 despite completing goals.
 
     // Reset daily coins counter ONLY when we're sure it's a new server-day.
     // Use lastCoinDate (which is set to the server's actualToday) to avoid double-resets.
@@ -262,9 +323,9 @@ const syncHealthData = async (req, res, next) => {
     let goalCoinsAwarded = false;
     let awardedGoalCoins = 0;
 
-    // ── Anti-cheat: Check if user is coin-blocked ────────────────────────────
+    // ── Anti-cheat: check if user is blocked from earning coins ──────────────
     const coinBlockStatus = isCoinBlocked(req.user);
-    const userIsCoinBlocked = coinBlockStatus.isBlocked;
+    const userCoinBlocked = coinBlockStatus.isBlocked;
 
     // ── Revert hydration reward if water was reset below goal ─────────────────
     // When the user explicitly resets hydration (sends 0), and they had already
@@ -298,7 +359,73 @@ const syncHealthData = async (req, res, next) => {
       await gam.save();
     }
 
-    if (isGoalMet && gam.stepGoalCoinDate !== today && isTodaySync && !userIsCoinBlocked) {
+    // ── Revert hydration CHALLENGES if water was reset below their target ────
+    // When the user resets hydration (sends 0 or drops below challenge targets),
+    // revert completed hydration challenges for today and deduct coins if rewarded.
+    if (isTodaySync && resolvedHydration === 0) {
+      const hydrationChallenges = await Challenge.find({
+        isActive: true,
+        criteriaType: 'HYDRATION',
+      }).select('_id title coinReward frequency');
+
+      if (hydrationChallenges.length > 0) {
+        const challengeIds = hydrationChallenges.map(c => c._id);
+        // For daily challenges, periodKey = today; for weekly, get the week key
+        const dailyPeriodKey = today;
+
+        // Find all user challenges that were completed today for hydration
+        const completedToday = await UserChallenge.find({
+          user: req.user._id,
+          challenge: { $in: challengeIds },
+          periodKey: dailyPeriodKey,
+          isCompleted: true,
+        });
+
+        let totalDeducted = 0;
+
+        for (const uc of completedToday) {
+          const challenge = hydrationChallenges.find(c => c._id.toString() === uc.challenge.toString());
+          if (!challenge) continue;
+
+          if (uc.isRewarded) {
+            // Deduct the coins that were earned for this challenge
+            const coinReward = challenge.coinReward || 0;
+            if (coinReward > 0) {
+              gam.coinsBalance = Math.max(0, Math.round(gam.coinsBalance - coinReward));
+              gam.coinsEarnedToday = Math.max(0, Math.round((gam.coinsEarnedToday || 0) - coinReward));
+              totalDeducted += coinReward;
+
+              logCoinTransaction({
+                userId: req.user._id,
+                type: 'DEDUCTED',
+                amount: coinReward,
+                balanceAfter: gam.coinsBalance,
+                source: 'CHALLENGE_REVERTED',
+                description: `Challenge reverted — "${challenge.title}" (hydration reset)`,
+                metadata: { date: today, challengeId: challenge._id },
+              });
+            }
+          }
+
+          // Revert the challenge progress
+          await UserChallenge.findByIdAndUpdate(uc._id, {
+            $set: {
+              currentValue: 0,
+              isCompleted: false,
+              completedAt: null,
+              isRewarded: false,
+              rewardedAt: null,
+            },
+          });
+        }
+
+        if (totalDeducted > 0) {
+          await gam.save();
+        }
+      }
+    }
+
+    if (isGoalMet && gam.stepGoalCoinDate !== today && isTodaySync && !userCoinBlocked) {
       // FIX #1: Use atomic findOneAndUpdate to prevent race condition.
       // Two concurrent syncs can't both pass this check — only one wins the
       // atomic condition { stepGoalCoinDate: { $ne: today } }.
@@ -365,7 +492,7 @@ const syncHealthData = async (req, res, next) => {
         });
       }
       // If atomicResult is null, another concurrent request already awarded coins — no-op.
-    } else if (!isGoalMet && !userIsCoinBlocked) {
+    } else if (!isGoalMet && !userCoinBlocked) {
       // Passive step-based coins: Math.floor(steps / 100) * rate_per_100_steps
       // FIX #4: Use a step watermark (lastPassiveCoinSteps) to prevent replay.
       // Instead of computing from total steps (which re-awards everything if
@@ -436,40 +563,24 @@ const syncHealthData = async (req, res, next) => {
               if (passiveResult) {
                 gam = passiveResult; // refresh local reference
 
-                // ── 3-hour throttle for transaction logging ─────────────────────
-                const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+                // ── Always log transaction when coins are awarded ────────────────
+                // Previously throttled to 3-hour intervals, which caused gaps in
+                // the user's transaction history (steps were awarded but not logged).
                 const now = new Date();
-                const lastLogTime = gam.lastPassiveCoinTime ? new Date(gam.lastPassiveCoinTime).getTime() : 0;
-                const timeSinceLastLog = now.getTime() - lastLogTime;
-                const currentHour = now.getHours();
 
-                const isEndOfDay = currentHour >= 23;
-                const lastLogHour = gam.lastPassiveCoinTime ? new Date(gam.lastPassiveCoinTime).getHours() : -1;
-                const lastLogDate = gam.lastPassiveCoinTime
-                  ? new Date(gam.lastPassiveCoinTime).toISOString().slice(0, 10)
-                  : null;
-                const isNewDay = lastLogDate !== actualToday;
+                logCoinTransaction({
+                  userId: req.user._id,
+                  type: 'EARNED',
+                  amount: actualAdded,
+                  balanceAfter: gam.coinsBalance,
+                  source: 'PASSIVE_STEPS',
+                  description: `Auto Step Coins — ${effectiveWatermark.toLocaleString()} → ${currentSteps.toLocaleString()} (+${newStepsSinceWatermark.toLocaleString()} steps)`,
+                  metadata: { steps: currentSteps, previousSteps: effectiveWatermark, stepDelta: newStepsSinceWatermark, date: today, trigger: 'sync' },
+                });
 
-                const shouldLogTransaction =
-                  isNewDay ||
-                  timeSinceLastLog >= THREE_HOURS_MS ||
-                  (isEndOfDay && lastLogHour < 23);
-
-                if (shouldLogTransaction) {
-                  logCoinTransaction({
-                    userId: req.user._id,
-                    type: 'EARNED',
-                    amount: actualAdded,
-                    balanceAfter: gam.coinsBalance,
-                    source: 'PASSIVE_STEPS',
-                    description: `Step Coins — ${effectiveWatermark.toLocaleString()} → ${currentSteps.toLocaleString()} = ${newStepsSinceWatermark.toLocaleString()} steps`,
-                    metadata: { steps: currentSteps, previousSteps: effectiveWatermark, stepDelta: newStepsSinceWatermark, date: today },
-                  });
-
-                  // Update throttle marker
-                  gam.lastPassiveCoinTime = now;
-                  await gam.save();
-                }
+                // Update time marker (used by cron to skip duplicate logging)
+                gam.lastPassiveCoinTime = now;
+                await gam.save();
               }
               // If passiveResult is null, another concurrent sync already moved the watermark — no-op.
             }
@@ -478,7 +589,7 @@ const syncHealthData = async (req, res, next) => {
       }
     }
 
-    // Ensure lastActiveDate is persisted even if no coins were added this sync
+    // Ensure lastActiveDate is persisted if _updateStreak or other code modified it
     if (isTodaySync && gam.isModified('lastActiveDate')) {
       await gam.save();
     }
@@ -499,6 +610,18 @@ const syncHealthData = async (req, res, next) => {
         reason: stepValidation.reason,
         originalSteps: steps,
         acceptedSteps: validatedSteps,
+      } : undefined,
+      // Anti-cheat: inform client if coins are blocked
+      coinBlocked: userCoinBlocked ? {
+        blocked: true,
+        blockedUntil: coinBlockStatus.blockedUntil,
+        daysRemaining: coinBlockStatus.daysRemaining,
+      } : undefined,
+      // Anti-cheat: inform client about today's cheat flag (for popup)
+      cheatWarning: cheatPenaltyResult ? {
+        flagCount: cheatPenaltyResult.flagCount,
+        blocked: cheatPenaltyResult.blocked,
+        blockedUntil: cheatPenaltyResult.coinBlockedUntil,
       } : undefined,
     });
   } catch (err) {
@@ -527,7 +650,11 @@ const getHealthHistory = async (req, res, next) => {
 // ─── GET /health/today ────────────────────────────────────────────────────────
 const getTodayHealth = async (req, res, next) => {
   try {
-    const today = todayISO();
+    // Use client timezone (query param) to determine "today" in the user's local time.
+    // This ensures the correct day's health record is returned regardless of the
+    // server's timezone. Falls back to server IST if no timezone is provided.
+    const timezone = req.query.timezone || req.headers['x-timezone'] || null;
+    const today = resolveClientDate(timezone);
     const record = await HealthActivity.findOne({ user: req.user._id, date: today });
     return success(res, 'Today health data fetched', record);
   } catch (err) {

@@ -37,6 +37,7 @@ export type HealthStackParamList = {
   [HealthRoutes.TRACKER]: undefined;
   [HealthRoutes.STEPS]: undefined;
   [HealthRoutes.STEP_DETAIL]: { date: string };
+  [HealthRoutes.STEP_SOURCES]: undefined;
   [HealthRoutes.CALORIES]: undefined;
   [HealthRoutes.HEART_RATE]: undefined;
   [HealthRoutes.BLOOD_PRESSURE]: undefined;
@@ -68,6 +69,7 @@ export type ShopStackParamList = {
   [ShopRoutes.CART]: { preSelectCoins?: boolean } | undefined;
   [ShopRoutes.CHECKOUT]: undefined;
   [ShopRoutes.ORDER_HISTORY]: undefined;
+  [ShopRoutes.ORDER_TRACKING]: { orderId: string };
   [ShopRoutes.ADDRESSES]: { selectMode?: boolean } | undefined;
   [ShopRoutes.ADD_EDIT_ADDRESS]: { addressId?: string } | undefined;
 };

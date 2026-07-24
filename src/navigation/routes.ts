@@ -21,6 +21,7 @@ export const HealthRoutes = {
   TRACKER: 'TrackerScreen',
   STEPS: 'StepsScreen',
   STEP_DETAIL: 'StepDetailScreen',
+  STEP_SOURCES: 'StepSourcesScreen',
   CALORIES: 'CaloriesScreen',
   HEART_RATE: 'HeartRateScreen',
   BLOOD_PRESSURE: 'BloodPressureScreen',
@@ -50,6 +51,7 @@ export const ShopRoutes = {
   CART: 'CartScreen',
   CHECKOUT: 'CheckoutScreen',
   ORDER_HISTORY: 'OrderHistoryScreen',
+  ORDER_TRACKING: 'OrderTrackingScreen',
   ADDRESSES: 'AddressesScreen',
   ADD_EDIT_ADDRESS: 'AddEditAddressScreen',
 } as const;

@@ -6,6 +6,7 @@ import ProductDetailScreen from '../features/shop/screens/ProductDetailScreen';
 import CartScreen from '../features/shop/screens/CartScreen';
 import CheckoutScreen from '../features/shop/screens/CheckoutScreen';
 import OrderHistoryScreen from '../features/shop/screens/OrderHistoryScreen';
+import OrderTrackingScreen from '../features/shop/screens/OrderTrackingScreen';
 import ShopSearchScreen from '../features/shop/screens/ShopSearchScreen';
 import AddressesScreen from '../features/shop/screens/AddressesScreen';
 import AddEditAddressScreen from '../features/shop/screens/AddEditAddressScreen';
@@ -31,6 +32,7 @@ const ShopNavigator: React.FC = () => {
       <Stack.Screen name={ShopRoutes.CART}            component={CartScreen} />
       <Stack.Screen name={ShopRoutes.CHECKOUT}        component={CheckoutScreen} />
       <Stack.Screen name={ShopRoutes.ORDER_HISTORY}   component={OrderHistoryScreen} />
+      <Stack.Screen name={ShopRoutes.ORDER_TRACKING}  component={OrderTrackingScreen} />
       <Stack.Screen name={ShopRoutes.ADDRESSES}       component={AddressesScreen} />
       <Stack.Screen
         name={ShopRoutes.ADD_EDIT_ADDRESS}

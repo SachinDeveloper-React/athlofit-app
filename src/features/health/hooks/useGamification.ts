@@ -12,6 +12,10 @@ export function useGamification() {
     queryKey: ['gamification'],
     queryFn: () => gamificationService.getGamification(),
     staleTime: 5 * 60_000,
+    // Always refetch on mount to ensure coinBlocked status is fresh.
+    // The banner depends on this data being up-to-date; stale cached data
+    // from before a block was applied would hide it incorrectly.
+    refetchOnMount: 'always',
   });
 
   useEffect(() => {

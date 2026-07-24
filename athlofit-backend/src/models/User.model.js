@@ -79,6 +79,9 @@ const userSchema = new mongoose.Schema(
     // continue using the current goal until midnight.
     pendingStepGoal: { type: Number, default: null },
     pendingGoalEffectiveDate: { type: String, default: null }, // ISO "YYYY-MM-DD"
+    // Tracks when the user last changed their step goal (ISO "YYYY-MM-DD").
+    // Used to enforce the 90-day cooldown between goal changes.
+    lastStepGoalChangeDate: { type: String, default: null },
 
     // Saved delivery addresses
     savedAddresses: [
@@ -117,9 +120,9 @@ const userSchema = new mongoose.Schema(
       bannedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     },
 
-    // ─── Anti-cheat: coin earning block ─────────────────────────────────────
-    // Set by cheatPenalty.js when 3+ flags occur in a day. Coins cannot be
-    // earned (passive or claimed) until this date passes.
+    // ─── Anti-cheat: coin block penalty ─────────────────────────────────────
+    // When set, user cannot earn/claim coins until this date passes.
+    // Triggered when step fraud is detected 3+ times in a single day.
     coinBlockedUntil: { type: Date, default: null },
 
     // FCM push notification token
@@ -130,6 +133,8 @@ const userSchema = new mongoose.Schema(
 
     // Activity tracking (for inactivity expiry)
     lastActiveAt: { type: Date, default: Date.now },
+    // Timestamp of the most recent successful login (used by anti-stale-sync guard)
+    lastLoginAt: { type: Date, default: null },
     // Terms & Conditions acceptance
     termsAccepted: { type: Boolean, default: false },
     termsAcceptedAt: { type: Date, default: null },

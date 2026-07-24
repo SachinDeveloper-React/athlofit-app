@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   type ViewStyle,
@@ -11,6 +11,7 @@ import { WaterCircleProgress } from './WaterCircleProgress';
 import { navigate } from '../../../../navigation/navigationRef';
 import { useHydration } from '../../hooks/useHydration';
 import { useCoinData, useClaimReward } from '../../hooks/useGamification';
+import { useToast } from '../../../../components/Toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,16 @@ export const HydrationCard = memo(({ value = 0, onUpdate }: Props) => {
   const displayValue = consumed;
   
   const { data: coinData } = useCoinData();
-  const { mutate: claimReward, isPending: claimPending } = useClaimReward();
+  const { mutate: claimReward, isPending: claimPending, isError, error } = useClaimReward();
+  const toast = useToast();
+
+  // Show toast when claim fails (e.g. coin blocked)
+  useEffect(() => {
+    if (isError && error) {
+      const message = (error as any)?.message || 'Failed to claim reward.';
+      toast.error(message);
+    }
+  }, [isError, error]);
 
   const hydrationReward = coinData?.claimable?.find(c => c.id === 'hydration_daily');
   const isGoalMet = displayValue >= max;

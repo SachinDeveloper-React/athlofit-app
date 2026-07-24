@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { stepService } from '../../../services/stepService';
 import { useStepCoinRate } from '../../../store/appConfigStore';
 import { useHealthDataStore } from '../store/healthDataStore';
+import { getLocalToday } from '../../../utils/date';
 
 const SYNC_INTERVAL_MS = 30_000; // 30 seconds
 
@@ -28,7 +29,7 @@ export function useStepCoinEarnings() {
   /** Get today's synced step offset (steps from other devices) */
   const getOffset = useCallback(() => {
     const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
     return syncedStepOffsetDate === today ? syncedStepOffset : 0;
   }, []);
 

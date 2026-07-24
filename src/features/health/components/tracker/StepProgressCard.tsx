@@ -54,7 +54,7 @@ type Props = {
   steps: number;
   goal?: number;
   weekData: WeeklyStepEntry[];
-  todayIndex?: "Mon" |"Tue" |"Wed" |"Thu" |"Fri" |"Sat"|"Sun" ;
+  todayIndex?: string; // ISO date "YYYY-MM-DD" for today matching
   style?: ViewStyle;
   isWeekPending?: boolean;
   claimedToday?: boolean;
@@ -431,7 +431,7 @@ export const StepProgressCard = memo(
   }: Props) => {
     const { colors, radius } = useTheme();
 
-    const todayIdx = todayIndex ?? "Sun";
+    const todayIdx = todayIndex ?? "";
 
     const maxSteps = useMemo(
       () => Math.max(...weekData.map(d => d.steps), goal),
@@ -461,6 +461,21 @@ export const StepProgressCard = memo(
           bg={colors.background}
           onEditGoal={onEditGoal}
         />
+
+        {/* View Step Sources — debugging link */}
+        {/* <TouchableOpacity
+          style={styles.viewSourcesBtn}
+          activeOpacity={0.7}
+          onPress={() => {
+            navigate(RootRoutes.HEALTH_NAVIGATOR, {
+              screen: HealthRoutes.STEP_SOURCES,
+            });
+          }}
+        >
+          <AppText variant="caption2" style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+            View Step Sources
+          </AppText>
+        </TouchableOpacity> */}
 
         {/* Bonus steps indicator */}
         {todayBonusSteps > 0 && (
@@ -519,11 +534,11 @@ export const StepProgressCard = memo(
             <AppView style={styles.weekGrid}>
               {weekData.map((day, i) => (
                 <DayBar
-                  key={`${day.date}-${i}`}
+                  key={`${day.fullDate || day.date}-${i}`}
                   data={day}
                   currentGoal={goal}
                   maxSteps={maxSteps}
-                  isToday={day.date === todayIdx}
+                  isToday={day.fullDate === todayIdx}
                 />
               ))}
             </AppView>
@@ -608,7 +623,7 @@ speedoContainer: {
   weekGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    // paddingHorizontal: 20,
   },
 
   // Day bar
@@ -655,7 +670,7 @@ speedoContainer: {
     textAlign: 'center',
   },
   dayName: {
-    fontSize: 11,
+    fontSize: 8,
     opacity: 0.7,
   },
   dayNameToday: {
@@ -680,6 +695,13 @@ speedoContainer: {
   editBtn: {
     marginLeft: 4,
     padding: 0,
+  },
+
+  viewSourcesBtn: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 4,
   },
 
   // Claim Coins Button

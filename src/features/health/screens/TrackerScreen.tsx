@@ -22,6 +22,7 @@ import { useHealth } from '../hooks/useHealth';
 import { WeeklyStepEntry, type HealthData, defaultHealthData } from '../types/healthTypes';
 import { TabId, TABS } from '../constants/tracker.constant';
 import { useWeeklySteps } from '../hooks/useWeeklySteps';
+import { toISODate } from '../utils/healthFormatters';
 import { useGamification } from '../hooks/useGamification';
 import { useStreak } from '../hooks/useStreak';
 import { useGamificationStore } from '../store/gamificationStore';
@@ -39,6 +40,8 @@ import {
 import { useNetworkStore } from '../../../store/networkStore';
 import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
+import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
+import ActivityPermissionBanner from '../components/tracker/ActivityPermissionBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -116,7 +119,7 @@ const TabPanels = memo(
         goal={goal}
         weekData={weekData}
         isWeekPending={isWeekPending}
-        todayIndex={(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const)[(new Date().getDay() + 6) % 7]}
+        todayIndex={toISODate(new Date())}
         metricRows={metricRows}
         stats={{
           heartRate: data?.heartRate,
@@ -208,12 +211,13 @@ const TrackerScreen = memo(() => {
   const userAvatarUrl = useAuthStore(state => state.user?.avatarUrl);
   const userName = useAuthStore(state => state.user?.name);
   const weightKg = useAuthStore(state => state.user?.weight);
+  const userGender = useAuthStore(state => state.user?.gender);
   const dailyStepGoal = useAuthStore(state => state.user?.dailyStepGoal);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const userId = useAuthStore(state => state.user?._id);
 
   const { platform, isReady, isLoading, data, error, refresh, retrySetup, skipToNativeSensor, lastUpdated } =
-    useHealth({ weightKg: Number(weightKg) || 70 });
+    useHealth({ weightKg: Number(weightKg) || 70, gender: userGender });
 
   // Bonus steps from admin/system — added on top of device steps
   const bonusSteps = useHealthDataStore(s => {
@@ -485,6 +489,8 @@ const TrackerScreen = memo(() => {
 
         >
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
+          <CoinBlockedBanner />
+          <ActivityPermissionBanner platform={platform} isReady={isReady} />
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
             goal={dailyStepGoal || 8000}

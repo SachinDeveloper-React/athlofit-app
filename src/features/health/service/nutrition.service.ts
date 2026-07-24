@@ -1,6 +1,7 @@
 // ─── nutrition.service.ts ─────────────────────────────────────────────────────
 
 import { api } from '../../../utils/api';
+import { getLocalToday } from '../../../utils/date';
 import type {
   DailySummaryResponse,
   LogMealRequest,
@@ -24,7 +25,7 @@ export const nutritionService = {
    * @param date - ISO date string YYYY-MM-DD (defaults to today)
    */
   getDailySummary: async (date?: string): Promise<DailySummaryResponse> => {
-    const today = date ?? new Date().toISOString().split('T')[0];
+    const today = date ?? getLocalToday();
     const response = await api.get<DailySummaryResponse>(
       `nutrition/summary?date=${today}`,
     );

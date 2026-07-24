@@ -23,6 +23,7 @@ export const useGamificationStore = create<GamificationStore>()(
       lastActiveDate: null,
       coinsEarnedToday: 0,
       lastCoinDate: null,
+      coinBlocked: null,
 
       setCoinsBalance: (balance) => set({ coinsBalance: balance }),
       
@@ -106,6 +107,7 @@ export const useGamificationStore = create<GamificationStore>()(
         lastActiveDate: null,
         coinsEarnedToday: 0,
         lastCoinDate: null,
+        coinBlocked: null,
       }),
     })),
     {

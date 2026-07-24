@@ -85,8 +85,8 @@ android {
         applicationId "com.athlofit.athlofit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "1.25"
+        versionCode 47
+        versionName "1.47"
     }
     signingConfigs {
         debug {
@@ -111,6 +111,7 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
+            minifyEnabled true
             shrinkResources true
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds

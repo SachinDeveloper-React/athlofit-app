@@ -35,7 +35,7 @@ export const defaultHealthData: HealthData = {
 // ─── Weekly Steps ─────────────────────────────────────────────────────────────
 
 export type WeeklyStepEntry = {
-  date: string;      // short label "Mon", "Tue" etc.
+  date: string;      // formatted label "10 (Fri)", "11 (Sat)" etc. — from backend
   fullDate?: string; // "YYYY-MM-DD" — used for navigation to StepDetailScreen
   steps: number;
   goalSnapshot?: number; // goal that was active on this specific day

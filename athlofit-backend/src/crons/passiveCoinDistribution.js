@@ -4,12 +4,17 @@
 // Runs every 3 hours (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00)
 // and once at 23:59 (EOD) to award remaining coins.
 //
+// This cron acts as a SAFETY NET for users whose app hasn't synced recently.
+// The primary coin-awarding + logging now happens in the health sync endpoint
+// (every sync logs a transaction). The cron skips users who synced within 5 min.
+//
 // Logic:
 //   1. For each user with HealthActivity today, calculate current steps.
-//   2. Compare against lastPassiveCoinSteps (steps at last payout).
-//   3. Compute coins = Math.floor(stepDelta / 100) * rate_per_100_steps.
-//   4. Cap at remaining daily allowance (dailyEarnLimit - coinsEarnedToday).
-//   5. Award coins, log transaction, update markers.
+//   2. Skip if health sync already handled this user recently (within 5 min).
+//   3. Compare against lastPassiveCoinSteps (steps at last payout).
+//   4. Compute coins = Math.floor(stepDelta / 100) * rate_per_100_steps.
+//   5. Cap at remaining daily allowance (dailyEarnLimit - coinsEarnedToday).
+//   6. Award coins, log transaction, update markers.
 
 const cron = require('node-cron');
 const Gamification = require('../models/Gamification.model');
@@ -44,7 +49,7 @@ async function distributePassiveCoins() {
     return { processed: 0, awarded: 0, totalCoins: 0 };
   }
 
-  // Batch-load user verification status
+  // Batch-load user verification + cheat-block status in one query
   const userIds = activities.map(a => a.user);
   const users = await User.find({ _id: { $in: userIds } })
     .select('_id emailVerified coinBlockedUntil')
@@ -68,57 +73,110 @@ async function distributePassiveCoins() {
 
       processed++;
 
-      // Skip if user is coin-blocked (anti-cheat penalty)
-      const user = userMap.get(userId.toString());
-      if (user && isCoinBlocked(user).isBlocked) continue;
+      // ── Anti-cheat: skip if user is blocked from earning coins ─────────────
+      const userDoc = userMap.get(userId.toString());
+      if (userDoc && isCoinBlocked(userDoc).isBlocked) continue;
 
-      // Reset coinsEarnedToday if it's a new day
+      // Reset coinsEarnedToday if it's a new day (read-only check — the atomic
+      // update below handles the actual state transition safely)
       const lastCoinDate = gam.lastCoinDate;
-      if (lastCoinDate && lastCoinDate !== today) {
-        gam.coinsEarnedToday = 0;
-        gam.lastPassiveCoinSteps = 0;
-        gam.lastPassiveCoinTime = null;
-      }
-
-      // Calculate step delta since last payout
-      const previousSteps = gam.lastPassiveCoinSteps || 0;
+      const isNewDay = !lastCoinDate || lastCoinDate !== today;
+      
+      // Use the correct baseline: if new day, watermark resets to 0
+      const previousSteps = isNewDay ? 0 : (gam.lastPassiveCoinSteps || 0);
       const stepDelta = currentSteps - previousSteps;
 
       // Skip if no new steps since last payout
       if (stepDelta <= 0) continue;
 
-      // Calculate coins for this delta
-      const rawCoins = parseFloat((Math.floor(stepDelta / 100) * rate).toFixed(4));
-      if (rawCoins <= 0) continue;
+      // Skip if a health sync recently processed and logged coins (within 5 min).
+      // Since the health sync now logs every transaction (no throttle), the cron
+      // only needs to act as a safety net for users whose app hasn't synced recently.
+      if (gam.lastPassiveCoinTime) {
+        const timeSinceLastAward = Date.now() - new Date(gam.lastPassiveCoinTime).getTime();
+        if (timeSinceLastAward < 5 * 60 * 1000) continue; // skip, sync just handled it
+      }
 
-      // Apply daily cap
-      const isVerified = user?.emailVerified ?? false;
+      // Determine the user's effective passive daily cap
+      const isVerified = userDoc?.emailVerified ?? false;
       const effectiveCap = isVerified
         ? dailyEarnLimit
         : Math.min(unverifiedDailyCap, dailyEarnLimit);
 
-      const currentEarned = gam.coinsEarnedToday || 0;
-      const remainingAllowance = Math.max(0, effectiveCap - currentEarned);
+      // Calculate coins using the same formula as health sync:
+      // Total passive coins earned today = min(dailyEarnLimit, floor(totalSteps/100) * rate)
+      // Only award the difference between what should be earned and what's already in coinsEarnedToday.
+      const totalPassiveCoinsForToday = parseFloat(
+        Math.min(effectiveCap, Math.max(0, Math.floor(currentSteps / 100) * rate)).toFixed(4)
+      );
 
-      if (remainingAllowance <= 0) continue; // Already maxed out for today
+      const currentEarned = isNewDay ? 0 : (gam.coinsEarnedToday || 0);
+      // coinsEarnedToday may include goal/hydration coins, so use lastPassiveCoinSteps as base
+      const passiveAlreadyAwarded = parseFloat(
+        Math.min(effectiveCap, Math.max(0, Math.floor(previousSteps / 100) * rate)).toFixed(4)
+      );
+      const actualCoins = parseFloat(
+        Math.max(0, totalPassiveCoinsForToday - passiveAlreadyAwarded).toFixed(4)
+      );
 
-      const actualCoins = parseFloat(Math.min(rawCoins, remainingAllowance).toFixed(4));
-      if (actualCoins <= 0) continue;
+      // Also check we don't exceed the overall daily cap
+      const overallCap = cfg.coin?.maxDailyRewards ?? 250;
+      const overallRemaining = Math.max(0, overallCap - currentEarned);
+      const finalCoins = parseFloat(Math.min(actualCoins, overallRemaining).toFixed(4));
 
-      // Award coins
-      gam.coinsBalance = parseFloat((gam.coinsBalance + actualCoins).toFixed(4));
-      gam.coinsEarnedToday = parseFloat((currentEarned + actualCoins).toFixed(4));
-      gam.lastCoinDate = today;
-      gam.lastPassiveCoinSteps = currentSteps;
-      gam.lastPassiveCoinTime = now;
-      await gam.save();
+      if (finalCoins <= 0) continue;
+
+      // Award coins ATOMICALLY — prevents race with concurrent health syncs.
+      // Only updates if lastPassiveCoinSteps hasn't moved past our baseline.
+      //
+      // If it's a new day, reset coinsEarnedToday to finalCoins instead of
+      // incrementing a stale yesterday value. Use $set for the new-day case,
+      // $inc for same-day case.
+      const updateOp = isNewDay
+        ? {
+            $set: {
+              lastCoinDate: today,
+              lastPassiveCoinSteps: currentSteps,
+              lastPassiveCoinTime: now,
+              coinsEarnedToday: finalCoins,
+            },
+            $inc: {
+              coinsBalance: finalCoins,
+            },
+          }
+        : {
+            $set: {
+              lastCoinDate: today,
+              lastPassiveCoinSteps: currentSteps,
+              lastPassiveCoinTime: now,
+            },
+            $inc: {
+              coinsBalance: finalCoins,
+              coinsEarnedToday: finalCoins,
+            },
+          };
+
+      const atomicResult = await Gamification.findOneAndUpdate(
+        {
+          user: userId,
+          $or: [
+            { lastPassiveCoinSteps: { $lte: previousSteps } },
+            { lastPassiveCoinSteps: null },
+            { lastPassiveCoinSteps: { $exists: false } },
+          ],
+        },
+        updateOp,
+        { new: true }
+      );
+
+      if (!atomicResult) continue; // another process already moved the watermark
 
       // Log transaction
       logCoinTransaction({
         userId,
         type: 'EARNED',
-        amount: actualCoins,
-        balanceAfter: gam.coinsBalance,
+        amount: finalCoins,
+        balanceAfter: atomicResult.coinsBalance,
         source: 'PASSIVE_STEPS',
         description: `Auto Step Coins — ${previousSteps.toLocaleString()} → ${currentSteps.toLocaleString()} (+${stepDelta.toLocaleString()} steps)`,
         metadata: {
@@ -131,7 +189,7 @@ async function distributePassiveCoins() {
       });
 
       awarded++;
-      totalCoinsAwarded += actualCoins;
+      totalCoinsAwarded += finalCoins;
     } catch (err) {
       console.error(`[CRON:PassiveCoins] Error processing user ${userId}:`, err.message);
     }

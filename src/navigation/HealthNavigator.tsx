@@ -32,6 +32,7 @@ import StreakScreen from '../features/health/screens/StreakScreen';
 import ChallengesScreen from '../features/health/screens/ChallengesScreen';
 import ChallengeDetailScreen from '../features/health/screens/ChallengeDetailScreen';
 import StepDetailScreen from '../features/health/screens/StepDetailScreen';
+import StepSourcesScreen from '../features/health/screens/StepSourcesScreen';
 import { useTheme } from '../hooks/useTheme';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
@@ -84,6 +85,7 @@ const HealthNavigator: React.FC = () => {
       <Stack.Screen name={HealthRoutes.CHALLENGES}       component={ChallengesScreen} />
       <Stack.Screen name={HealthRoutes.CHALLENGE_DETAIL} component={ChallengeDetailScreen} />
       <Stack.Screen name={HealthRoutes.STEP_DETAIL}      component={StepDetailScreen} />
+      <Stack.Screen name={HealthRoutes.STEP_SOURCES}     component={StepSourcesScreen} />
     </Stack.Navigator>
   );
 };

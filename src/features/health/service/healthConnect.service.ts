@@ -24,18 +24,26 @@ import {
 } from 'react-native-health-connect';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
-// ─── Derivation constants (70 kg, 76 cm stride adult baseline) ────────────────
+// ─── Derivation constants ─────────────────────────────────────────────────────
 const DEFAULT_WEIGHT_KG = 70;
-const STRIDE_M = 0.76; // metres per step
+const STRIDE_MALE_M = 0.78;   // average male stride length in metres
+const STRIDE_FEMALE_M = 0.70; // average female stride length in metres
 const KCAL_PER_STEP = (kg: number) => (kg * 0.57) / 1000; // MET-based formula
 const STEPS_PER_MINUTE = 100; // average walking cadence
+
+export type GenderForStride = 'M' | 'F' | 'O' | null | undefined;
+
+/** Returns stride length in metres based on gender. Defaults to male (0.78m). */
+const getStrideM = (gender?: GenderForStride): number =>
+  gender === 'F' ? STRIDE_FEMALE_M : STRIDE_MALE_M;
 
 export const deriveFromSteps = (
   steps: number,
   weightKg = DEFAULT_WEIGHT_KG,
+  gender?: GenderForStride,
 ) => ({
   calories: Math.round(steps * KCAL_PER_STEP(weightKg)),
-  distanceKm: Math.round(steps * (STRIDE_M / 1000) * 100) / 100,
+  distanceKm: Math.round(steps * (getStrideM(gender) / 1000) * 100) / 100,
   activeMinutes: Math.round(steps / STEPS_PER_MINUTE),
 });
 
@@ -111,8 +119,73 @@ export const initializeHealthConnect = async (): Promise<boolean> => {
   await sleep(300);
   const granted = await requestPermission(PERMISSIONS);
   // Accept if at least 80% of permissions were granted
-  return granted.length >= PERMISSIONS.length * 0.8;
+  const success = granted.length >= PERMISSIONS.length * 0.8;
+
+  // FIX: Clean up any stale step records written by our app to Health Connect.
+  // The native StepCounterService previously wrote steps under our package name,
+  // which caused a circular inflation loop. Delete those records so affected
+  // users immediately get correct step counts.
+  if (success) {
+    cleanupOwnStepRecords().catch(e =>
+      console.warn('[HealthConnect] cleanup own step records failed:', e)
+    );
+  }
+
+  return success;
 };
+
+/**
+ * Deletes all StepsRecord entries written by our own app (com.athlofit.athlofit)
+ * from Health Connect for today. This fixes the inflation issue for users who
+ * already have stale/inflated records from the old write behavior.
+ *
+ * Safe to call multiple times — no-ops if no records exist.
+ */
+async function cleanupOwnStepRecords(): Promise<void> {
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const { records } = await readRecords('Steps', {
+      timeRangeFilter: {
+        operator: 'between' as const,
+        startTime: startOfDay.toISOString(),
+        endTime: now.toISOString(),
+      },
+    });
+
+    if (!records || records.length === 0) return;
+
+    const OWN_PACKAGE = 'com.athlofit.athlofit';
+    const ownRecordIds: string[] = [];
+
+    for (const r of records) {
+      const origin = (r as any).metadata?.dataOrigin ?? '';
+      const id = (r as any).metadata?.id;
+      if (origin === OWN_PACKAGE && id) {
+        ownRecordIds.push(id);
+      }
+    }
+
+    if (ownRecordIds.length === 0) {
+      console.log('[HealthConnect] No own step records to clean up');
+      return;
+    }
+
+    // Delete our own step records using time range (deleteRecordsByTimeRange
+    // deletes ALL records of that type within the range that our app owns)
+    await deleteRecordsByTimeRange('Steps', {
+      operator: 'between' as const,
+      startTime: startOfDay.toISOString(),
+      endTime: now.toISOString(),
+    });
+
+    console.log(`[HealthConnect] Cleaned up ${ownRecordIds.length} own step records from Health Connect`);
+  } catch (e) {
+    console.warn('[HealthConnect] cleanupOwnStepRecords error:', e);
+  }
+}
 
 // ─── Retry helper ─────────────────────────────────────────────────────────────
 //
@@ -158,23 +231,49 @@ export const todayRange = () => {
 };
 
 /**
- * Get time range from login timestamp to now (for filtering historical data)
- * If no login timestamp, falls back to today's range
+ * Get time range for today's step reading.
+ *
+ * ALWAYS filters from loginTimestamp when login was today.
+ * This ensures that after any login (new or existing account), only steps
+ * walked AFTER login are read from Health Connect.
+ *
+ * Steps from before login are handled separately via the server baseline
+ * (syncedServerBaseline / syncedStepOffset) which is fetched on login and
+ * added on top of the local Health Connect reading.
+ *
+ * Formula: displayed_steps = server_steps_before_login + HC_steps_after_login
+ *
+ * Next-day onwards: loginTimestamp is from a previous day, so todayRange()
+ * is used, returning full-day steps (which is correct — user has been logged
+ * in since yesterday, all of today's steps belong to them).
+ *
+ * @param loginTimestamp — epoch ms when user logged in this session
+ * @param _accountCreatedAt — unused, kept for API compat
  */
-export const sinceLoginRange = (loginTimestamp: number | null) => {
-  if (!loginTimestamp) {
-    return todayRange();
-  }
-  
-  // Use the later of: login timestamp OR start of today
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const effectiveStart = Math.max(loginTimestamp, startOfDay.getTime());
-  
+export const sinceLoginRange = (
+  loginTimestamp: number | null,
+  _accountCreatedAt?: string | null,
+) => {
+  if (!loginTimestamp) return todayRange();
+
+  const now = new Date();
+  const loginDate = new Date(loginTimestamp);
+
+  // Only filter from loginTimestamp if login was today
+  const isLoginToday =
+    loginDate.getFullYear() === now.getFullYear() &&
+    loginDate.getMonth() === now.getMonth() &&
+    loginDate.getDate() === now.getDate();
+
+  if (!isLoginToday) return todayRange();
+
+  // Login was today — read steps only from login time onwards.
+  // Steps from earlier today are already on the server and will be added
+  // via syncedServerBaseline / syncedStepOffset.
   return {
     operator: 'between' as const,
-    startTime: new Date(effectiveStart).toISOString(),
-    endTime: new Date().toISOString(),
+    startTime: loginDate.toISOString(),
+    endTime: now.toISOString(),
   };
 };
 
@@ -195,6 +294,7 @@ let _lastDerivedWriteSteps: number = 0;
 export const writeDerivedActivity = async (
   steps: number,
   weightKg = DEFAULT_WEIGHT_KG,
+  gender?: GenderForStride,
 ): Promise<void> => {
   if (steps <= 0) return;
 
@@ -215,6 +315,7 @@ export const writeDerivedActivity = async (
   const { calories, distanceKm, activeMinutes } = deriveFromSteps(
     steps,
     weightKg,
+    gender,
   );
 
   const sessionEnd = new Date(
@@ -282,6 +383,13 @@ let _stepCacheValue: number = 0;
 let _stepCacheTime: number = 0;
 let _stepCacheKey: string = ''; // startTime+endTime fingerprint
 
+/** Reset the step cache — call on midnight reset to prevent stale data leaking. */
+export function resetStepCache(): void {
+  _stepCacheValue = 0;
+  _stepCacheTime = 0;
+  _stepCacheKey = '';
+}
+
 export async function readStepsDeduped(
   startTime: string,
   endTime: string,
@@ -312,18 +420,126 @@ export async function readStepsDeduped(
 
     if (!records.length) return 0;
 
+    // ── Midnight bleed guard ─────────────────────────────────────────────────
+    // Health Connect returns records that OVERLAP with the requested time range.
+    // A record with startTime 11:55 PM yesterday and endTime 12:05 AM today
+    // will be included in a today query. Filter out any records whose startTime
+    // is before our requested startTime — these are previous day records that
+    // bleed into today and should NOT be counted.
+    const requestedStart = new Date(startTime).getTime();
+    const filteredRecords = records.filter((r: any) => {
+      const recStart = new Date(r.startTime).getTime();
+      // Only count records that started ON or AFTER our requested start time.
+      // This eliminates cross-midnight records from the previous day.
+      return recStart >= requestedStart;
+    });
+
+    if (!filteredRecords.length) return 0;
+
     // Group step totals by data origin (package name)
     const totals: Record<string, number> = {};
-    for (const r of records) {
+    for (const r of filteredRecords) {
       const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
       totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
     }
 
-    console.log('[HealthConnect] Steps by origin:', totals);
+    console.log('[HealthConnect] Steps by origin (raw):', totals);
 
-    // Return the highest single-source total — this matches what Samsung Health
-    // shows and what the native Kotlin worker reports.
-    const result = Math.max(...Object.values(totals));
+    // ── FIX: Exclude our own app's package from the origin totals ────────────
+    // The native StepCounterService previously wrote steps to Health Connect
+    // under our package name (com.athlofit.athlofit). Exclude to prevent
+    // circular inflation.
+    const OWN_PACKAGE = 'com.athlofit.athlofit';
+    const externalTotals: Record<string, number> = {};
+    for (const [origin, steps] of Object.entries(totals)) {
+      if (origin !== OWN_PACKAGE) {
+        externalTotals[origin] = steps;
+      }
+    }
+
+    console.log('[HealthConnect] Steps by origin (excluding self):', externalTotals);
+
+    // If no external sources exist, fall back to our own written value
+    // (this handles cases where Health Connect only has our app's data)
+    const originsToUse = Object.keys(externalTotals).length > 0 ? externalTotals : totals;
+
+    // ── Time-aware deduplication ─────────────────────────────────────────────
+    // Problem: "max single source" works for Samsung devices where Samsung Health
+    // and platform sensor record the SAME walk (duplicates). But it fails for
+    // phone + watch scenarios where the watch records DIFFERENT time periods
+    // (complementary data). We need both: dedup overlapping + sum non-overlapping.
+    //
+    // Approach: Divide the day into time slots. For each slot, take the max
+    // across all origins (dedup). Then sum across all slots (complement).
+    // This correctly handles:
+    //   - Samsung phone: Samsung Health + platform sensor both record same walk → deduped
+    //   - Phone + Watch: phone records morning, watch records evening → summed
+    //
+    const externalRecords = filteredRecords.filter((r: any) => {
+      const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+      return origin !== OWN_PACKAGE;
+    });
+
+    let result: number;
+
+    if (externalRecords.length === 0) {
+      // Fallback: only own records exist
+      result = Math.max(...Object.values(originsToUse), 0);
+    } else if (Object.keys(originsToUse).length <= 1) {
+      // Single external source — no dedup needed, just sum its records
+      result = Math.max(...Object.values(originsToUse), 0);
+    } else {
+      // Multiple external sources — use time-slot deduplication
+      // Divide day into 30-min slots, take max per slot across origins, then sum slots
+      const SLOT_MS = 30 * 60 * 1000; // 30 minutes
+      const dayStart = new Date(startTime).getTime();
+      const dayEnd = new Date(endTime).getTime();
+      const numSlots = Math.ceil((dayEnd - dayStart) / SLOT_MS) || 1;
+
+      // For each slot, track steps per origin
+      const slotMaxes: number[] = new Array(numSlots).fill(0);
+
+      for (const r of externalRecords) {
+        const recStart = new Date((r as any).startTime).getTime();
+        const recEnd = new Date((r as any).endTime).getTime();
+        const count = (r as any).count ?? 0;
+        if (count <= 0) continue;
+
+        // Determine which slot(s) this record spans
+        const startSlot = Math.max(0, Math.floor((recStart - dayStart) / SLOT_MS));
+        const endSlot = Math.min(numSlots - 1, Math.floor((recEnd - dayStart) / SLOT_MS));
+
+        if (startSlot === endSlot) {
+          // Record fits in one slot — add to that slot's max tracking
+          slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
+        } else {
+          // Record spans multiple slots — distribute proportionally
+          const duration = recEnd - recStart;
+          if (duration <= 0) {
+            slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
+          } else {
+            for (let s = startSlot; s <= endSlot; s++) {
+              const slotStart = dayStart + s * SLOT_MS;
+              const slotEnd = slotStart + SLOT_MS;
+              const overlapStart = Math.max(recStart, slotStart);
+              const overlapEnd = Math.min(recEnd, slotEnd);
+              const overlapFraction = (overlapEnd - overlapStart) / duration;
+              const slotSteps = Math.round(count * overlapFraction);
+              slotMaxes[s] = Math.max(slotMaxes[s], slotSteps);
+            }
+          }
+        }
+      }
+
+      const timeAwareTotal = slotMaxes.reduce((sum, v) => sum + v, 0);
+
+      // Safety: also compute simple max-source as a floor.
+      // Time-aware should always be >= max-source, but use max as safety net.
+      const maxSource = Math.max(...Object.values(originsToUse), 0);
+      result = Math.max(timeAwareTotal, maxSource);
+
+      console.log('[HealthConnect] Time-aware dedup:', timeAwareTotal, 'max-source:', maxSource, 'final:', result);
+    }
 
     // FIX #5: Store in cache
     _stepCacheValue = result;
@@ -354,10 +570,12 @@ export async function readStepsDeduped(
 export const fetchAllHealthConnectData = async (
   weightKg = DEFAULT_WEIGHT_KG,
   loginTimestamp: number | null = null,
+  gender?: GenderForStride,
+  accountCreatedAt?: string | null,
 ): Promise<HealthData> => {
   try {
     // Use sinceLoginRange for steps to prevent syncing historical data to new accounts
-    const stepsTimeRange = sinceLoginRange(loginTimestamp);
+    const stepsTimeRange = sinceLoginRange(loginTimestamp, accountCreatedAt);
     
     const [
       stepsResult,
@@ -377,7 +595,7 @@ export const fetchAllHealthConnectData = async (
           return { COUNT_TOTAL: 0 };
         }),
 
-      readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: todayRange() })).catch(e => {
+      readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: lastNDays(1) })).catch(e => {
         console.warn('HeartRate read failed:', e);
         return { records: [] };
       }),
@@ -417,20 +635,47 @@ export const fetchAllHealthConnectData = async (
     // ── Always derive calories / distance / activeMinutes from steps ────────
     // This ensures values are always consistent with current step count,
     // never stale from a previous session's written records.
-    const derived = deriveFromSteps(steps, weightKg);
+    const derived = deriveFromSteps(steps, weightKg, gender);
     const calories = derived.calories;
     const distance = derived.distanceKm;
     const activeMinutes = derived.activeMinutes;
 
     // ── Heart rate ─────────────────────────────────────────────────────────
+    // Use last 24h of records to capture smartwatch data that spans midnight.
+    // Prefer today's samples for the average, but show the most recent reading
+    // if no data exists for today (common with smartwatches that sync periodically).
     const allSamples = hrRecords.records.flatMap(r => r.samples ?? []);
     const bpms = allSamples.map(s => s.beatsPerMinute);
-    const hrAvg = bpms.length
-      ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length)
+
+    // Filter to only today's samples for the average display
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todaySamples = allSamples.filter(s => {
+      const sampleTime = new Date(s.time).getTime();
+      return sampleTime >= startOfToday.getTime();
+    });
+    const todayBpms = todaySamples.map(s => s.beatsPerMinute);
+
+    // Use today's readings if available, otherwise fall back to all 24h readings
+    const effectiveBpms = todayBpms.length > 0 ? todayBpms : bpms;
+    const hrAvg = effectiveBpms.length
+      ? Math.round(effectiveBpms.reduce((a, b) => a + b, 0) / effectiveBpms.length)
       : 0;
+
+    console.log(`[HealthConnect] HR: ${hrRecords.records.length} records, ${allSamples.length} total samples, ${todaySamples.length} today samples, avg=${hrAvg}`);
+    if (hrRecords.records.length > 0 && allSamples.length === 0) {
+      console.warn('[HealthConnect] HR records exist but have no samples — smartwatch may use a different record format');
+    }
+    if (hrRecords.records.length === 0) {
+      console.log('[HealthConnect] No HR records found in last 24h. Ensure smartwatch companion app syncs to Health Connect.');
+    }
 
     // ── Blood pressure ─────────────────────────────────────────────────────
     const latestBP = bpRecords.records.at(-1);
+    console.log(`[HealthConnect] BP: ${bpRecords.records.length} records in last 7 days, latest=${latestBP ? `${Math.round(latestBP.systolic.inMillimetersOfMercury)}/${Math.round(latestBP.diastolic.inMillimetersOfMercury)}` : 'none'}`);
+    if (bpRecords.records.length === 0) {
+      console.log('[HealthConnect] No BP records found in last 7 days. Ensure smartwatch companion app syncs BP to Health Connect.');
+    }
 
     // ── Weight ─────────────────────────────────────────────────────────────
     const latestWeight = weightRecords.records.at(-1);
@@ -448,8 +693,8 @@ export const fetchAllHealthConnectData = async (
       activeMinutes,
       heartRate: hrAvg,
       hydration: Math.round(hydrationMl),
-      heartRateMin: bpms.length ? Math.min(...bpms) : 0,
-      heartRateMax: bpms.length ? Math.max(...bpms) : 0,
+      heartRateMin: effectiveBpms.length ? Math.min(...effectiveBpms) : 0,
+      heartRateMax: effectiveBpms.length ? Math.max(...effectiveBpms) : 0,
       bloodPressureSystolic: latestBP
         ? Math.round(latestBP.systolic.inMillimetersOfMercury)
         : 0,
@@ -467,7 +712,7 @@ export const fetchAllHealthConnectData = async (
 
     // Write derived records back so they persist in Health Connect
     // (fire-and-forget — don't await so it doesn't block the UI)
-    writeDerivedActivity(steps, weightKg).catch(e =>
+    writeDerivedActivity(steps, weightKg, gender).catch(e =>
       console.warn('writeDerivedActivity failed:', e),
     );
 

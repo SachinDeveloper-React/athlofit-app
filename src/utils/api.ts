@@ -7,6 +7,7 @@ import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { useSystemStore } from '../store/systemStore';
 import { useNetworkStore } from '../store/networkStore';
+import { useSyncStore } from '../store/syncStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 
 // BUG-044: Read BASE_URL from env variable with platform-aware localhost fallback.
@@ -45,6 +46,12 @@ async function request<T>(
 ): Promise<T> {
   const { auth = true, retry = false, ...fetchOptions } = options;
 
+  // Track sync state for the global sync indicator (only for primary requests,
+  // not retries — avoids double-counting after token refresh).
+  if (!retry) {
+    useSyncStore.getState().startSync();
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((fetchOptions.headers as Record<string, string>) ?? {}),
@@ -65,6 +72,11 @@ async function request<T>(
     // Server responded — clear any previous unreachable flag
     useSystemStore.getState().setServerUnreachable(false);
   } catch (err: any) {
+    // End sync tracking on network failure
+    if (!retry) {
+      useSyncStore.getState().endSync();
+    }
+
     // fetch() throws a TypeError when the network request fails entirely
     // (no DNS, connection refused, server down, etc.)
     const isNetworkError =
@@ -86,6 +98,9 @@ async function request<T>(
 
   // ── 401: attempt token refresh ─────────────────────────────────────────────
   if (response.status === 401 && !retry) {
+    // End sync tracking — the retry (if any) won't double-count
+    useSyncStore.getState().endSync();
+
     // If logout is in progress, don't trigger another logout — just throw
     if (isLoggingOut()) {
       throw createError('Session expired. Please log in again.', 401);
@@ -121,6 +136,7 @@ async function request<T>(
 
   // ── 503: Maintenance mode ──────────────────────────────────────────────────
   if (response.status === 503) {
+    if (!retry) { useSyncStore.getState().endSync(); }
     useSystemStore.getState().setMaintenance(true);
     throw createError('Service is under maintenance.', 503);
   }
@@ -129,11 +145,14 @@ async function request<T>(
   const json = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (!retry) { useSyncStore.getState().endSync(); }
     const err = createError(json?.message ?? 'Something went wrong', response.status);
     err.data = json?.data ?? null;
     throw err;
   }
 
+  // Success — end sync tracking
+  if (!retry) { useSyncStore.getState().endSync(); }
   return json as T;
 }
 

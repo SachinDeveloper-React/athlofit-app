@@ -9,6 +9,16 @@ export interface GamificationState {
   lastActiveDate: string | null;
   coinsEarnedToday: number;
   lastCoinDate: string | null;
+  // Anti-cheat: coin block penalty info (null if not blocked)
+  coinBlocked: CoinBlockedInfo | null;
+}
+
+/** Info returned from backend when user is blocked from earning coins */
+export interface CoinBlockedInfo {
+  blocked: boolean;
+  blockedUntil: string; // ISO date
+  daysRemaining: number;
+  message?: string;
 }
 
 export type GamificationResponse = ApiResponse<GamificationState>;

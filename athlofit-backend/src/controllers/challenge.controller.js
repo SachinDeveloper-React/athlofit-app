@@ -4,11 +4,13 @@ const UserChallenge = require('../models/UserChallenge.model');
 const Gamification  = require('../models/Gamification.model');
 const HealthActivity = require('../models/HealthActivity.model');
 const MealLog       = require('../models/MealLog.model');
+const User          = require('../models/User.model');
 const { success, error } = require('../utils/response');
 const { todayISO } = require('../utils/date');
 const { sendPushToUser } = require('../utils/pushNotification');
 const { createNotification } = require('../utils/createNotification');
 const { logCoinTransaction } = require('../utils/logCoinTransaction');
+const { isCoinBlocked } = require('../utils/cheatPenalty');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -133,11 +135,14 @@ const syncChallengeProgress = async (userId) => {
     const totalProteinLogged  = mealLogs.reduce((s, m) => s + (m.protein  || 0), 0);
     const mealsLoggedCount    = mealLogs.length;
 
-    // Weekly data for weekly challenges
+    // Weekly data for weekly challenges (IST-based)
     const weekKey = getWeeklyPeriodKey();
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
-    const weekStartISO = weekStart.toISOString().split('T')[0];
+    const todayParts = today.split('-').map(Number);
+    const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
+    const dayOfWeek = todayDate.getDay(); // 0=Sun
+    const weekStartDate = new Date(todayDate);
+    weekStartDate.setDate(weekStartDate.getDate() - dayOfWeek);
+    const weekStartISO = `${weekStartDate.getFullYear()}-${String(weekStartDate.getMonth() + 1).padStart(2, '0')}-${String(weekStartDate.getDate()).padStart(2, '0')}`;
     const weekActivities = await HealthActivity.find({
       user: userId,
       date: { $gte: weekStartISO, $lte: today },
@@ -250,6 +255,25 @@ const syncChallengeProgress = async (userId) => {
 
       // Auto-award coins if just completed and not yet rewarded
       if (isCompleted && !existing?.isRewarded) {
+        // ── Anti-cheat: skip coin award if user is penalized ─────────────────
+        const user = await User.findById(userId).select('coinBlockedUntil');
+        const coinBlockStatus = isCoinBlocked(user || {});
+        if (coinBlockStatus.isBlocked) {
+          // Challenge is marked complete but coins are NOT awarded due to penalty.
+          // Still mark as rewarded to prevent retry — user forfeits this reward.
+          await UserChallenge.findOneAndUpdate(
+            { user: userId, challenge: challenge._id, periodKey },
+            { $set: { isRewarded: true, rewardedAt: new Date() } },
+            { new: true },
+          );
+          newlyCompleted.push({
+            title:      challenge.title,
+            emoji:      challenge.emoji,
+            coinReward: 0, // blocked
+          });
+          continue;
+        }
+
         // BUG-023 fix: save gam (coins) BEFORE marking isRewarded on UserChallenge.
         // If gam.save() fails, isRewarded stays false so the user can retry.
         // If we marked isRewarded first and gam.save() failed, coins would never be credited.

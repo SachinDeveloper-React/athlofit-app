@@ -74,8 +74,18 @@ class WidgetUpdateWorker(
     }
 
     private suspend fun readTodaySteps(prefs: android.content.SharedPreferences): Int {
+        // FIX: Check stored date before trusting liveStepCount.
+        // After midnight but before first sensor event, liveStepCount has yesterday's value.
+        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
+        val storedDate = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "Midnight reset pending (storedDate=$storedDate, today=$today) — returning 0")
+            return 0
+        }
+
         // Prefer the live in-memory step count from StepCounterService (real-time).
-        // This ensures the widget matches the notification and app UI exactly.
         val liveSteps = StepCounterService.liveStepCount
         if (liveSteps >= 0) {
             Log.d(TAG, "Using live sensor steps: $liveSteps")
@@ -83,11 +93,13 @@ class WidgetUpdateWorker(
         }
 
         // Fallback: try persisted value from StepCounterService
-        val stepPrefs = context.getSharedPreferences("StepCounterPrefs", Context.MODE_PRIVATE)
-        val persistedSteps = stepPrefs.getInt("dailySteps", 0)
-        if (persistedSteps > 0) {
-            Log.d(TAG, "Using persisted sensor steps: $persistedSteps")
-            return persistedSteps
+        // storedDate already verified as today above
+        if (storedDate == today) {
+            val persistedSteps = stepPrefs.getInt("dailySteps", 0)
+            if (persistedSteps > 0) {
+                Log.d(TAG, "Using persisted sensor steps: $persistedSteps (date=$storedDate)")
+                return persistedSteps
+            }
         }
 
         // Last resort: query Health Connect
@@ -98,11 +110,10 @@ class WidgetUpdateWorker(
             val startOfDay = today.atStartOfDay(zone).toInstant()
             val now        = Instant.now()
 
-            val loginTs = prefs.getLong("loginTimestamp", 0L)
-            val stepsStart = if (loginTs > 0L) {
-                val loginInstant = Instant.ofEpochMilli(loginTs)
-                if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-            } else startOfDay
+            // FIX: Always use startOfDay to show ALL steps walked today.
+            // Previously filtered by loginTimestamp which caused the widget to
+            // show fewer steps than the phone's built-in pedometer after re-login.
+            val stepsStart = startOfDay
 
             val stepRecords = client.readRecords(
                 ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(stepsStart, now))
@@ -110,14 +121,24 @@ class WidgetUpdateWorker(
 
             val stepsByOrigin = stepRecords
                 .groupBy { it.metadata.dataOrigin.packageName }
+                .filterKeys { it != applicationContext.packageName }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
             val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "Steps by origin (HC fallback): $stepsByOrigin → using $steps")
+            Log.d(TAG, "Steps by origin (HC fallback, excluding self): $stepsByOrigin → using $steps")
             steps
         } catch (e: Exception) {
             Log.w(TAG, "Steps read failed: ${e.message}")
-            prefs.getInt("steps", 0)
+            // Only return cached widget steps if they were written today.
+            // Prevents showing yesterday's stale count when HC is unavailable.
+            val lastUpdated = prefs.getLong("lastUpdated", 0)
+            val isFromToday = if (lastUpdated > 0) {
+                val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = lastUpdated }
+                val nowCal = java.util.Calendar.getInstance()
+                updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                    updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+            } else false
+            if (isFromToday) prefs.getInt("steps", 0) else 0
         }
     }
 }

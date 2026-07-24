@@ -1,6 +1,5 @@
 package com.athlofit
 
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,7 +13,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.health.connect.client.HealthConnectClient
@@ -25,6 +26,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,7 +34,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Calendar
 
 /**
  * StepCounterService
@@ -56,14 +57,12 @@ class StepCounterService : Service(), SensorEventListener {
     companion object {
         private const val TAG = "StepCounterService"
         private const val CHANNEL_ID = "step_counter_live"
-        // Use the same notification ID as StepNotificationService so only one
-        // notification is visible. StepNotificationService handles the display;
-        // this service just needs a foreground notification to stay alive.
         private const val NOTIF_ID = 1001
         private const val PREFS_NAME = "StepCounterPrefs"
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
         private const val STEP_HISTORY_KEY = "stepHistory"
-        private const val MIDNIGHT_ALARM_REQUEST_CODE = 3001
+        private const val DEBUG_LOG_KEY = "stepDebugLog"
+        private const val MAX_DEBUG_LINES = 50
 
         // Max report latency for sensor batching (10 seconds as per requirement 9.3)
         private const val MAX_REPORT_LATENCY_US = 10_000_000 // 10 seconds in microseconds
@@ -75,6 +74,24 @@ class StepCounterService : Service(), SensorEventListener {
         private const val HC_WRITE_INTERVAL_MS = 30 * 1000L
 
         /**
+         * Appends a debug log entry to SharedPreferences for production debugging.
+         * Keeps only the last MAX_DEBUG_LINES entries.
+         */
+        fun debugLog(context: Context, message: String) {
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val existing = prefs.getString(DEBUG_LOG_KEY, "") ?: ""
+                val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+                val newLine = "[$timestamp] $message"
+                val lines = existing.split("\n").filter { it.isNotEmpty() }.toMutableList()
+                lines.add(newLine)
+                // Keep only last N lines
+                while (lines.size > MAX_DEBUG_LINES) lines.removeAt(0)
+                prefs.edit().putString(DEBUG_LOG_KEY, lines.joinToString("\n")).apply()
+            } catch (_: Exception) { /* non-fatal */ }
+        }
+
+        /**
          * Live in-memory step count accessible from NativeStepModule.getCurrentSteps()
          * without waiting for the 90-second SharedPreferences persist cycle.
          * Returns -1 if the service is not running (caller should fall back to SharedPreferences).
@@ -82,6 +99,100 @@ class StepCounterService : Service(), SensorEventListener {
         @Volatile
         var liveStepCount: Int = -1
             private set
+
+        /**
+         * Forcefully sets the liveStepCount to a corrected value.
+         * Used only by correctInflatedSteps to fix the persisted inflation bug.
+         */
+        fun setLiveStepCountCorrected(steps: Int) {
+            liveStepCount = steps
+        }
+
+        /**
+         * Updates the live step count from an external source (e.g., JS layer pushing
+         * a fresher Health Connect value). Only applies if the new value is higher
+         * than the current count, preventing stale data from overwriting real-time sensor data.
+         * Also updates the notification and widget immediately.
+         *
+         * @param steps The step count to apply (only if > current liveStepCount).
+         * @param context Context for SharedPreferences and notification updates.
+         * @return true if the value was applied, false if current value is already higher.
+         */
+        fun pushStepUpdate(steps: Int, context: Context): Boolean {
+            // FIX: Do NOT update liveStepCount here. liveStepCount should ONLY be
+            // set by the hardware sensor (onSensorChanged). Updating it from
+            // Health Connect or server values creates a circular inflation loop:
+            //   HC/server value → liveStepCount → getCurrentSteps() → fed back to HC
+            // Instead, only update the notification and widget DISPLAY.
+            if (steps <= liveStepCount && liveStepCount >= 0) return false
+
+            // Update widget SharedPreferences
+            val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
+            val goal = widgetPrefs.getInt("goal", 10000)
+            widgetPrefs.edit()
+                .putInt("steps", steps)
+                .putLong("lastUpdated", System.currentTimeMillis())
+                .apply()
+
+            // Update notification
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            if (nm != null) {
+                val channel = android.app.NotificationChannel(
+                    "step_counter_live",
+                    "Live Step Counter",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Shows your live step count for today"
+                    setShowBadge(false)
+                }
+                nm.createNotificationChannel(channel)
+
+                val percentage = if (goal > 0) ((steps.toLong() * 100) / goal).toInt().coerceIn(0, 100) else 0
+                val stepsFormatted = String.format("%,d", steps)
+                val goalFormatted = String.format("%,d", goal)
+
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                    putExtra("screen", "steps")
+                }
+                val pendingIntent = launchIntent?.let {
+                    android.app.PendingIntent.getActivity(
+                        context, 0, it,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                    )
+                }
+
+                val notification = androidx.core.app.NotificationCompat.Builder(context, "step_counter_live")
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle("$stepsFormatted steps today")
+                    .setContentText("Goal: $goalFormatted \u2022 $percentage% complete")
+                    .setProgress(100, percentage, false)
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
+                    .setSilent(true)
+                    .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(pendingIntent)
+                    .build()
+
+                nm.notify(1001, notification)
+            }
+
+            // Trigger widget refresh broadcast
+            try {
+                val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(context)
+                val componentName = android.content.ComponentName(context, StepsWidgetProvider::class.java)
+                val ids = appWidgetManager.getAppWidgetIds(componentName)
+                if (ids.isNotEmpty()) {
+                    val intent = android.content.Intent(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+                        component = componentName
+                        putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                    }
+                    context.sendBroadcast(intent)
+                }
+            } catch (_: Exception) { /* non-fatal */ }
+
+            return true
+        }
 
         /**
          * Convenience method to start the service from any context.
@@ -147,6 +258,27 @@ class StepCounterService : Service(), SensorEventListener {
     /** Coroutine scope for Health Connect writes (requires suspend functions). */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // ── Health Connect polling mode (when native sensor is unavailable) ───────
+
+    /** Whether service is running in HC-only polling mode (no native sensor). */
+    private var isHcPollingMode: Boolean = false
+
+    /** Handler for periodic HC polling in HC-only mode. */
+    private val hcHandler = Handler(Looper.getMainLooper())
+
+    /** Last step count from HC poll (to avoid redundant notification updates). */
+    private var lastHcPollSteps: Int = -1
+
+    /** HC polling interval: 10 seconds for near-real-time notification updates. */
+    private val HC_POLL_INTERVAL_MS = 10_000L
+
+    private val hcPollRunnable = object : Runnable {
+        override fun run() {
+            pollHealthConnectAndUpdateNotification()
+            hcHandler.postDelayed(this, HC_POLL_INTERVAL_MS)
+        }
+    }
+
     // ── System references ─────────────────────────────────────────────────────
 
     private var sensorManager: SensorManager? = null
@@ -164,8 +296,11 @@ class StepCounterService : Service(), SensorEventListener {
         createNotificationChannel()
         try {
             // Show cached steps so notification never displays zero while awaiting first sensor event
+            // FIX: Only use cached steps if they're from today — prevents showing yesterday's count
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val cachedSteps = prefs.getInt("dailySteps", 0)
+            val storedDate = prefs.getString("storedDate", "") ?: ""
+            val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val cachedSteps = if (storedDate == todayStr) prefs.getInt("dailySteps", 0) else 0
             startForeground(NOTIF_ID, buildStepNotification(cachedSteps))
             lastNotificationUpdateTime = System.currentTimeMillis()
         } catch (e: Exception) {
@@ -185,8 +320,11 @@ class StepCounterService : Service(), SensorEventListener {
             if (storedDate.isNotEmpty() && storedDate != today) {
                 handleMultiDayGap(storedDate, today)
             } else {
-                // storedDate already matches today (unlikely at midnight) — just reschedule
-                scheduleMidnightAlarm()
+                // storedDate already matches today because MidnightResetReceiver
+                // updated SharedPrefs before starting the service. Still perform
+                // a full midnight reset to ensure liveStepCount=0, emit 0 to JS,
+                // and re-confirm baseline=lastCumulative in memory.
+                performMidnightReset()
             }
         } else {
             // Normal start: detect date change and perform midnight reset if needed
@@ -200,10 +338,14 @@ class StepCounterService : Service(), SensorEventListener {
         if (sensorManager == null) {
             val registered = registerSensorListener()
             if (!registered) {
-                Log.e(TAG, "Failed to register sensor listener — stopping service")
-                emitSensorFailure()
-                stopSelf()
-                return START_NOT_STICKY
+                // Native sensor unavailable — switch to Health Connect polling mode.
+                // This replaces the old StepNotificationService (which had a dataSync
+                // foreground type that was subject to Android 15+ 6-hour timeout).
+                // StepCounterService uses foregroundServiceType="health" which has no timeout.
+                Log.d(TAG, "Native sensor unavailable — switching to Health Connect polling mode")
+                isHcPollingMode = true
+                pollHealthConnectAndUpdateNotification()
+                hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
             }
         }
 
@@ -214,6 +356,12 @@ class StepCounterService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy — persisting state and unregistering sensor")
+        // Stop HC polling if active
+        if (isHcPollingMode) {
+            hcHandler.removeCallbacks(hcPollRunnable)
+        }
+        // Cancel coroutine scope
+        serviceScope.cancel()
         // Persist current state before shutdown
         persistState()
         // Unregister sensor listener
@@ -268,6 +416,11 @@ class StepCounterService : Service(), SensorEventListener {
         val cumulative = event.values[0].toLong()
         lastCumulative = cumulative
 
+        // Persist lastCumulative so midnight reset can use it even after service restart
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putLong("lastCumulative", cumulative)
+            .apply()
+
         // Check if the day has changed since last event — handles the case where
         // the midnight alarm fires late or doesn't fire at all (Doze mode).
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -287,9 +440,11 @@ class StepCounterService : Service(), SensorEventListener {
                 // Fresh start — no persisted baseline, use current cumulative
                 baseline = cumulative
                 persistState()
+                debugLog(this, "FIRST_EVENT: baseline set to $cumulative")
                 Log.d(TAG, "First event — initialized baseline to $cumulative")
                 return
             }
+            debugLog(this, "FIRST_EVENT: baseline already set=$baseline, cumulative=$cumulative")
         }
 
         // Delegate reboot detection and step calculation to pure function
@@ -306,6 +461,11 @@ class StepCounterService : Service(), SensorEventListener {
         dailySteps = result.dailySteps
         rebootOffset = result.rebootOffset
 
+        // Debug log every 100 steps or on significant changes
+        if (result.dailySteps % 100 == 0 || result.dailySteps > 10000) {
+            debugLog(this, "CALC: cum=$cumulative, base=${result.baseline}, offset=${result.rebootOffset}, daily=${result.dailySteps}")
+        }
+
         // Update the live static step count so NativeStepModule.getCurrentSteps()
         // always returns the freshest value without waiting for SharedPreferences persist.
         liveStepCount = dailySteps
@@ -316,7 +476,14 @@ class StepCounterService : Service(), SensorEventListener {
         maybeUpdateNotification()
         maybeEmitEvent()
         updateWidget()
-        maybeWriteToHealthConnect()
+        // FIX: Disabled maybeWriteToHealthConnect(). Writing steps to Health Connect
+        // under our own package creates a circular inflation loop:
+        //   native sensor → write to HC as "com.athlofit.athlofit" → readStepsDeduped
+        //   picks up our written data → inflated value → compounds each cycle.
+        // The platform sensor (com.android.healthconnect.phone / com.google.android.gms)
+        // already writes steps to Health Connect automatically. Other apps can read
+        // those. We don't need to duplicate the write.
+        // maybeWriteToHealthConnect()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -351,6 +518,7 @@ class StepCounterService : Service(), SensorEventListener {
             .putLong("lastSyncTime", lastSyncTime)
             .putInt("lastSyncedSteps", lastSyncedSteps)
             .putString("pendingSyncPayload", pendingSyncPayload)
+            .putLong("lastCumulative", lastCumulative)
             .apply()
     }
 
@@ -366,6 +534,100 @@ class StepCounterService : Service(), SensorEventListener {
         lastSyncTime = prefs.getLong("lastSyncTime", 0L)
         lastSyncedSteps = prefs.getInt("lastSyncedSteps", -1)
         pendingSyncPayload = prefs.getString("pendingSyncPayload", "") ?: ""
+        // Restore lastCumulative so midnight reset works even after service restart
+        lastCumulative = prefs.getLong("lastCumulative", 0L)
+
+        // FIX: One-time FULL reset of all step state from the inflation bug.
+        // Resets rebootOffset, dailySteps, AND baseline so the sensor starts fresh.
+        // Uses "inflationFixV2" flag (v1 didn't reset baseline, so inflation persisted).
+        val inflationFixV2 = prefs.getBoolean("inflationFixV2", false)
+        if (!inflationFixV2) {
+            debugLog(this, "FIX_V2: Resetting ALL state (offset=$rebootOffset, daily=$dailySteps, baseline=$baseline)")
+            Log.w(TAG, "loadPersistedState — inflationFixV2: resetting ALL step state (offset=$rebootOffset, daily=$dailySteps, baseline=$baseline)")
+            rebootOffset = 0
+            dailySteps = 0
+            baseline = 0L  // Force re-initialization on next sensor event
+            hasReceivedFirstEvent = false  // Ensure baseline gets set fresh from current cumulative
+            prefs.edit()
+                .putInt("rebootOffset", 0)
+                .putInt("dailySteps", 0)
+                .putLong("baseline", 0L)
+                .putBoolean("inflationFixV2", true)
+                .apply()
+        }
+
+        // FIX V3: The baseline from yesterday persisted across midnight because
+        // performMidnightReset didn't fire (lastCumulative was 0 on service restart).
+        // If storedDate is not today, baseline is stale — reset it.
+        // Now uses persisted lastCumulative for proper baseline if available.
+        val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            val newBaseline = if (lastCumulative > 0L) lastCumulative else 0L
+            debugLog(this, "FIX_V3: Stale date ($storedDate != $today). baseline=$baseline → $newBaseline, lastCum=$lastCumulative")
+            baseline = newBaseline
+            dailySteps = 0
+            rebootOffset = 0
+            storedDate = today
+            if (newBaseline == 0L) hasReceivedFirstEvent = false
+            persistState()
+        }
+
+        // FIX V4: One-time baseline reset for users who already have today's date
+        // but with a stale baseline from yesterday (the date got updated but baseline didn't).
+        val fixV4 = prefs.getBoolean("inflationFixV4", false)
+        if (!fixV4) {
+            debugLog(this, "FIX_V4: One-time baseline reset (baseline=$baseline, daily=$dailySteps)")
+            baseline = 0L
+            dailySteps = 0
+            rebootOffset = 0
+            hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", 0L)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV4", true)
+                .apply()
+        }
+
+        // FIX V5: Same as V4 but for users who already applied V4 on July 20.
+        // Their baseline was set to 26702 (correct for July 20) but persisted into July 21.
+        // Force re-initialization from current sensor cumulative.
+        val fixV5 = prefs.getBoolean("inflationFixV5", false)
+        if (!fixV5) {
+            debugLog(this, "FIX_V5: Force baseline reinit (baseline=$baseline, daily=$dailySteps, lastCum=$lastCumulative)")
+            val newBase = if (lastCumulative > 0L) lastCumulative else 0L
+            baseline = newBase
+            dailySteps = 0
+            rebootOffset = 0
+            if (newBase == 0L) hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", newBase)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV5", true)
+                .apply()
+        }
+
+        // FIX V6: Final one-time fix for users who already ran V5 but still have
+        // stale baseline (because V5 ran with lastCumulative=0 or wrong value).
+        // This time: always reset baseline to 0 and let first sensor event set it fresh.
+        // This guarantees clean slate for ALL affected users regardless of prior state.
+        val fixV6 = prefs.getBoolean("inflationFixV6", false)
+        if (!fixV6) {
+            debugLog(this, "FIX_V6: Final baseline reset (baseline=$baseline, daily=$dailySteps, lastCum=$lastCumulative)")
+            baseline = 0L
+            dailySteps = 0
+            rebootOffset = 0
+            hasReceivedFirstEvent = false
+            prefs.edit()
+                .putLong("baseline", 0L)
+                .putInt("dailySteps", 0)
+                .putInt("rebootOffset", 0)
+                .putBoolean("inflationFixV6", true)
+                .apply()
+        }
+
+        debugLog(this, "LOAD: daily=$dailySteps, offset=$rebootOffset, baseline=$baseline, date=$storedDate, fixV2=$inflationFixV2")
 
         // Keep live count in sync with persisted state on service start
         liveStepCount = dailySteps
@@ -387,6 +649,35 @@ class StepCounterService : Service(), SensorEventListener {
         // FIX #8: Skip sync if steps haven't changed and there's no pending retry.
         // This prevents POSTing identical data every 15 min when the phone is on a desk.
         if (dailySteps == lastSyncedSteps && pendingSyncPayload.isEmpty()) return
+
+        // FIX: Date staleness guard — if storedDate doesn't match today, midnight
+        // reset hasn't happened yet. Skip sync to prevent yesterday's steps from
+        // being POSTed with today's date (race condition on OEMs that delay alarms).
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "maybeSync — skipping: storedDate=$storedDate != today=$today (midnight reset pending)")
+            return
+        }
+
+        // FIX: Discard stale pending payload from a previous day. If the pending
+        // payload contains a date that doesn't match today, it's leftover from a
+        // failed sync yesterday — drop it instead of sending stale data.
+        if (pendingSyncPayload.isNotEmpty()) {
+            try {
+                val pendingJson = JSONObject(pendingSyncPayload)
+                val pendingDate = pendingJson.optString("date", "")
+                if (pendingDate.isNotEmpty() && pendingDate != today) {
+                    Log.d(TAG, "maybeSync — discarding stale pending payload (date=$pendingDate, today=$today)")
+                    pendingSyncPayload = ""
+                    persistState()
+                }
+            } catch (e: Exception) {
+                // Malformed payload — discard it
+                Log.w(TAG, "maybeSync — discarding malformed pending payload", e)
+                pendingSyncPayload = ""
+                persistState()
+            }
+        }
 
         // Build a fresh payload for the current step data
         val payload = buildSyncPayload()
@@ -535,64 +826,14 @@ class StepCounterService : Service(), SensorEventListener {
      * Updates liveStepCount, notification, and widget once the seed value arrives.
      */
     private fun seedFromHealthConnectIfNeeded() {
-        serviceScope.launch {
-            try {
-                val client = HealthConnectClient.getOrCreate(this@StepCounterService)
-                val zone = ZoneId.systemDefault()
-                val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
-                val now = Instant.now()
-
-                // Apply loginTimestamp filter if available (same logic as notification service)
-                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-                val loginTs = widgetPrefs.getLong("loginTimestamp", 0L)
-                val stepsStart = if (loginTs > 0L) {
-                    val loginInstant = Instant.ofEpochMilli(loginTs)
-                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-                } else startOfDay
-
-                val stepRecords = client.readRecords(
-                    ReadRecordsRequest(
-                        StepsRecord::class,
-                        TimeRangeFilter.between(stepsStart, now),
-                    )
-                ).records
-
-                // Dedup by data origin — pick highest single source (same logic as notification)
-                val stepsByOrigin = stepRecords
-                    .groupBy { it.metadata.dataOrigin.packageName }
-                    .mapValues { (_, records) -> records.sumOf { it.count } }
-
-                val hcSteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-
-                if (hcSteps > dailySteps) {
-                    // HC reports more steps than the sensor has counted since restart.
-                    // The difference is steps accumulated before the service started
-                    // (e.g., user walked before the app launched this morning).
-                    // Store the difference as rebootOffset so the calculateSteps formula
-                    // (cumulative - baseline) + rebootOffset preserves these steps
-                    // when the next sensor event arrives. Without this, the sensor
-                    // calculation would overwrite dailySteps with just the delta since
-                    // baseline, losing all steps accumulated before the service started.
-                    val missingSteps = hcSteps - dailySteps
-                    Log.d(TAG, "seedFromHealthConnect — seeding offset of $missingSteps steps (HC=$hcSteps, sensor=$dailySteps)")
-                    rebootOffset += missingSteps
-                    dailySteps = hcSteps
-                    liveStepCount = hcSteps
-                    persistState()
-                    // Update notification and widget immediately
-                    maybeUpdateNotification()
-                    updateWidget()
-                    // Emit to JS so the app shows correct value
-                    NativeStepModule.emitStepUpdate(hcSteps, forceEmit = true)
-                } else {
-                    Log.d(TAG, "seedFromHealthConnect — HC returned $hcSteps steps, dailySteps=$dailySteps, no seed needed")
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "seedFromHealthConnect — failed: ${e.message}", e)
-                // Non-fatal: service continues counting from 0, HC data will
-                // show in the app via the normal useHealth flow.
-            }
-        }
+        // FIX: Completely disabled. This function was the root cause of step inflation.
+        // It reads HC (which may contain our own stale records or cached data) and
+        // injects the difference into rebootOffset, causing dailySteps to inflate.
+        //
+        // Cross-device step continuity is handled by the JS layer (stepOffset.service.ts).
+        // The native service only needs to count hardware sensor steps for notification/widget.
+        // Seeding from HC is no longer needed and only causes problems.
+        Log.d(TAG, "seedFromHealthConnectIfNeeded — DISABLED (inflation fix)")
     }
 
     /**
@@ -638,18 +879,61 @@ class StepCounterService : Service(), SensorEventListener {
 
         dailySteps = 0
         rebootOffset = 0
-        // Set baseline to last known cumulative sensor value
-        // If no sensor event has been received yet, keep existing baseline
+        // Set baseline to last known cumulative sensor value.
+        // If no sensor event has been received yet (lastCumulative == 0),
+        // reset baseline to 0 so the first sensor event reinitializes it
+        // to the current cumulative. This prevents the old baseline from
+        // persisting across midnight and inflating next day's step count.
         if (lastCumulative > 0L) {
             baseline = lastCumulative
+        } else {
+            baseline = 0L
+            hasReceivedFirstEvent = false // Force reinitialization on next event
         }
         storedDate = today
+        debugLog(this, "MIDNIGHT_RESET: baseline=$baseline, lastCum=$lastCumulative, date=$today")
 
         // Update live step count immediately so JS reads 0 right after midnight
         liveStepCount = 0
 
         persistState()
         scheduleMidnightAlarm()
+
+        // FIX: Delete our own stale step records from Health Connect.
+        // This prevents seedFromHealthConnectIfNeeded from re-inflating on next restart.
+        serviceScope.launch {
+            try {
+                val status = HealthConnectClient.getSdkStatus(this@StepCounterService)
+                if (status == HealthConnectClient.SDK_AVAILABLE) {
+                    val client = HealthConnectClient.getOrCreate(this@StepCounterService)
+                    val zone = ZoneId.systemDefault()
+                    // Delete yesterday's records (they're the ones that could bleed)
+                    val yesterday = LocalDate.now(zone).minusDays(1)
+                    val yesterdayStart = yesterday.atStartOfDay(zone).toInstant()
+                    val yesterdayEnd = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+                    val todayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+                    val nowInstant = Instant.now()
+
+                    // Delete our own records from yesterday AND today
+                    val allRecords = client.readRecords(
+                        ReadRecordsRequest(
+                            StepsRecord::class,
+                            TimeRangeFilter.between(yesterdayStart, nowInstant)
+                        )
+                    ).records.filter {
+                        it.metadata.dataOrigin.packageName == packageName
+                    }
+
+                    if (allRecords.isNotEmpty()) {
+                        val ids = allRecords.map { it.metadata.id }
+                        client.deleteRecords(StepsRecord::class, ids, emptyList())
+                        Log.d(TAG, "performMidnightReset — deleted ${ids.size} own HC step records")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "performMidnightReset — HC cleanup failed: ${e.message}")
+            }
+        }
 
         // Emit step update event to JS so the UI resets to 0 immediately
         NativeStepModule.emitStepUpdate(0, forceEmit = true)
@@ -692,42 +976,16 @@ class StepCounterService : Service(), SensorEventListener {
     // ── Midnight Alarm Scheduling ─────────────────────────────────────────────
 
     /**
-     * Schedules an inexact AlarmManager alarm targeting the next occurrence of
+     * Schedules an exact AlarmManager alarm targeting the next occurrence of
      * midnight (00:00:00) local time as a fallback reset trigger.
-     * Uses setAndAllowWhileIdle for Doze compatibility.
+     * Uses setExactAndAllowWhileIdle for precise midnight reset on OEM-aggressive
+     * devices (Xiaomi, Samsung, Huawei) where inexact alarms can be delayed 15+ min.
+     *
+     * Falls back to setAndAllowWhileIdle if exact alarm permission is not granted
+     * (Android 12+ requires SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM).
      */
     private fun scheduleMidnightAlarm() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-        if (alarmManager == null) {
-            Log.e(TAG, "AlarmManager is null — cannot schedule midnight alarm")
-            return
-        }
-
-        val intent = Intent(this, MidnightResetReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this,
-            MIDNIGHT_ALARM_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Calculate next midnight
-        val calendar = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        // Use setAndAllowWhileIdle for Doze compatibility (inexact but reliable)
-        alarmManager.setAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            calendar.timeInMillis,
-            pendingIntent
-        )
-
-        Log.d(TAG, "scheduleMidnightAlarm — alarm set for ${calendar.time}")
+        MidnightAlarmScheduler.schedule(this)
     }
 
     // ── Notification ─────────────────────────────────────────────────────────
@@ -738,10 +996,6 @@ class StepCounterService : Service(), SensorEventListener {
      * updates which could drain battery or cause visual flickering.
      */
     private fun maybeUpdateNotification() {
-        val now = System.currentTimeMillis()
-        if (now - lastNotificationUpdateTime < 5_000L) return
-        lastNotificationUpdateTime = now
-
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         nm.notify(NOTIF_ID, buildStepNotification(dailySteps))
     }
@@ -807,6 +1061,16 @@ class StepCounterService : Service(), SensorEventListener {
         if (now - lastHcWriteTime < HC_WRITE_INTERVAL_MS) return
         if (dailySteps <= 0 || dailySteps == lastHcWrittenSteps) return
 
+        // Midnight sync guard: don't write to Health Connect if the stored date
+        // doesn't match today. This prevents stale yesterday's steps from being
+        // written under today's date during the brief window after midnight but
+        // before performMidnightReset() fires.
+        val today = LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        if (storedDate.isNotEmpty() && storedDate != today) {
+            Log.d(TAG, "maybeWriteToHealthConnect — skipping, storedDate=$storedDate != today=$today (awaiting midnight reset)")
+            return
+        }
+
         lastHcWriteTime = now
         val stepsToWrite = dailySteps
 
@@ -824,17 +1088,9 @@ class StepCounterService : Service(), SensorEventListener {
                 val today = LocalDate.now(zone)
                 val startOfDay = today.atStartOfDay(zone).toInstant()
                 
-                // Use loginTimestamp as start if available (reading logic filters from login time)
-                // This ensures the written record falls within the reading query's time range.
-                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-                val loginTs = widgetPrefs.getLong("loginTimestamp", 0L)
-                val startTime = if (loginTs > 0L) {
-                    val loginInstant = Instant.ofEpochMilli(loginTs)
-                    // Use login time if it's today, otherwise use start of day
-                    if (loginInstant.isAfter(startOfDay)) loginInstant else startOfDay
-                } else {
-                    startOfDay
-                }
+                // Always write from startOfDay so the record is visible to all
+                // step queries (app, widget, notification all read from startOfDay).
+                val startTime = startOfDay
                 val endTime = Instant.now()
 
                 // startTime must be strictly before endTime
@@ -877,6 +1133,94 @@ class StepCounterService : Service(), SensorEventListener {
                 Log.d(TAG, "Wrote $stepsToWrite steps to Health Connect (deleted old records first)")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to write steps to Health Connect: ${e.message}", e)
+            }
+        }
+    }
+
+    // ── Health Connect Polling (HC-only mode) ───────────────────────────────
+
+    /**
+     * Polls Health Connect for today's steps and updates the notification.
+     * Used when the native sensor is unavailable (HC-only devices, API 34+).
+     * Replicates the single-source deduplication logic from the former
+     * StepNotificationService to avoid inflated counts from multiple apps.
+     */
+    private fun pollHealthConnectAndUpdateNotification() {
+        // Check midnight reset state first
+        val stepPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val storedDateVal = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+        if (storedDateVal.isNotEmpty() && storedDateVal != today) {
+            // Midnight reset pending — show 0
+            if (lastHcPollSteps != 0) {
+                lastHcPollSteps = 0
+                liveStepCount = 0
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildStepNotification(0))
+                updateWidget()
+                NativeStepModule.emitStepUpdate(0, forceEmit = true)
+                Log.d(TAG, "HC poll: notification reset to 0 (midnight reset pending)")
+            }
+            return
+        }
+
+        serviceScope.launch {
+            try {
+                val zone = ZoneId.systemDefault()
+                val now = Instant.now()
+                val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+
+                val client = HealthConnectClient.getOrCreate(this@StepCounterService)
+
+                // readRecords + single-source dedup — pick the highest-count source
+                // (excluding our own package) to avoid inflation from multiple apps.
+                val stepRecords = client.readRecords(
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        TimeRangeFilter.between(startOfDay, now),
+                    )
+                ).records
+
+                val stepsByOrigin = stepRecords
+                    .groupBy { it.metadata.dataOrigin.packageName }
+                    .filterKeys { it != packageName }
+                    .mapValues { (_, records) -> records.sumOf { it.count } }
+
+                val todaySteps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+
+                // Fallback to widget cache if HC returns 0 (common early morning / after reboot)
+                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
+                val cachedSteps = widgetPrefs.getInt("steps", 0)
+                val cachedLastUpdated = widgetPrefs.getLong("lastUpdated", 0)
+                val isCachedFromToday = if (cachedLastUpdated > 0) {
+                    val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = cachedLastUpdated }
+                    val nowCal = java.util.Calendar.getInstance()
+                    updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                        updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+                } else false
+                val safeCachedSteps = if (isCachedFromToday) cachedSteps else 0
+                val steps = if (todaySteps == 0 && safeCachedSteps > 0) safeCachedSteps else todaySteps
+
+                if (steps != lastHcPollSteps) {
+                    lastHcPollSteps = steps
+                    liveStepCount = steps
+                    val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    nm.notify(NOTIF_ID, buildStepNotification(steps))
+                    updateWidget()
+                    NativeStepModule.emitStepUpdate(steps)
+                    Log.d(TAG, "HC poll: notification updated — $steps steps (origins: $stepsByOrigin)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "HC poll failed: ${e.message} — using cached value")
+                val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
+                val cachedSteps = widgetPrefs.getInt("steps", 0)
+                if (cachedSteps != lastHcPollSteps) {
+                    lastHcPollSteps = cachedSteps
+                    liveStepCount = cachedSteps
+                    val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    nm.notify(NOTIF_ID, buildStepNotification(cachedSteps))
+                }
             }
         }
     }
