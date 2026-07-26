@@ -54,7 +54,7 @@ export interface Step1Props {
 }
 
 export interface Step2Props {
-  onSubmit: (v: BodyFormValues) => void;
+  onSubmit: (v: BodyFormValues & { heightUnit?: 'cm' | 'ft'; weightUnit?: 'kg' | 'lbs' }) => void;
   loading: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
 }

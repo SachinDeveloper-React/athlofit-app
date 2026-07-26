@@ -17,7 +17,7 @@ import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 //   (Platform.OS === 'android'
 //     ? 'http://192.168.0.129:5001/'
 //     : 'http://localhost:5001/');
-// export const BASE_URL = 'http://192.168.0.129:5001/'
+// export const BASE_URL = 'http://192.168.1.37:5001/'
 
 export const BASE_URL = 'https://api.athlofit.com/'
 

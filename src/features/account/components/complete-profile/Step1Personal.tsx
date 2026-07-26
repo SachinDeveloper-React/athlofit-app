@@ -3,7 +3,7 @@ import { Step1Props } from '../../types/completeProfile.types';
 import { PersonalFormValues, personalSchema } from '../../utils/profileSetup.validation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Image, StyleSheet, TouchableOpacity } from 'react-native';
-import { AppView, AppText, Button, Avatar, Icon } from '../../../../components';
+import { AppView, AppText, Button, Icon } from '../../../../components';
 import { DateField } from './DateField';
 import { PhoneField } from './PhoneField';
 import { GENDER_OPTIONS } from '../../constants/completeProfile.constant';

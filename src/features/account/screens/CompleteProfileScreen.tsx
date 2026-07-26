@@ -63,7 +63,7 @@ const CompleteProfileScreen: React.FC<Props> = () => {
     setStep(2);
   };
 
-  const handleStep2 = async (values: BodyFormValues) => {
+  const handleStep2 = async (values: BodyFormValues & { heightUnit?: 'cm' | 'ft'; weightUnit?: 'kg' | 'lbs' }) => {
     if (!step1Data) return;
 
     // Upload avatar to Cloudinary right before submitting

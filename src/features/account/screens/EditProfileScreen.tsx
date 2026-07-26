@@ -30,8 +30,8 @@ import {
   BLOOD_TYPES,
 } from '../constants/completeProfile.constant';
 import { PickerSheet } from '../components/complete-profile/PickerSheet';
-import { NumericStepper } from '../components/complete-profile/NumericStepper';
 import { HeightInput } from '../components/complete-profile/HeightInput';
+import { WeightInput } from '../components/complete-profile/WeightInput';
 import AvatarPickerModal from '../components/AvatarPickerModal';
 import { useAvatarUpload } from '../hooks/useAvatarUpload';
 import { ActivityIndicator } from 'react-native';
@@ -68,9 +68,11 @@ const EditProfileScreen: React.FC = () => {
 
   const [bloodTypePickerVisible, setBloodTypePickerVisible] =
     React.useState(false);
+  const [heightUnit, setHeightUnit] = React.useState<'cm' | 'ft'>(user?.heightUnit || 'cm');
+  const [weightUnit, setWeightUnit] = React.useState<'kg' | 'lbs'>(user?.weightUnit || 'kg');
 
   const onSubmit = (values: EditProfileFormValues) => {
-    updateProfile(values, {
+    updateProfile({ ...values, heightUnit, weightUnit }, {
       onSuccess: () => {
         toast.success('Profile updated successfully! ✨');
         navigation.goBack();
@@ -309,6 +311,8 @@ const EditProfileScreen: React.FC = () => {
                   <HeightInput
                     value={value}
                     onChange={onChange}
+                    onUnitChange={setHeightUnit}
+                    initialUnit={user?.heightUnit || 'cm'}
                   />
                 )}
               />
@@ -319,11 +323,11 @@ const EditProfileScreen: React.FC = () => {
                 control={control}
                 name="weight"
                 render={({ field: { value, onChange } }) => (
-                  <NumericStepper
-                    label="Weight"
-                    unit="kg"
+                  <WeightInput
                     value={value}
                     onChange={onChange}
+                    onUnitChange={setWeightUnit}
+                    initialUnit={user?.weightUnit || 'kg'}
                     min={20}
                     max={300}
                     step={0.5}

@@ -17,6 +17,10 @@ interface HeightInputProps {
   value: number | undefined;
   /** Called with value in cm */
   onChange: (cm: number) => void;
+  /** Called when user switches unit */
+  onUnitChange?: (unit: 'cm' | 'ft') => void;
+  /** Initial unit to display (from user's saved preference) */
+  initialUnit?: 'cm' | 'ft';
   error?: string;
 }
 
@@ -28,10 +32,12 @@ export const HeightInput: React.FC<HeightInputProps> = ({
   label = 'Height',
   value,
   onChange,
+  onUnitChange,
+  initialUnit = 'cm',
   error,
 }) => {
   const { colors } = useTheme();
-  const [unit, setUnit] = useState<HeightUnit>('cm');
+  const [unit, setUnit] = useState<HeightUnit>(initialUnit);
 
   // Local state
   const [cmRaw, setCmRaw] = useState(value?.toString() ?? '');
@@ -52,13 +58,14 @@ export const HeightInput: React.FC<HeightInputProps> = ({
 
   const handleUnitToggle = useCallback((newUnit: HeightUnit) => {
     setUnit(newUnit);
+    onUnitChange?.(newUnit);
     if (newUnit === 'ft' && value) {
       setSelectedFt(cmToFeet(value));
       setSelectedIn(cmToInches(value));
     } else if (newUnit === 'cm' && value) {
       setCmRaw(value.toString());
     }
-  }, [value]);
+  }, [value, onUnitChange]);
 
   const handleCmChange = useCallback((txt: string) => {
     setCmRaw(txt);
@@ -171,10 +178,12 @@ export const HeightInput: React.FC<HeightInputProps> = ({
             <AppText style={[styles.sheetTitle, { color: colors.foreground }]}>
               {pickerOpen === 'ft' ? 'Select Feet' : 'Select Inches'}
             </AppText>
+            <AppView style={styles.listContainer}>
             <FlashList
               data={pickerOpen === 'ft' ? FEET_OPTIONS : INCH_OPTIONS}
               keyExtractor={item => item.toString()}
               showsVerticalScrollIndicator={false}
+              // estimatedItemSize={52}
               renderItem={({ item }) => {
                 const isSelected = pickerOpen === 'ft' ? item === selectedFt : item === selectedIn;
                 return (
@@ -199,6 +208,7 @@ export const HeightInput: React.FC<HeightInputProps> = ({
                 );
               }}
             />
+            </AppView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -270,6 +280,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 40,
     maxHeight: '50%',
+  },
+  listContainer: {
+    // flex: 1,
+    minHeight: 200,
   },
   handle: {
     width: 36,

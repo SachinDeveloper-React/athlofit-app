@@ -103,10 +103,30 @@ export function useHealth(options: UseHealthOptions = {}) {
     // so stale steps never leak into the new day's display.
     if (!isCacheFromToday) {
       useHealthDataStore.getState().setData(defaultHealthData);
-      useHealthDataStore.getState().setSyncedStepOffset(0, '');
-      useHealthDataStore.getState().setSyncedServerBaseline(null, '');
-      useHealthDataStore.getState().setStepOffsetFetched(false);
-      useHealthDataStore.getState().setBonusSteps(0, '');
+
+      // Only clear step offset / server baseline if they are stale (from a
+      // previous day). After a fresh login, fetchAndStoreTodayStepOffset may
+      // have ALREADY stored today's baseline before this component mounts.
+      // Unconditionally wiping it caused distance/calories/activeMinutes to
+      // show 0 after re-login because the baseline (the only source of
+      // pre-login values) was destroyed before loadData could read it.
+      const today = getLocalToday();
+      const { syncedStepOffsetDate, syncedServerBaselineDate, bonusStepsDate } =
+        useHealthDataStore.getState();
+      if (syncedStepOffsetDate !== today) {
+        useHealthDataStore.getState().setSyncedStepOffset(0, '');
+      }
+      if (syncedServerBaselineDate !== today) {
+        useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+      }
+      if (bonusStepsDate !== today) {
+        useHealthDataStore.getState().setBonusSteps(0, '');
+      }
+
+      // If the step offset fetch hasn't completed yet (login flow in progress),
+      // keep the flag as-is so loadData waits for it. If it already completed
+      // (baseline is stored for today), leave it as true so loadData proceeds
+      // immediately without an unnecessary 3-second wait.
     }
 
     if (preInitialized) {
@@ -506,15 +526,35 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
-          const combinedSteps = isLoginToday
+          // Heuristic: If HK returns steps >= 80% of server baseline, HK likely
+          // has full-day data (time filter not effective). Use max() to avoid
+          // doubling. If HK steps are much less, HK has only post-login data → additive.
+          const hkHasFullDay = isLoginToday && serverStepsTrusted > 0
+            && result.steps >= serverStepsTrusted * 0.8;
+          const useAdditive = isLoginToday && !hkHasFullDay;
+
+          const combinedSteps = useAdditive
             ? serverStepsTrusted + result.steps
             : Math.max(result.steps, serverStepsTrusted);
 
+          // When using additive mode (HK only has post-login data), distance,
+          // calories, and activeMinutes must also be additive so they increment.
+          // When HK has full-day data, Math.max ensures no doubling.
+          const combinedCalories = useAdditive
+            ? syncedServerBaseline.calories + result.calories
+            : Math.max(result.calories, syncedServerBaseline.calories);
+          const combinedDistance = useAdditive
+            ? Math.round((syncedServerBaseline.distance + result.distance) * 100) / 100
+            : Math.max(result.distance, syncedServerBaseline.distance);
+          const combinedActiveMinutes = useAdditive
+            ? syncedServerBaseline.activeMinutes + result.activeMinutes
+            : Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes);
+
           result = {
             steps: combinedSteps,
-            calories: Math.max(result.calories, syncedServerBaseline.calories),
-            distance: Math.max(result.distance, syncedServerBaseline.distance),
-            activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
+            calories: combinedCalories,
+            distance: combinedDistance,
+            activeMinutes: combinedActiveMinutes,
             heartRate: result.heartRate || syncedServerBaseline.heartRate,
             heartRateMin: result.heartRateMin || syncedServerBaseline.heartRateMin,
             heartRateMax: result.heartRateMax || syncedServerBaseline.heartRateMax,
@@ -675,15 +715,36 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
-          const combinedSteps = isLoginToday
+          // Heuristic: If HC returns steps >= 80% of server baseline, HC likely
+          // has full-day data (time filter not effective on this device/source).
+          // Use max() to avoid doubling. If HC steps are much less than server,
+          // HC genuinely has only post-login data → use additive.
+          const hcHasFullDay = isLoginToday && serverStepsTrusted > 0
+            && result.steps >= serverStepsTrusted * 0.8;
+          const useAdditive = isLoginToday && !hcHasFullDay;
+
+          const combinedSteps = useAdditive
             ? serverStepsTrusted + result.steps  // Server (before login) + HC (after login)
-            : Math.max(result.steps, serverStepsTrusted); // Full day — take max
+            : Math.max(result.steps, serverStepsTrusted); // Full day or not login today — take max
+
+          // When using additive mode (HC only has post-login data), distance,
+          // calories, and activeMinutes must also be additive so they increment.
+          // When HC has full-day data, Math.max ensures no doubling.
+          const combinedCalories = useAdditive
+            ? syncedServerBaseline.calories + result.calories
+            : Math.max(result.calories, syncedServerBaseline.calories);
+          const combinedDistance = useAdditive
+            ? Math.round((syncedServerBaseline.distance + result.distance) * 100) / 100
+            : Math.max(result.distance, syncedServerBaseline.distance);
+          const combinedActiveMinutes = useAdditive
+            ? syncedServerBaseline.activeMinutes + result.activeMinutes
+            : Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes);
 
           result = {
             steps: combinedSteps,
-            calories: Math.max(result.calories, syncedServerBaseline.calories),
-            distance: Math.max(result.distance, syncedServerBaseline.distance),
-            activeMinutes: Math.max(result.activeMinutes, syncedServerBaseline.activeMinutes),
+            calories: combinedCalories,
+            distance: combinedDistance,
+            activeMinutes: combinedActiveMinutes,
             heartRate: result.heartRate || syncedServerBaseline.heartRate,
             heartRateMin: result.heartRateMin || syncedServerBaseline.heartRateMin,
             heartRateMax: result.heartRateMax || syncedServerBaseline.heartRateMax,

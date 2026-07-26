@@ -6,7 +6,7 @@ import {
 import { AppView, AppText, Button, Icon } from '../../../../components';
 import { Step2Props } from '../../types/completeProfile.types';
 import { Controller, useForm } from 'react-hook-form';
-import { NumericStepper } from './NumericStepper';
+import { WeightInput } from './WeightInput';
 import { HeightInput } from './HeightInput';
 import { PickerSheet } from './PickerSheet';
 import { useState } from 'react';
@@ -23,6 +23,8 @@ export const Step2Body: React.FC<Step2Props> = ({
   colors,
 }) => {
   const [showBloodPicker, setShowBloodPicker] = useState(false);
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
 
   const {
     control,
@@ -59,6 +61,7 @@ export const Step2Body: React.FC<Step2Props> = ({
           <HeightInput
             value={value}
             onChange={onChange}
+            onUnitChange={setHeightUnit}
             error={errors.height?.message}
           />
         )}
@@ -69,11 +72,10 @@ export const Step2Body: React.FC<Step2Props> = ({
         control={control}
         name="weight"
         render={({ field: { value, onChange } }) => (
-          <NumericStepper
-            label="Weight"
-            unit="kg"
+          <WeightInput
             value={value}
             onChange={onChange}
+            onUnitChange={setWeightUnit}
             error={errors.weight?.message}
             min={10}
             max={500}
@@ -140,7 +142,7 @@ export const Step2Body: React.FC<Step2Props> = ({
 
       <Button
         label="Complete Profile"
-        onPress={handleSubmit(onSubmit)}
+        onPress={handleSubmit((values) => onSubmit({ ...values, heightUnit, weightUnit }))}
         loading={loading}
         size="lg"
         fullWidth

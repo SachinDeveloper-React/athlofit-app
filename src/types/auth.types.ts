@@ -67,6 +67,8 @@ export interface User {
   bloodType?: string | null;
   avatarUrl?: string | null;
   unitSystem?: 'metric' | 'imperial';
+  heightUnit?: 'cm' | 'ft';
+  weightUnit?: 'kg' | 'lbs';
   referralCode?: string | null;
 }
 
@@ -78,6 +80,8 @@ export interface CompleteProfileRequest {
   weight: number; // kg
   bloodType: string; // e.g. "A+" | "O-"
   avatarUrl?: string | null;
+  heightUnit?: 'cm' | 'ft';
+  weightUnit?: 'kg' | 'lbs';
 }
 
 
