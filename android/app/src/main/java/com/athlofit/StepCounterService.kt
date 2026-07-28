@@ -64,8 +64,11 @@ class StepCounterService : Service(), SensorEventListener {
         private const val DEBUG_LOG_KEY = "stepDebugLog"
         private const val MAX_DEBUG_LINES = 50
 
-        // Max report latency for sensor batching (10 seconds as per requirement 9.3)
-        private const val MAX_REPORT_LATENCY_US = 10_000_000 // 10 seconds in microseconds
+        // Max report latency for sensor batching (0 = deliver immediately).
+        // Previously 10 seconds, but budget devices (Mediatek/Techno/Infinix)
+        // often ignore this hint and batch for much longer, causing steps to
+        // appear "stuck". Setting to 0 + periodic flush() ensures delivery.
+        private const val MAX_REPORT_LATENCY_US = 0 // Deliver immediately
 
         // Sync interval: 15 minutes in milliseconds (requirement 9.4)
         private const val SYNC_INTERVAL_MS = 15 * 60 * 1000L
@@ -101,6 +104,21 @@ class StepCounterService : Service(), SensorEventListener {
             private set
 
         /**
+         * Display step floor pushed from the JS layer (app UI's combined value).
+         * The app UI combines native sensor + server baseline + HC offset, which
+         * can be higher than the raw native sensor count alone. The notification
+         * and widget should never show LESS than what the app is displaying.
+         *
+         * maybeUpdateNotification() and updateWidget() use max(dailySteps, displayStepFloor)
+         * so the pushed value is never overwritten by a lower sensor reading.
+         *
+         * Reset to 0 at midnight.
+         */
+        @Volatile
+        var displayStepFloor: Int = 0
+            private set
+
+        /**
          * Forcefully sets the liveStepCount to a corrected value.
          * Used only by correctInflatedSteps to fix the persisted inflation bug.
          */
@@ -125,6 +143,12 @@ class StepCounterService : Service(), SensorEventListener {
             //   HC/server value → liveStepCount → getCurrentSteps() → fed back to HC
             // Instead, only update the notification and widget DISPLAY.
             if (steps <= liveStepCount && liveStepCount >= 0) return false
+
+            // Only update displayStepFloor if the new value is higher — never decrease.
+            // This prevents a stale loadData result from lowering the notification.
+            if (steps > displayStepFloor) {
+                displayStepFloor = steps
+            }
 
             // Update widget SharedPreferences
             val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
@@ -209,6 +233,23 @@ class StepCounterService : Service(), SensorEventListener {
             liveStepCount = -1
             context.stopService(Intent(context, StepCounterService::class.java))
         }
+
+        /**
+         * Requests a sensor flush from the running service instance.
+         * Called from NativeStepModule.getCurrentSteps() to ensure batched events
+         * are delivered before returning the step count. Non-blocking, best-effort.
+         */
+        fun requestFlush() {
+            serviceInstance?.let { instance ->
+                try {
+                    instance.sensorManager?.flush(instance)
+                } catch (_: Exception) { /* non-fatal */ }
+            }
+        }
+
+        /** Weak reference to the running service instance for flush requests. */
+        @Volatile
+        private var serviceInstance: StepCounterService? = null
     }
 
     // ── Step counting state ───────────────────────────────────────────────────
@@ -279,6 +320,46 @@ class StepCounterService : Service(), SensorEventListener {
         }
     }
 
+    // ── Sensor flush mechanism ────────────────────────────────────────────────
+    // Some devices (Mediatek/budget phones) don't respect MAX_REPORT_LATENCY_US
+    // and batch sensor events for much longer than specified, causing the step
+    // count UI to appear "stuck" even though the user is walking.
+    // Periodically flush the sensor to force delivery of pending events.
+    private val flushHandler = Handler(Looper.getMainLooper())
+    private val FLUSH_INTERVAL_MS = 10_000L // Flush every 10 seconds
+
+    private val flushRunnable = object : Runnable {
+        override fun run() {
+            // Force pending sensor events to be delivered immediately.
+            // On devices where flush() is not effective (some Mediatek chips),
+            // re-register the listener as a fallback to kick the sensor driver.
+            val flushed = sensorManager?.flush(this@StepCounterService) ?: false
+            if (!flushed && sensorManager != null && stepSensor != null) {
+                // flush() returned false or isn't supported — re-register listener
+                sensorManager!!.unregisterListener(this@StepCounterService)
+                sensorManager!!.registerListener(
+                    this@StepCounterService,
+                    stepSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL,
+                    MAX_REPORT_LATENCY_US
+                )
+            }
+
+            // Safety net: always emit the current step count to JS at each flush
+            // interval. This ensures live updates every 10s even if sensor events
+            // are being batched by the hardware and flush() had no effect.
+            // The JS throttle (5s) won't block this since we use forceEmit.
+            if (dailySteps > 0) {
+                liveStepCount = dailySteps
+                NativeStepModule.emitStepUpdate(dailySteps, forceEmit = true)
+                maybeUpdateNotification()
+                updateWidget()
+            }
+
+            flushHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+        }
+    }
+
     // ── System references ─────────────────────────────────────────────────────
 
     private var sensorManager: SensorManager? = null
@@ -288,6 +369,7 @@ class StepCounterService : Service(), SensorEventListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand called")
+        serviceInstance = this
 
         // Check if this is a midnight reset trigger from MidnightResetReceiver
         val isMidnightReset = intent?.getBooleanExtra(MidnightResetReceiver.EXTRA_MIDNIGHT_RESET, false) ?: false
@@ -295,13 +377,22 @@ class StepCounterService : Service(), SensorEventListener {
         // Create notification channel and start as foreground service immediately
         createNotificationChannel()
         try {
-            // Show cached steps so notification never displays zero while awaiting first sensor event
-            // FIX: Only use cached steps if they're from today — prevents showing yesterday's count
-            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val storedDate = prefs.getString("storedDate", "") ?: ""
-            val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-            val cachedSteps = if (storedDate == todayStr) prefs.getInt("dailySteps", 0) else 0
-            startForeground(NOTIF_ID, buildStepNotification(cachedSteps))
+            // If service is already running (re-entry from JS resume call),
+            // use the live in-memory step count for the notification instead of
+            // reading stale SharedPreferences. This prevents the notification
+            // from briefly dropping to an old value on app resume.
+            val notifSteps: Int
+            if (sensorManager != null && liveStepCount >= 0) {
+                // Service already running — use live count
+                notifSteps = maxOf(liveStepCount, displayStepFloor)
+            } else {
+                // Fresh start — read from SharedPreferences
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val storedDate = prefs.getString("storedDate", "") ?: ""
+                val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+                notifSteps = if (storedDate == todayStr) prefs.getInt("dailySteps", 0) else 0
+            }
+            startForeground(NOTIF_ID, buildStepNotification(notifSteps))
             lastNotificationUpdateTime = System.currentTimeMillis()
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed: ${e.message}", e)
@@ -309,8 +400,15 @@ class StepCounterService : Service(), SensorEventListener {
             return START_NOT_STICKY
         }
 
-        // Load persisted state
-        loadPersistedState()
+        // Load persisted state ONLY if this is a fresh start (sensor not yet registered).
+        // If the service is already running (sensorManager != null), onStartCommand was
+        // triggered by a redundant startForegroundService() call from the JS layer
+        // (e.g., on app resume). In that case, the in-memory dailySteps is MORE CURRENT
+        // than SharedPreferences (which is only persisted every 90s). Loading from prefs
+        // would overwrite the live count with a stale value, causing steps to drop.
+        if (sensorManager == null) {
+            loadPersistedState()
+        }
 
         // If triggered by midnight alarm and service was already running,
         // perform midnight reset directly for immediate effect
@@ -346,6 +444,11 @@ class StepCounterService : Service(), SensorEventListener {
                 isHcPollingMode = true
                 pollHealthConnectAndUpdateNotification()
                 hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
+            } else {
+                // Start periodic sensor flush to force event delivery on devices
+                // that don't respect MAX_REPORT_LATENCY_US (e.g., Mediatek budget phones).
+                flushHandler.removeCallbacks(flushRunnable)
+                flushHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
             }
         }
 
@@ -356,10 +459,13 @@ class StepCounterService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy — persisting state and unregistering sensor")
+        serviceInstance = null
         // Stop HC polling if active
         if (isHcPollingMode) {
             hcHandler.removeCallbacks(hcPollRunnable)
         }
+        // Stop sensor flush timer
+        flushHandler.removeCallbacks(flushRunnable)
         // Cancel coroutine scope
         serviceScope.cancel()
         // Persist current state before shutdown
@@ -498,7 +604,7 @@ class StepCounterService : Service(), SensorEventListener {
      */
     private fun maybePersist() {
         val now = System.currentTimeMillis()
-        if (now - lastPersistTime >= 90_000L) {
+        if (now - lastPersistTime >= 30_000L) {
             persistState()
             lastPersistTime = now
         }
@@ -536,6 +642,12 @@ class StepCounterService : Service(), SensorEventListener {
         pendingSyncPayload = prefs.getString("pendingSyncPayload", "") ?: ""
         // Restore lastCumulative so midnight reset works even after service restart
         lastCumulative = prefs.getLong("lastCumulative", 0L)
+
+        // displayStepFloor starts at 0 on each service start. It only gets raised
+        // during the current session via pushStepUpdate (when the JS layer pushes
+        // a combined HC+baseline value). This prevents stale inflated values from
+        // previous sessions from locking the notification at an incorrect high count.
+        displayStepFloor = 0
 
         // FIX: One-time FULL reset of all step state from the inflation bug.
         // Resets rebootOffset, dailySteps, AND baseline so the sensor starts fresh.
@@ -896,6 +1008,9 @@ class StepCounterService : Service(), SensorEventListener {
         // Update live step count immediately so JS reads 0 right after midnight
         liveStepCount = 0
 
+        // Reset display floor so notification/widget show 0 until new data arrives
+        displayStepFloor = 0
+
         persistState()
         scheduleMidnightAlarm()
 
@@ -997,7 +1112,11 @@ class StepCounterService : Service(), SensorEventListener {
      */
     private fun maybeUpdateNotification() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-        nm.notify(NOTIF_ID, buildStepNotification(dailySteps))
+        // Use max(dailySteps, displayStepFloor) so the notification never shows
+        // fewer steps than what the app UI is displaying (which includes server
+        // baseline + HC offset on top of the raw native sensor count).
+        val displaySteps = maxOf(dailySteps, displayStepFloor)
+        nm.notify(NOTIF_ID, buildStepNotification(displaySteps))
     }
 
     // ── Event Emission ──────────────────────────────────────────────────────
@@ -1007,6 +1126,12 @@ class StepCounterService : Service(), SensorEventListener {
      * Delegates to NativeStepModule.emitStepUpdate() which enforces the 5-second throttle.
      */
     private fun maybeEmitEvent() {
+        // Emit the RAW hardware sensor step count to the JS layer.
+        // The JS layer applies its own server baseline logic (additive mode) to
+        // compute the correct combined total. Previously this emitted
+        // max(dailySteps, displayStepFloor) which masked real step increments
+        // and prevented live updates from working after server data loaded.
+        // Notification and widget still use displayStepFloor separately.
         NativeStepModule.emitStepUpdate(dailySteps)
     }
 
@@ -1027,11 +1152,15 @@ class StepCounterService : Service(), SensorEventListener {
      * Broadcast failures are swallowed silently (non-fatal).
      */
     private fun updateWidget() {
-        // Write current steps, goal, and timestamp to widget SharedPreferences
+        // Write current steps, goal, and timestamp to widget SharedPreferences.
+        // Use max(dailySteps, displayStepFloor) so the widget never shows fewer
+        // steps than what the app UI is displaying (which includes server baseline
+        // + HC offset on top of the raw native sensor count).
+        val displaySteps = maxOf(dailySteps, displayStepFloor)
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
         val goal = widgetPrefs.getInt("goal", 10000)
         widgetPrefs.edit()
-            .putInt("steps", dailySteps)
+            .putInt("steps", displaySteps)
             .putInt("goal", goal)
             .putLong("lastUpdated", System.currentTimeMillis())
             .apply()
@@ -1205,11 +1334,16 @@ class StepCounterService : Service(), SensorEventListener {
                 if (steps != lastHcPollSteps) {
                     lastHcPollSteps = steps
                     liveStepCount = steps
+                    // Use max(steps, displayStepFloor) so the notification/widget
+                    // never shows fewer steps than what the app UI is displaying.
+                    val displaySteps = maxOf(steps, displayStepFloor)
                     val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                    nm.notify(NOTIF_ID, buildStepNotification(steps))
+                    nm.notify(NOTIF_ID, buildStepNotification(displaySteps))
                     updateWidget()
+                    // Emit raw HC steps to JS (not the floor-capped value) so the
+                    // JS-side additive logic can correctly compute the total.
                     NativeStepModule.emitStepUpdate(steps)
-                    Log.d(TAG, "HC poll: notification updated — $steps steps (origins: $stepsByOrigin)")
+                    Log.d(TAG, "HC poll: notification updated — $displaySteps steps (raw=$steps, floor=$displayStepFloor, origins: $stepsByOrigin)")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "HC poll failed: ${e.message} — using cached value")
@@ -1218,8 +1352,9 @@ class StepCounterService : Service(), SensorEventListener {
                 if (cachedSteps != lastHcPollSteps) {
                     lastHcPollSteps = cachedSteps
                     liveStepCount = cachedSteps
+                    val displaySteps = maxOf(cachedSteps, displayStepFloor)
                     val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                    nm.notify(NOTIF_ID, buildStepNotification(cachedSteps))
+                    nm.notify(NOTIF_ID, buildStepNotification(displaySteps))
                 }
             }
         }

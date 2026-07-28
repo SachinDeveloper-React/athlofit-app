@@ -42,6 +42,7 @@ import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
 import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
 import ActivityPermissionBanner from '../components/tracker/ActivityPermissionBanner';
+import BatteryOptimizationBanner from '../../../components/BatteryOptimizationBanner';
 
 const RIGHTACTION = memo(
   ({
@@ -219,7 +220,10 @@ const TrackerScreen = memo(() => {
   const { platform, isReady, isLoading, data, error, refresh, retrySetup, skipToNativeSensor, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) || 70, gender: userGender });
 
-  // Bonus steps from admin/system — added on top of device steps
+  // Bonus steps from admin/system — credited after login (not in baseline).
+  // The sync response returns bonusSteps which we store. Add them on top of
+  // device steps for display. This does NOT inflate because we don't send
+  // totalSteps back to server — we send data.steps (device-only from useHealth).
   const bonusSteps = useHealthDataStore(s => {
     const today = new Date().toISOString().split('T')[0];
     return s.bonusStepsDate === today ? s.bonusSteps : 0;
@@ -305,7 +309,12 @@ const TrackerScreen = memo(() => {
     }
 
     const isGoalMet = totalSteps >= (dailyStepGoal || 8000);
-    syncHealth({ ...data, steps: totalSteps, goalMet: isGoalMet });
+    // Subtract bonusSteps before sending to server. data.steps from useHealth
+    // may include the server baseline (set at login) which itself contains bonus.
+    // If we send that as-is, server does: merge(X, existing-bonus) + bonus → inflation.
+    // By removing bonus client-side, server sees pure device steps and adds bonus correctly.
+    const stepsForServer = Math.max(0, data.steps - bonusSteps);
+    syncHealth({ ...data, steps: stepsForServer, goalMet: isGoalMet });
     lastSyncedUserRef.current = userId;
     lastSyncTimeRef.current = now;
     lastSyncedStepsRef.current = data.steps;
@@ -329,17 +338,34 @@ const TrackerScreen = memo(() => {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  const metricRows = useMemo(() => buildMetricRows(data), [data]);
+  // When total steps (from server floor) exceed device-reported steps,
+  // re-derive distance/calories/activeMinutes so all metrics are consistent.
+  const displayData = useMemo(() => {
+    if (totalSteps <= data.steps) return { ...data, steps: totalSteps };
+    // totalSteps is higher (from store) — re-derive metrics
+    const { deriveFromSteps } = require('../service/healthConnect.service');
+    const derived = deriveFromSteps(totalSteps, Number(weightKg) || 70, userGender);
+    return {
+      ...data,
+      steps: totalSteps,
+      calories: Math.max(data.calories, derived.calories),
+      distance: Math.max(data.distance, derived.distanceKm),
+      activeMinutes: Math.max(data.activeMinutes, derived.activeMinutes),
+    };
+  }, [data, totalSteps, weightKg, userGender]);
+
+  const metricRows = useMemo(() => buildMetricRows(displayData), [displayData]);
 
   // Override today's entry in weekly chart with live local step count.
-  // The server may have stale data (from a previous sync before midnight reset),
-  // but the user should see their actual current steps for today.
+  // Use the higher of server value and local total — the server may have
+  // bonus steps (admin-credited) that the device doesn't know about yet,
+  // or the device may have steps not yet synced to the server.
   const adjustedWeekData = useMemo(() => {
     if (!weekData || weekData.length === 0) return weekData;
     const todayDate = new Date();
     const todayISO = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
     return weekData.map(entry =>
-      entry.fullDate === todayISO ? { ...entry, steps: totalSteps } : entry,
+      entry.fullDate === todayISO ? { ...entry, steps: Math.max(entry.steps, totalSteps) } : entry,
     );
   }, [weekData, totalSteps]);
 
@@ -491,11 +517,12 @@ const TrackerScreen = memo(() => {
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
           <CoinBlockedBanner />
           <ActivityPermissionBanner platform={platform} isReady={isReady} />
+          <BatteryOptimizationBanner />
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
             goal={dailyStepGoal || 8000}
             activeTab={activeTab}
-            data={{ ...data, steps: totalSteps }}
+            data={displayData}
             weekData={adjustedWeekData || []}
             isWeekPending={isWeekPending}
             isWeekSkeleton={isWeekPending && !weekData}

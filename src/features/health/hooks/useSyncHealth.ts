@@ -138,6 +138,27 @@ export function useSyncHealth() {
         const today = getLocalToday();
         const { useHealthDataStore } = require('../store/healthDataStore');
         useHealthDataStore.getState().setBonusSteps(d.bonusSteps, today);
+
+        // Push total steps (device + bonus) to notification and widget
+        // so they also reflect the bonus-adjusted count.
+        if (d.totalSteps && d.totalSteps > 0) {
+          import('../../../services/stepService').then(({ stepService }) => {
+            stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
+          });
+        }
+      }
+
+      // If server has more total steps than what the app currently displays,
+      // push to notification and widget immediately.
+      // NOTE: Do NOT update healthDataStore.data here — it conflicts with
+      // useHealth's loadData which overwrites the store on every poll.
+      // The next loadData (90s max) will read the correct value via
+      // server baseline. Updating store here causes oscillation.
+      if (d?.totalSteps && d.totalSteps > 0) {
+        // Push to notification and widget
+        import('../../../services/stepService').then(({ stepService }) => {
+          stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
+        });
       }
 
       // Always invalidate weekly-steps after a sync so the chart reflects

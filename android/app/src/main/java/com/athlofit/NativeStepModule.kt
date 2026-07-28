@@ -196,6 +196,9 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
      * First tries the live in-memory value from StepCounterService (updated on every sensor event).
      * Falls back to SharedPreferences if the service is not running.
      * Returns 0 if no data has been recorded for the current day.
+     *
+     * Also triggers a sensor flush to ensure pending batched events are delivered,
+     * which helps on budget devices that don't respect MAX_REPORT_LATENCY.
      */
     @ReactMethod
     fun getCurrentSteps(promise: Promise) {
@@ -217,7 +220,11 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 return
             }
 
-            // Prefer live in-memory value (updates instantly on every sensor event)
+            // Trigger a sensor flush so any batched events are delivered before
+            // we return the current value. Helps on Mediatek/budget devices.
+            StepCounterService.requestFlush()
+
+            // Prefer live in-memory value (updates instantly on every sensor event).
             val liveSteps = StepCounterService.liveStepCount
             if (liveSteps >= 0) {
                 promise.resolve(liveSteps)

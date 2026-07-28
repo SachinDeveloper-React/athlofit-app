@@ -130,18 +130,38 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
 
     useHealthDataStore.getState().setSyncedServerBaseline(serverBaseline, today);
 
+    // Store bonus steps from the server record so the UI shows them immediately
+    // (without waiting for the first sync response). This covers the case where
+    // admin/system credits bonus steps while the user is logged out.
+    if (typeof record.bonusSteps === 'number' && record.bonusSteps > 0) {
+      useHealthDataStore.getState().setBonusSteps(record.bonusSteps, today);
+    }
+
     // Step offset calculation (for native sensor real-time updates)
     if (typeof record.steps === 'number' && record.steps > 0) {
       const { stepService } = await import('../../../services/stepService');
       const currentNativeSteps = await stepService.getCurrentSteps();
 
+      // Store the native sensor's step count at login time so the onStepUpdate
+      // handler can compute post-login deltas for real-time live updates.
+      // This prevents the native sensor's pre-login steps from being double-counted
+      // with the server baseline in the additive calculation.
+      useHealthDataStore.getState().setNativeStepsAtLogin(currentNativeSteps);
+
       // ── FIX: Inflation guard ───────────────────────────────────────────────
       // If the server's step count is more than 2x the native sensor's reading,
       // the server likely has inflated data from the previous circular write bug.
       // In that case, don't trust the server steps for offset/floor calculations.
-      // The cleanup in initializeHealthConnect() will delete stale HC records,
-      // and the next sync will push correct values to the server.
-      const isLikelyInflated = currentNativeSteps > 100 && record.steps > currentNativeSteps * 2;
+      //
+      // IMPORTANT: This guard should NOT fire during a fresh login session.
+      // On login, the native service was just (re)started so it has very few
+      // steps, while the server legitimately has the full day's accumulated
+      // steps from before login. The server being >> native is EXPECTED here.
+      // We detect "fresh login" by checking if loginTimestamp is recent (< 5 min ago).
+      const loginTs = useHealthDataStore.getState().loginTimestamp;
+      const isFreshLogin = loginTs ? (Date.now() - loginTs < 5 * 60_000) : false;
+
+      const isLikelyInflated = !isFreshLogin && currentNativeSteps > 100 && record.steps > currentNativeSteps * 2;
       if (isLikelyInflated) {
         console.warn(
           `[StepOffset] Inflation guard: server=${record.steps}, native=${currentNativeSteps}. ` +

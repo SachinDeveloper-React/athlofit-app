@@ -19,6 +19,7 @@ interface HealthDataStore {
   stepOffsetFetched: boolean; // Whether the step offset fetch has completed (success or fail)
   bonusSteps: number; // Bonus steps credited by admin/system for today
   bonusStepsDate: string | null; // Date the bonus applies to (resets daily)
+  nativeStepsAtLogin: number; // Native sensor step count at login time (to compute post-login delta)
   setData: (data: HealthData) => void;
   setLastUpdated: (date: Date | null) => void;
   setLoginTimestamp: (timestamp: number) => void;
@@ -27,6 +28,7 @@ interface HealthDataStore {
   setSyncedServerBaseline: (baseline: HealthData | null, date: string) => void;
   setStepOffsetFetched: (fetched: boolean) => void;
   setBonusSteps: (steps: number, date: string) => void;
+  setNativeStepsAtLogin: (steps: number) => void;
   reset: () => void;
 }
 
@@ -44,6 +46,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
       stepOffsetFetched: false,
       bonusSteps: 0,
       bonusStepsDate: null,
+      nativeStepsAtLogin: 0,
       
       setData: (data) => set({ data }),
       
@@ -60,6 +63,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
       setStepOffsetFetched: (fetched) => set({ stepOffsetFetched: fetched }),
 
       setBonusSteps: (steps, date) => set({ bonusSteps: steps, bonusStepsDate: date }),
+
+      setNativeStepsAtLogin: (steps) => set({ nativeStepsAtLogin: steps }),
       
       reset: () => set({ 
         data: defaultHealthData, 
@@ -73,6 +78,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
         stepOffsetFetched: false,
         bonusSteps: 0,
         bonusStepsDate: null,
+        nativeStepsAtLogin: 0,
       }),
     }),
     {
@@ -91,6 +97,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
         stepOffsetFetched: state.stepOffsetFetched,
         bonusSteps: state.bonusSteps,
         bonusStepsDate: state.bonusStepsDate,
+        nativeStepsAtLogin: state.nativeStepsAtLogin,
       }),
     }
   )

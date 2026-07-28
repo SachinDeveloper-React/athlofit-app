@@ -86,10 +86,14 @@ class WidgetUpdateWorker(
         }
 
         // Prefer the live in-memory step count from StepCounterService (real-time).
+        // Use max(liveSteps, displayStepFloor) so the widget always shows at least
+        // what the app UI displays (which includes server baseline + HC offset).
         val liveSteps = StepCounterService.liveStepCount
+        val displayFloor = StepCounterService.displayStepFloor
         if (liveSteps >= 0) {
-            Log.d(TAG, "Using live sensor steps: $liveSteps")
-            return liveSteps
+            val displaySteps = maxOf(liveSteps, displayFloor)
+            Log.d(TAG, "Using live sensor steps: $liveSteps (floor=$displayFloor, display=$displaySteps)")
+            return displaySteps
         }
 
         // Fallback: try persisted value from StepCounterService

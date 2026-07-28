@@ -1,4 +1,4 @@
-import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2, HeartPulse, Bell, Footprints, Camera } from 'lucide-react-native';
+import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2, HeartPulse, Bell, Footprints, Camera, BatteryWarning } from 'lucide-react-native';
 import { Section } from '../types/setting.types';
 import { DeletionStatus } from './accountDeletion.service';
 import type { PermissionStatuses } from './permissionStatus.service';
@@ -18,10 +18,12 @@ export const settingScreenService = {
       onCancelDeletion?: () => void;
       onConnectHealth?: () => void;
       onRequestPermission?: (key: string) => void;
+      onBatteryOptimization?: () => void;
       deletionStatus?: DeletionStatus;
       scheduledDeletionDate?: string | null;
       healthConnectionStatus?: 'connected' | 'skipped' | 'not_set';
       permissionStatuses?: PermissionStatuses | null;
+      batteryOptExempt?: boolean | null;
     },
   ): Section[] => {
     const sections: Section[] = [
@@ -65,6 +67,19 @@ export const settingScreenService = {
               badge: { text: 'Active', variant: 'success' as const },
             }),
           },
+          // Battery optimization row (Android only, show when status is known)
+          ...(callbacks.batteryOptExempt !== null && callbacks.batteryOptExempt !== undefined ? [{
+            key: 'battery_opt',
+            type: 'nav' as const,
+            title: 'BACKGROUND ACTIVITY',
+            icon: BatteryWarning,
+            iconColorKey: (callbacks.batteryOptExempt ? 'primary' : 'destructive') as 'primary' | 'destructive',
+            valueText: callbacks.batteryOptExempt ? 'Unrestricted' : 'Restricted',
+            badge: callbacks.batteryOptExempt
+              ? { text: 'OK', variant: 'success' as const }
+              : { text: 'Fix', variant: 'destructive' as const },
+            onPress: callbacks.onBatteryOptimization,
+          }] : []),
         ],
       },
       ...(callbacks.permissionStatuses ? [{

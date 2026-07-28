@@ -90,6 +90,17 @@ export function useHealth(options: UseHealthOptions = {}) {
   const lastFetchedAtRef = useRef<number>(useHealthDataStore.getState().lastFetchedAt ?? 0);
   const isSettingUpRef = useRef(false);
 
+  // ── HC floor tracking for real-time native increments ─────────────────────
+  // When loadData runs (every 90s), HC may report steps from external sources
+  // (watch, other device) that the phone's native sensor doesn't know about.
+  // We track the last loadData result so onStepUpdate can apply native sensor
+  // increments ON TOP of the HC value instead of getting blocked.
+  // Initialize from cached data so the "never decrease" guard works on first loadData.
+  const lastLoadDataStepsRef = useRef<number>(cachedData?.steps ?? 0);
+  // Track the last raw native value received by onStepUpdate, so we can
+  // compute the delta (increment) between consecutive native events.
+  const lastRawNativeRef = useRef<number>(0);
+
   // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     // FIX #9: Eagerly clear any stale step offset from a previous day.
@@ -190,6 +201,8 @@ export function useHealth(options: UseHealthOptions = {}) {
           useHealthDataStore.getState().setSyncedStepOffset(0, '');
           useHealthDataStore.getState().setSyncedServerBaseline(null, '');
           lastFetchedAtRef.current = 0;
+          lastRawNativeRef.current = 0;
+          lastLoadDataStepsRef.current = 0;
 
           // Trigger native midnight reset in case the native alarm was also missed
           if (Platform.OS === 'android') {
@@ -197,6 +210,28 @@ export function useHealth(options: UseHealthOptions = {}) {
               stepService.triggerMidnightReset();
             });
           }
+        }
+
+        // ── FIX Issue 2a: Auto-open midnight reset gate on resume ──────────
+        // If the gate has been pending for > 2 minutes, the safety timeout
+        // likely fired while the app was backgrounded (JS timers are unreliable
+        // in background). Open the gate now so steps aren't stuck at 0.
+        if (Platform.OS === 'android' && midnightResetPendingRef.current) {
+          const msSinceReset = Date.now() - midnightResetAtRef.current;
+          if (msSinceReset > 2 * 60_000) {
+            console.warn('[useHealth] Midnight gate auto-opened on resume (pending > 2min)');
+            midnightResetPendingRef.current = false;
+          }
+        }
+
+        // ── FIX Issue 2b: Restart native step service if killed ────────────
+        // Some OEM ROMs aggressively kill foreground services. On resume,
+        // always call start() — it's a no-op if already running, but will
+        // restart the service if it was killed in the background.
+        if (Platform.OS === 'android') {
+          import('../../../services/stepService').then(({ stepService }) => {
+            stepService.start().catch(() => {});
+          });
         }
 
         if (isReadyRef.current) {
@@ -235,6 +270,8 @@ export function useHealth(options: UseHealthOptions = {}) {
       setData(freshData);
       setLastUpdated(new Date());
       useHealthDataStore.getState().setData(freshData);
+      lastRawNativeRef.current = 0;
+      lastLoadDataStepsRef.current = 0;
 
       // Clear the synced step offset — it was for yesterday
       useHealthDataStore.getState().setSyncedStepOffset(0, '');
@@ -503,19 +540,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         const today = getLocalToday();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
-          const serverStepsTrusted = (
-            result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
-          ) ? result.steps : syncedServerBaseline.steps;
-
-          if (serverStepsTrusted !== syncedServerBaseline.steps) {
-            console.warn(
-              `[useHealth] Inflation guard (healthkit): server baseline ${syncedServerBaseline.steps} is ` +
-              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
-            );
-            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
-          }
-
-          // If login was today, HC/HK steps are post-login only — add server baseline.
+          // If login was today, HK steps are post-login only — add server baseline.
           // If login was yesterday, HK returns full day — use max.
           const loginTs = useHealthDataStore.getState().loginTimestamp;
           const isLoginToday = loginTs ? (() => {
@@ -525,6 +550,20 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getMonth() === now.getMonth() &&
                    ld.getDate() === now.getDate();
           })() : false;
+
+          // FIX: Skip inflation guard when login was today — HC/HK only has
+          // post-login steps so server being > 2x local is EXPECTED.
+          const serverStepsTrusted = (
+            !isLoginToday && result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+          ) ? result.steps : syncedServerBaseline.steps;
+
+          if (serverStepsTrusted !== syncedServerBaseline.steps) {
+            console.warn(
+              `[useHealth] Inflation guard (healthkit): server baseline ${syncedServerBaseline.steps} is ` +
+              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
+            );
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          }
 
           // Heuristic: If HK returns steps >= 80% of server baseline, HK likely
           // has full-day data (time filter not effective). Use max() to avoid
@@ -647,6 +686,20 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { stepService } = await import('../../../services/stepService');
         const nativeSteps = await stepService.getCurrentSteps();
 
+        // Determine if login was today — needed for native overlay decision.
+        const loginTsForOverlay = useHealthDataStore.getState().loginTimestamp;
+        const isLoginTodayForOverlay = loginTsForOverlay ? (() => {
+          const ld = new Date(loginTsForOverlay);
+          const now = new Date();
+          return ld.getFullYear() === now.getFullYear() &&
+                 ld.getMonth() === now.getMonth() &&
+                 ld.getDate() === now.getDate();
+        })() : false;
+
+        // Check if server baseline exists for today (will be added later).
+        const { syncedServerBaseline: baselineForOverlay, syncedServerBaselineDate: baselineDateForOverlay } = useHealthDataStore.getState();
+        const hasServerBaselineToday = baselineForOverlay && baselineDateForOverlay === getLocalToday();
+
         if (midnightResetPendingRef.current) {
           if (nativeSteps <= 50) {
             // Native sensor confirmed reset — open the gate
@@ -658,6 +711,25 @@ export function useHealth(options: UseHealthOptions = {}) {
             }
           }
           // If gate is still pending (native > 50), don't overlay — keep HC value
+        } else if (isLoginTodayForOverlay && hasServerBaselineToday) {
+          // FIX: When login was today and we have a server baseline, DON'T overlay
+          // the native sensor's all-day count onto HC's post-login-only count.
+          // The native sensor reports total steps since midnight (including pre-login
+          // steps that are already captured in the server baseline). If we overlay
+          // native here and then ADD server baseline later, we'd double-count:
+          //   native(3000, all-day) overlaid → result=3000
+          //   server(12000) + result(3000) = 15000 ← WRONG (should be 12000 + post-login only)
+          // Instead, keep HC's post-login-only steps and let the server baseline
+          // additive logic handle the total correctly.
+          // Only overlay if native is reporting MORE than the server baseline (genuinely new steps).
+          const serverStepsForOverlay = baselineForOverlay?.steps ?? 0;
+          if (nativeSteps > serverStepsForOverlay && nativeSteps > result.steps) {
+            // Native has exceeded the server baseline — these are truly new steps
+            // The total should be nativeSteps (which already includes pre+post login)
+            // so replace HC result with native and switch to max mode below.
+            result = { ...result, steps: nativeSteps };
+          }
+          // Otherwise, keep HC's post-login steps only — additive mode will add server baseline
         } else {
           // FIX: Detect inflated native sensor. If native is more than 2x HC,
           // the native service has a persisted inflated value from the old bug.
@@ -687,22 +759,6 @@ export function useHealth(options: UseHealthOptions = {}) {
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         const today = getLocalToday();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
-          // FIX: Inflation guard — if server baseline steps are more than 2x
-          // the local HC/native result, the server likely has inflated data from
-          // the circular write bug. Don't use inflated server steps as a floor.
-          const serverStepsTrusted = (
-            result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
-          ) ? result.steps : syncedServerBaseline.steps;
-
-          if (serverStepsTrusted !== syncedServerBaseline.steps) {
-            console.warn(
-              `[useHealth] Inflation guard: server baseline ${syncedServerBaseline.steps} is ` +
-              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
-            );
-            // Clear the inflated baseline so it doesn't persist
-            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
-          }
-
           // Determine if we're reading HC from loginTimestamp (login was today).
           // If so, HC steps are only post-login — add them to server baseline.
           // If not (login was yesterday / loginTimestamp null), HC has full day — use max.
@@ -715,17 +771,47 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
+          // FIX: Inflation guard — if server baseline steps are more than 2x
+          // the local HC/native result, the server likely has inflated data from
+          // the circular write bug. Don't use inflated server steps as a floor.
+          // IMPORTANT: Skip the inflation guard when login was today, because
+          // HC only has post-login steps (filtered by loginTimestamp) while the
+          // server has the full day's steps. It's EXPECTED that server > 2x local
+          // in this scenario (e.g., user walked 8000 steps, logged out, logged
+          // back in — HC returns 1520 post-login steps, server has 8000).
+          const serverStepsTrusted = (
+            !isLoginToday && result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+          ) ? result.steps : syncedServerBaseline.steps;
+
+          if (serverStepsTrusted !== syncedServerBaseline.steps) {
+            console.warn(
+              `[useHealth] Inflation guard: server baseline ${syncedServerBaseline.steps} is ` +
+              `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
+            );
+            // Clear the inflated baseline so it doesn't persist
+            useHealthDataStore.getState().setSyncedServerBaseline(null, '');
+          }
+
           // Heuristic: If HC returns steps >= 80% of server baseline, HC likely
           // has full-day data (time filter not effective on this device/source).
           // Use max() to avoid doubling. If HC steps are much less than server,
           // HC genuinely has only post-login data → use additive.
-          const hcHasFullDay = isLoginToday && serverStepsTrusted > 0
-            && result.steps >= serverStepsTrusted * 0.8;
+          //
+          // FIX: Use server's DEVICE steps (total - bonus) for the combination
+          // calculation. The server baseline's `steps` field = device + bonus.
+          // If we use the full value, bonus gets baked into data.steps, and
+          // TrackerScreen adds bonusSteps again → double-counting.
+          const { bonusSteps: storedBonus, bonusStepsDate } = useHealthDataStore.getState();
+          const todayBonus = bonusStepsDate === today ? (storedBonus || 0) : 0;
+          const serverDeviceSteps = Math.max(0, serverStepsTrusted - todayBonus);
+
+          const hcHasFullDay = isLoginToday && serverDeviceSteps > 0
+            && result.steps >= serverDeviceSteps * 0.8;
           const useAdditive = isLoginToday && !hcHasFullDay;
 
           const combinedSteps = useAdditive
-            ? serverStepsTrusted + result.steps  // Server (before login) + HC (after login)
-            : Math.max(result.steps, serverStepsTrusted); // Full day or not login today — take max
+            ? serverDeviceSteps + result.steps  // Server device steps (before login) + HC (after login)
+            : Math.max(result.steps, serverDeviceSteps); // Full day or not login today — take max
 
           // When using additive mode (HC only has post-login data), distance,
           // calories, and activeMinutes must also be additive so they increment.
@@ -767,8 +853,34 @@ export function useHealth(options: UseHealthOptions = {}) {
         result = { ...result, steps: 0, calories: 0, distance: 0, activeMinutes: 0 };
       }
 
+      // ── FIX: Never show fewer steps than what's currently displayed ────────────
+      // Health Connect / HealthKit are batch APIs that can be behind the native
+      // sensor. The native sensor drives the notification in real-time. When the
+      // user opens the app, the displayed step count (from onStepUpdate events or
+      // previous loadData) should never drop — even if HC/HK returns a lower value.
+      // This is the same "never decrease" rule that onStepUpdate uses, but
+      // applied to loadData's batch result.
+      // Skip during midnight reset (steps legitimately go to 0).
+      // NOTE: We read from lastLoadDataStepsRef which tracks the highest step count
+      // ever set by either loadData or onStepUpdate. The Zustand store (MMKV) is
+      // only updated by loadData and may be stale if onStepUpdate advanced the count.
+      if (!midnightResetPendingRef.current) {
+        const currentFloor = lastLoadDataStepsRef.current;
+        if (currentFloor > result.steps) {
+          result = { ...result, steps: currentFloor };
+        }
+      }
+
       setData(result);
       setLastUpdated(new Date());
+
+      // ── Track HC floor for real-time native increments ──────────────────────
+      // Store the step count from this loadData call. onStepUpdate will use this
+      // as a floor: native sensor increments get applied ON TOP of this value.
+      // This covers watch/external source steps that the phone sensor doesn't know.
+      if (Platform.OS === 'android' && p !== 'native_sensor') {
+        lastLoadDataStepsRef.current = result.steps;
+      }
 
       // Persist to MMKV store for cache hydration on next launch
       useHealthDataStore.getState().setData(result);
@@ -826,6 +938,8 @@ export function useHealth(options: UseHealthOptions = {}) {
           useHealthDataStore.getState().setSyncedStepOffset(0, '');
           useHealthDataStore.getState().setSyncedServerBaseline(null, '');
           lastFetchedAtRef.current = 0;
+          lastRawNativeRef.current = 0;
+          lastLoadDataStepsRef.current = 0;
           // Don't apply this stale event — it's from yesterday.
           // The native service will emit 0 once its own reset fires.
           return;
@@ -859,16 +973,81 @@ export function useHealth(options: UseHealthOptions = {}) {
           if (syncedServerBaseline && syncedServerBaselineDate === today) {
             totalSteps = Math.max(totalSteps, syncedServerBaseline.steps);
           }
+        } else {
+          // HC/HK mode: When login was today and server baseline exists, compute
+          // the real-time total using: serverBaseline + postLoginNativeSteps.
+          // The native service now emits raw hardware dailySteps (not capped by
+          // displayStepFloor). We compute the delta from nativeStepsAtLogin to get
+          // only steps walked AFTER login, then add to the server baseline.
+          const { syncedServerBaseline, syncedServerBaselineDate, nativeStepsAtLogin, loginTimestamp } = useHealthDataStore.getState();
+          const isLoginToday = loginTimestamp ? (() => {
+            const ld = new Date(loginTimestamp);
+            const now = new Date();
+            return ld.getFullYear() === now.getFullYear() &&
+                   ld.getMonth() === now.getMonth() &&
+                   ld.getDate() === now.getDate();
+          })() : false;
+
+          if (isLoginToday && syncedServerBaseline && syncedServerBaselineDate === today && nativeStepsAtLogin > 0) {
+            const { bonusSteps: storedBonus, bonusStepsDate } = useHealthDataStore.getState();
+            const todayBonus = bonusStepsDate === today ? (storedBonus || 0) : 0;
+            const serverDeviceSteps = Math.max(0, syncedServerBaseline.steps - todayBonus);
+            // Post-login steps = current raw hardware steps - hardware steps at login time
+            const postLoginSteps = Math.max(0, newSteps - nativeStepsAtLogin);
+            totalSteps = serverDeviceSteps + postLoginSteps;
+          }
+          // If not login today or no baseline, use newSteps as-is (raw hardware count)
         }
 
         setData(prev => {
           if (prev.steps === totalSteps) return prev;
           // In healthconnect/healthkit mode, the native sensor is a supplementary
-          // source for real-time updates. Never let it decrease the step count
-          // below what Health Connect already reported — this prevents the service
-          // from overwriting HC steps with 0 when it restarts after being stopped.
-          if (platformRef.current !== 'native_sensor' && totalSteps < prev.steps) {
+          // source for real-time updates between loadData refreshes.
+          // Rules:
+          // 1. Never decrease: if native reports less than what's displayed (HC
+          //    batch might have set a higher value), keep the displayed value.
+          // 2. Always increase: if native exceeds what's displayed, show it
+          //    immediately — the user is actively walking and should see live count.
+          // 3. After loadData runs (every 90s), HC's batch value becomes the new
+          //    floor via setData(result). Native can then only go UP from there.
+          // 4. FIX: If HC reported higher steps (e.g., from a watch), and native
+          //    is still lower but INCREASING, apply the native delta on top of
+          //    the displayed (HC) value. This allows live counting to continue
+          //    after HC sets a floor that native hasn't reached yet.
+          if (platformRef.current !== 'native_sensor') {
+            if (totalSteps >= prev.steps) {
+              // Native computed value exceeds display — use it directly
+              lastRawNativeRef.current = newSteps;
+              if (totalSteps > lastLoadDataStepsRef.current) {
+                lastLoadDataStepsRef.current = totalSteps;
+              }
+              return { ...prev, steps: totalSteps };
+            }
+            // Native is below displayed value (HC/watch set a higher floor).
+            // Check if native is INCREASING from its last known raw value.
+            // If yes, apply that increment on top of what's currently displayed.
+            const lastRaw = lastRawNativeRef.current;
+            lastRawNativeRef.current = newSteps;
+            if (lastRaw > 0 && newSteps > lastRaw) {
+              const increment = newSteps - lastRaw;
+              const newTotal = prev.steps + increment;
+              if (newTotal > lastLoadDataStepsRef.current) {
+                lastLoadDataStepsRef.current = newTotal;
+              }
+              // Push to notification/widget so they also show the increment
+              // (native service only knows its own raw count, not HC+delta)
+              if (Platform.OS === 'android') {
+                import('../../../services/stepService').then(({ stepService }) => {
+                  stepService.forceRefreshSteps(newTotal).catch(() => {});
+                });
+              }
+              return { ...prev, steps: newTotal };
+            }
+            // Native not increasing or first event — keep displayed value
             return prev;
+          }
+          if (totalSteps > lastLoadDataStepsRef.current) {
+            lastLoadDataStepsRef.current = totalSteps;
           }
           return { ...prev, steps: totalSteps };
         });

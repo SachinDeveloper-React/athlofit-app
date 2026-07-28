@@ -20,10 +20,11 @@ export const healthService = {
   },
 
   syncHealthData: async (body: any) => {
-    const response = await api.post<{ success: boolean; message: string }>('health/sync', body);
+    const response = await api.post<{ success: boolean; message: string; data?: any }>('health/sync', body);
     return {
       success: response?.success,
       message: response?.message,
+      data: response?.data,
     };
   },
 };

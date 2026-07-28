@@ -13,6 +13,7 @@ import {
   requestPermissionByKey,
   type PermissionStatuses,
 } from '../service/permissionStatus.service';
+import { stepService } from '../../../services/stepService';
 
 export const useSettingScreen = () => {
   const profile = useAuthStore(s => s.user);
@@ -148,9 +149,15 @@ export const useSettingScreen = () => {
   // ── Permission statuses ──────────────────────────────────────────────────
   const [permissionStatuses, setPermissionStatuses] = useState<PermissionStatuses | null>(null);
   const [healthConnectionStatus, setHealthConnectionStatus] = useState<'connected' | 'skipped' | 'not_set'>('not_set');
+  const [batteryOptExempt, setBatteryOptExempt] = useState<boolean | null>(null);
 
   useEffect(() => {
     getAllPermissionStatuses().then(setPermissionStatuses);
+
+    // Check battery optimization status (Android only)
+    if (Platform.OS === 'android') {
+      stepService.isIgnoringBatteryOptimizations().then(setBatteryOptExempt);
+    }
 
     // Determine actual health connection status by checking both preference AND real permissions
     (async () => {
@@ -185,6 +192,24 @@ export const useSettingScreen = () => {
     setPermissionStatuses(updated);
   }, []);
 
+  const onBatteryOptimization = useCallback(async () => {
+    // If already exempt, open general battery settings for verification
+    if (batteryOptExempt) {
+      await stepService.openBatterySettings();
+      return;
+    }
+    // Try the direct exemption dialog first
+    const result = await stepService.requestDisableBatteryOptimization();
+    // Some OEMs block the direct dialog — fallback to general battery settings
+    if (!result) {
+      await stepService.openBatterySettings();
+    }
+    // Re-check after user returns from settings
+    setTimeout(() => {
+      stepService.isIgnoringBatteryOptimizations().then(setBatteryOptExempt);
+    }, 1000);
+  }, [batteryOptExempt]);
+
   const onDeleteAccount = useCallback(() => {
     requestDeletion();
   }, [requestDeletion]);
@@ -206,10 +231,12 @@ export const useSettingScreen = () => {
         onCancelDeletion,
         onConnectHealth,
         onRequestPermission,
+        onBatteryOptimization,
         deletionStatus: deletionStatus?.status,
         scheduledDeletionDate: deletionStatus?.scheduledDeletionDate,
         healthConnectionStatus,
         permissionStatuses,
+        batteryOptExempt,
       }),
     [
       profile?.name,
@@ -224,10 +251,12 @@ export const useSettingScreen = () => {
       onCancelDeletion,
       onConnectHealth,
       onRequestPermission,
+      onBatteryOptimization,
       deletionStatus?.status,
       deletionStatus?.scheduledDeletionDate,
       healthConnectionStatus,
       permissionStatuses,
+      batteryOptExempt,
     ],
   );
 
