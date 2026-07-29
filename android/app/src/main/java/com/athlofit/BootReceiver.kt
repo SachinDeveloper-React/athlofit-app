@@ -66,6 +66,9 @@ class BootReceiver : BroadcastReceiver() {
         StepCounterService.start(context)
         StepServiceScheduler.schedule(context)
 
+        // Schedule periodic midnight reset check as a reliable backup
+        MidnightResetWorker.enqueue(context)
+
         // Explicitly reschedule the midnight alarm after boot/update.
         // The service does this in onStartCommand, but if the service start is delayed
         // by OEM throttling, this ensures the alarm is registered early.

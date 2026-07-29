@@ -616,12 +616,50 @@ export function useHealth(options: UseHealthOptions = {}) {
           console.log(`[useHealth] loadData (native_sensor): Midnight reset confirmed at ${nativeSensorSteps}`);
         }
 
+        // FIX: Also read from Health Connect as a fallback when in native_sensor mode.
+        // On devices where the native sensor dies (OEM killing), HC (fed by GMS) is
+        // the only source that keeps counting. Use max(native, HC) so steps never
+        // appear stuck even when the hardware sensor is dead.
+        let hcFallbackSteps = 0;
+        if (Platform.OS === 'android') {
+          try {
+            const { readRecords } = await import('react-native-health-connect');
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const now = new Date();
+            const { records } = await readRecords('Steps', {
+              timeRangeFilter: {
+                operator: 'between' as const,
+                startTime: startOfDay.toISOString(),
+                endTime: now.toISOString(),
+              },
+            });
+            if (records && records.length > 0) {
+              const OWN_PACKAGE = 'com.athlofit.athlofit';
+              const totals: Record<string, number> = {};
+              for (const r of records) {
+                const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+                if (origin === OWN_PACKAGE) continue;
+                totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
+              }
+              hcFallbackSteps = Object.values(totals).length > 0
+                ? Math.max(...Object.values(totals))
+                : 0;
+            }
+          } catch (e) {
+            // HC not available or read failed — continue with native only
+          }
+        }
+
+        // Use the higher of native sensor and HC fallback
+        const effectiveSteps = Math.max(nativeSensorSteps, hcFallbackSteps);
+
         // Add synced step offset from server (cross-device continuity).
         // If the user walked on another device today, those steps carry over.
         const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
         const today = getLocalToday();
         const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
-        const steps = nativeSensorSteps + offset;
+        const steps = effectiveSteps + offset;
 
         const STEPS_PER_MINUTE = 100;
         const STRIDE_M = gender === 'F' ? 0.70 : 0.78; // gender-based stride
@@ -988,11 +1026,12 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
-          if (isLoginToday && syncedServerBaseline && syncedServerBaselineDate === today && nativeStepsAtLogin > 0) {
+          if (isLoginToday && syncedServerBaseline && syncedServerBaselineDate === today) {
             const { bonusSteps: storedBonus, bonusStepsDate } = useHealthDataStore.getState();
             const todayBonus = bonusStepsDate === today ? (storedBonus || 0) : 0;
             const serverDeviceSteps = Math.max(0, syncedServerBaseline.steps - todayBonus);
             // Post-login steps = current raw hardware steps - hardware steps at login time
+            // nativeStepsAtLogin may be 0 if the service just started at login — that's valid.
             const postLoginSteps = Math.max(0, newSteps - nativeStepsAtLogin);
             totalSteps = serverDeviceSteps + postLoginSteps;
           }

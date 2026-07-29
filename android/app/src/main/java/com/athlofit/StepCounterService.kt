@@ -13,6 +13,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -101,6 +102,16 @@ class StepCounterService : Service(), SensorEventListener {
          */
         @Volatile
         var liveStepCount: Int = -1
+            private set
+
+        /** Last time a sensor event was received (ms since epoch). 0 if no event yet. */
+        @Volatile
+        var lastSensorEventTimeStatic: Long = 0L
+            private set
+
+        /** Total sensor events received this service session. */
+        @Volatile
+        var sensorEventCountStatic: Long = 0L
             private set
 
         /**
@@ -325,17 +336,103 @@ class StepCounterService : Service(), SensorEventListener {
     // and batch sensor events for much longer than specified, causing the step
     // count UI to appear "stuck" even though the user is walking.
     // Periodically flush the sensor to force delivery of pending events.
+    //
+    // FIX: On some OEM Android 10 devices (Mediatek/Unisoc), the sensor only
+    // delivers events at registration time (one cached event per register call).
+    // For these devices, we use "poll-by-reregister": unregister + re-register
+    // every flush interval to force event delivery.
     private val flushHandler = Handler(Looper.getMainLooper())
     private val FLUSH_INTERVAL_MS = 10_000L // Flush every 10 seconds
 
+    /** Tracks consecutive re-registrations that got the same cumulative value.
+     *  If this exceeds a threshold, the sensor only delivers on re-register. */
+    private var consecutiveSameCumCount: Int = 0
+
+    /** Indicates this device needs "poll-by-reregister" mode (sensor only fires on register). */
+    private var needsPollByReregister: Boolean = false
+
     private val flushRunnable = object : Runnable {
         override fun run() {
-            // Force pending sensor events to be delivered immediately.
-            // On devices where flush() is not effective (some Mediatek chips),
-            // re-register the listener as a fallback to kick the sensor driver.
+            val now = System.currentTimeMillis()
+
+            // ── Poll-by-reregister mode ──────────────────────────────────────
+            // If we've detected that this device only delivers sensor events at
+            // registration time, try re-registration + one-shot + HC fallback.
+            if (needsPollByReregister && sensorManager != null && stepSensor != null) {
+                // Re-register main listener (may or may not deliver an event)
+                sensorManager!!.unregisterListener(this@StepCounterService)
+                sensorManager!!.registerListener(
+                    this@StepCounterService,
+                    stepSensor,
+                    SensorManager.SENSOR_DELAY_FASTEST,  // Use FASTEST to maximize delivery chance
+                    0 // immediate
+                )
+                sensorManager?.flush(this@StepCounterService)
+
+                // If sensor has been dead for 60s+ in poll mode, activate HC polling.
+                // HC is the only reliable data source on these OEM devices since
+                // GMS (Google Play Services) counts steps at the system level and
+                // is never killed by OEM restrictions.
+                val silenceInPollMode = now - lastSensorEventTime
+                if (silenceInPollMode > 60_000L && !isHcPollingMode) {
+                    Log.w(TAG, "Poll-by-reregister mode: sensor still dead after ${silenceInPollMode/1000}s — activating HC polling")
+                    debugLog(this@StepCounterService, "HC_FALLBACK: Poll mode sensor dead ${silenceInPollMode/1000}s, activating HC polling")
+                    isHcPollingMode = true
+                    pollHealthConnectAndUpdateNotification()
+                    hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
+                }
+
+                // Emit current steps to JS regardless
+                if (dailySteps > 0) {
+                    liveStepCount = dailySteps
+                    NativeStepModule.emitStepUpdate(dailySteps, forceEmit = true)
+                    maybeUpdateNotification()
+                    updateWidget()
+                }
+
+                flushHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+                return
+            }
+
+            // ── Normal flush mode ────────────────────────────────────────────
             val flushed = sensorManager?.flush(this@StepCounterService) ?: false
-            if (!flushed && sensorManager != null && stepSensor != null) {
-                // flush() returned false or isn't supported — re-register listener
+            var reRegistered = false
+
+            if (lastSensorEventTime > 0L) {
+                val silenceMs = now - lastSensorEventTime
+                if (silenceMs > 30_000L && sensorManager != null && stepSensor != null) {
+                    // Silence detected — re-register to kick sensor driver
+                    sensorManager!!.unregisterListener(this@StepCounterService)
+                    val success = sensorManager!!.registerListener(
+                        this@StepCounterService,
+                        stepSensor,
+                        SensorManager.SENSOR_DELAY_NORMAL,
+                        MAX_REPORT_LATENCY_US
+                    )
+                    reRegistered = true
+                    val silenceSec = silenceMs / 1000
+                    debugLog(this@StepCounterService, "REREGISTER: Silence ${silenceSec}s, re-registered=$success (flush was $flushed, events=$sensorEventCount)")
+                    Log.w(TAG, "Sensor silence ${silenceSec}s — re-registered listener (success=$success, API ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER})")
+                }
+            } else if (sensorEventCount == 0L) {
+                if (sensorManager != null && stepSensor != null) {
+                    sensorManager!!.unregisterListener(this@StepCounterService)
+                    val success = sensorManager!!.registerListener(
+                        this@StepCounterService,
+                        stepSensor,
+                        SensorManager.SENSOR_DELAY_NORMAL,
+                        MAX_REPORT_LATENCY_US
+                    )
+                    reRegistered = true
+                    debugLog(this@StepCounterService, "REREGISTER: 0 events, re-registered=$success (flush=$flushed)")
+                } else {
+                    debugLog(this@StepCounterService, "SILENCE: 0 events since service start (flush=$flushed)")
+                }
+                Log.w(TAG, "Sensor registered but 0 events received (API ${Build.VERSION.SDK_INT}, ${Build.MANUFACTURER})")
+            }
+
+            // If no silence detected but flush failed, still re-register
+            if (!reRegistered && !flushed && sensorManager != null && stepSensor != null) {
                 sensorManager!!.unregisterListener(this@StepCounterService)
                 sensorManager!!.registerListener(
                     this@StepCounterService,
@@ -345,10 +442,19 @@ class StepCounterService : Service(), SensorEventListener {
                 )
             }
 
-            // Safety net: always emit the current step count to JS at each flush
-            // interval. This ensures live updates every 10s even if sensor events
-            // are being batched by the hardware and flush() had no effect.
-            // The JS throttle (5s) won't block this since we use forceEmit.
+            // HC polling fallback after 2 minutes of silence
+            if (!isHcPollingMode && lastSensorEventTime > 0L) {
+                val totalSilenceMs = now - lastSensorEventTime
+                if (totalSilenceMs > 120_000L) {
+                    Log.w(TAG, "Sensor silent for ${totalSilenceMs/1000}s — activating HC polling fallback")
+                    debugLog(this@StepCounterService, "HC_FALLBACK: Activating HC polling (sensor silent ${totalSilenceMs/1000}s)")
+                    isHcPollingMode = true
+                    pollHealthConnectAndUpdateNotification()
+                    hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
+                }
+            }
+
+            // Safety net: emit current steps to JS
             if (dailySteps > 0) {
                 liveStepCount = dailySteps
                 NativeStepModule.emitStepUpdate(dailySteps, forceEmit = true)
@@ -449,6 +555,19 @@ class StepCounterService : Service(), SensorEventListener {
                 // that don't respect MAX_REPORT_LATENCY_US (e.g., Mediatek budget phones).
                 flushHandler.removeCallbacks(flushRunnable)
                 flushHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS)
+
+                // FIX: On Android 10-11 (API 29-30), OEM devices frequently kill
+                // the sensor listener within seconds of registration. Start HC polling
+                // ALONGSIDE the native sensor as a proactive fallback — don't wait for
+                // silence detection. If the native sensor works, HC polling is just
+                // redundant (the "never decrease" logic in JS handles dedup).
+                // This eliminates the 20-minute dead period after install/login.
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                    Log.d(TAG, "API ${Build.VERSION.SDK_INT} <= 30 — starting proactive HC polling alongside native sensor")
+                    debugLog(this, "HC_PROACTIVE: Starting HC polling (API ${Build.VERSION.SDK_INT})")
+                    isHcPollingMode = true
+                    hcHandler.postDelayed(hcPollRunnable, HC_POLL_INTERVAL_MS)
+                }
             }
         }
 
@@ -470,8 +589,9 @@ class StepCounterService : Service(), SensorEventListener {
         serviceScope.cancel()
         // Persist current state before shutdown
         persistState()
-        // Unregister sensor listener
+        // Unregister sensor listeners (counter + detector)
         sensorManager?.unregisterListener(this)
+        sensorManager?.unregisterListener(stepDetectorListener)
         // Emit service stopped event to JS layer
         NativeStepModule.emitServiceStopped()
         super.onDestroy()
@@ -483,9 +603,15 @@ class StepCounterService : Service(), SensorEventListener {
 
     /**
      * Registers the TYPE_STEP_COUNTER sensor listener with SENSOR_DELAY_NORMAL
-     * and a max report latency of 10 seconds.
+     * and immediate delivery (MAX_REPORT_LATENCY_US = 0).
      *
-     * @return true if registration succeeded, false otherwise.
+     * Also registers TYPE_STEP_DETECTOR as a backup wake-up mechanism.
+     * On some OEM devices (Android 10), the step counter listener gets silently
+     * killed. The step detector (which fires per-step) can survive longer and
+     * serves as a "heartbeat" to detect that the user is still walking,
+     * triggering a counter re-registration when silence is detected.
+     *
+     * @return true if at least the counter registration succeeded, false otherwise.
      */
     private fun registerSensorListener(): Boolean {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
@@ -511,15 +637,114 @@ class StepCounterService : Service(), SensorEventListener {
             Log.e(TAG, "registerListener returned false")
         }
 
+        // Register TYPE_STEP_DETECTOR as a backup "heartbeat" sensor.
+        // This is a wake-up sensor on most devices — when it fires (per step),
+        // we know the user is walking. If the counter is silent, the detector
+        // event triggers a counter re-registration.
+        val detector = sensorManager!!.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+        if (detector != null) {
+            sensorManager!!.registerListener(
+                stepDetectorListener,
+                detector,
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+            Log.d(TAG, "TYPE_STEP_DETECTOR registered as backup heartbeat (wakeUp=${detector.isWakeUpSensor})")
+        }
+
         return success
+    }
+
+    /**
+     * Backup listener for TYPE_STEP_DETECTOR.
+     * When this fires but TYPE_STEP_COUNTER is silent, it means the counter
+     * listener was killed by the OEM. Triggers a counter re-registration.
+     */
+    private val stepDetectorListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event == null || event.sensor.type != Sensor.TYPE_STEP_DETECTOR) return
+
+            // If the counter has been silent for > 20 seconds but detector fires,
+            // the counter listener is dead — force re-registration.
+            val now = System.currentTimeMillis()
+            val counterSilenceMs = if (lastSensorEventTime > 0L) now - lastSensorEventTime else Long.MAX_VALUE
+
+            if (counterSilenceMs > 20_000L && sensorManager != null && stepSensor != null) {
+                Log.w(TAG, "DETECTOR fired but COUNTER silent for ${counterSilenceMs/1000}s — re-registering counter")
+                debugLog(this@StepCounterService, "DETECTOR_WAKE: Counter silent ${counterSilenceMs/1000}s, re-registering")
+                sensorManager!!.unregisterListener(this@StepCounterService)
+                sensorManager!!.registerListener(
+                    this@StepCounterService,
+                    stepSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL,
+                    MAX_REPORT_LATENCY_US
+                )
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
 
     // ── SensorEventListener ───────────────────────────────────────────────────
 
+    /** Timestamp of last sensor event (used to detect sensor silence on Android 10). */
+    private var lastSensorEventTime: Long = 0L
+
+    /** Count of total sensor events received this session (for diagnostics). */
+    private var sensorEventCount: Long = 0L
+
+    /** Last cumulative value from sensor event (for detecting stale re-register responses). */
+    private var lastEventCumulative: Long = 0L
+
+    /** Count of consecutive events with same cumulative (indicates sensor HAL is dead). */
+    private var sameCumulativeCount: Int = 0
+
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || event.sensor.type != Sensor.TYPE_STEP_COUNTER) return
 
+        val now = System.currentTimeMillis()
+        val gapMs = if (lastSensorEventTime > 0L) now - lastSensorEventTime else 0L
+        lastSensorEventTime = now
+        sensorEventCount++
+
+        // Update static accessors for diagnostics
+        lastSensorEventTimeStatic = now
+        sensorEventCountStatic = sensorEventCount
+
+        // Log significant gaps (> 60 seconds) — helps identify OEM sensor batching/killing
+        if (gapMs > 60_000L) {
+            val gapSec = gapMs / 1000
+            debugLog(this, "SENSOR_GAP: ${gapSec}s since last event (event#$sensorEventCount)")
+            Log.w(TAG, "onSensorChanged — gap of ${gapSec}s since last event (possible OEM throttle/kill)")
+        }
+
+        // Log first 3 events for startup debugging
+        if (sensorEventCount <= 3) {
+            debugLog(this, "EVENT#$sensorEventCount: cum=${event.values[0].toLong()}, gap=${gapMs}ms")
+        }
+
         val cumulative = event.values[0].toLong()
+
+        // ── Detect "poll-by-reregister" pattern ──────────────────────────────
+        // On some OEM devices (Mediatek/Unisoc Android 10), the sensor only
+        // delivers a cached value on re-registration. If we see 3+ consecutive
+        // events with the same cumulative and gaps of ~30s (our re-register interval),
+        // switch to "poll-by-reregister" mode where we re-register every 10s
+        // to keep the HAL alive and counting.
+        if (cumulative == lastEventCumulative && gapMs > 25_000L) {
+            sameCumulativeCount++
+            if (sameCumulativeCount >= 2 && !needsPollByReregister) {
+                needsPollByReregister = true
+                debugLog(this, "POLL_MODE: Sensor stuck at $cumulative for $sameCumulativeCount events — switching to poll-by-reregister")
+                Log.w(TAG, "Detected stale sensor: cumulative stuck at $cumulative for $sameCumulativeCount events. Activating poll-by-reregister mode.")
+            }
+        } else if (cumulative != lastEventCumulative) {
+            // Cumulative changed — sensor is alive and counting
+            sameCumulativeCount = 0
+            // If we were in poll-by-reregister mode and sensor starts delivering
+            // real updates again (e.g., after user whitelisted the app), keep the
+            // mode active — it doesn't hurt and prevents regression.
+        }
+        lastEventCumulative = cumulative
         lastCumulative = cumulative
 
         // Persist lastCumulative so midnight reset can use it even after service restart
@@ -1395,9 +1620,15 @@ class StepCounterService : Service(), SensorEventListener {
      * @param steps The current daily step count to display.
      */
     private fun buildStepNotification(steps: Int): Notification {
+        // ── Date guard: always show 0 if storedDate doesn't match today ──────
+        // This ensures that even if midnight reset didn't fire (OEM kill, Doze,
+        // alarm miss), the notification never shows yesterday's stale step count.
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val safeSteps = if (storedDate.isNotEmpty() && storedDate != today) 0 else steps
+
         val goal = getDailyGoal()
-        val percentage = if (goal > 0) ((steps.toLong() * 100) / goal).toInt().coerceIn(0, 100) else 0
-        val stepsFormatted = String.format("%,d", steps)
+        val percentage = if (goal > 0) ((safeSteps.toLong() * 100) / goal).toInt().coerceIn(0, 100) else 0
+        val stepsFormatted = String.format("%,d", safeSteps)
         val goalFormatted = String.format("%,d", goal)
 
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {

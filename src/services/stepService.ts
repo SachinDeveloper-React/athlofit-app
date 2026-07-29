@@ -328,6 +328,174 @@ class StepService {
       return false;
     }
   }
+
+  // ─── Diagnostics ──────────────────────────────────────────────────────────
+
+  /**
+   * Returns comprehensive diagnostic data for debugging step counting issues.
+   * Includes device info, permission status, sensor details, service state,
+   * battery optimization, and the native debug log.
+   *
+   * Use this when steps are not increasing on specific devices (e.g., Android 10).
+   */
+  async getDiagnostics(): Promise<StepDiagnostics | null> {
+    if (!NativeStep) {
+      return null;
+    }
+    try {
+      return await NativeStep.getDiagnostics();
+    } catch (e) {
+      console.warn('[StepService] getDiagnostics failed:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Fetches diagnostics and logs a formatted summary to the console.
+   * Call this from a debug screen or when investigating step issues on a device.
+   *
+   * Returns the raw diagnostics object for further inspection.
+   */
+  async logDiagnostics(): Promise<StepDiagnostics | null> {
+    const diag = await this.getDiagnostics();
+    if (!diag) {
+      console.warn('[StepService] Diagnostics unavailable (iOS or native module missing)');
+      return null;
+    }
+
+    const lines: string[] = [
+      '═══════════════════════════════════════════════════',
+      '       STEP SERVICE DIAGNOSTICS',
+      '═══════════════════════════════════════════════════',
+      '',
+      '── Device ──',
+      `  API Level: ${diag.device?.apiLevel} (Android ${diag.device?.androidVersion})`,
+      `  Manufacturer: ${diag.device?.manufacturer}`,
+      `  Model: ${diag.device?.model}`,
+      `  Brand: ${diag.device?.brand}`,
+      `  Hardware: ${diag.device?.hardware}`,
+      `  Board: ${diag.device?.board}`,
+      `  SoC: ${diag.device?.soc}`,
+      '',
+      '── Permission ──',
+      `  ACTIVITY_RECOGNITION required: ${diag.permission?.activityRecognitionRequired}`,
+      `  ACTIVITY_RECOGNITION granted: ${diag.permission?.activityRecognitionGranted}`,
+      `  Status: ${diag.permission?.permissionStatus}`,
+      `  Retry count: ${diag.permission?.retryCount}`,
+      `  Retry exhausted: ${diag.permission?.retryExhausted}`,
+      '',
+      '── Sensor ──',
+      `  SensorManager available: ${diag.sensor?.sensorManagerAvailable}`,
+      `  TYPE_STEP_COUNTER available: ${diag.sensor?.stepCounterAvailable}`,
+      `  TYPE_STEP_DETECTOR available: ${diag.sensor?.stepDetectorAvailable}`,
+      `  Sensor name: ${diag.sensor?.sensorName ?? 'N/A'}`,
+      `  Sensor vendor: ${diag.sensor?.sensorVendor ?? 'N/A'}`,
+      `  Wake-up sensor: ${diag.sensor?.isWakeUpSensor ?? 'N/A'}`,
+      `  FIFO max: ${diag.sensor?.fifoMaxCount ?? 'N/A'}`,
+      `  FIFO reserved: ${diag.sensor?.fifoReservedCount ?? 'N/A'}`,
+      '',
+      '── Service ──',
+      `  Running: ${diag.service?.serviceRunning}`,
+      `  Live step count: ${diag.service?.liveStepCount}`,
+      `  Display step floor: ${diag.service?.displayStepFloor}`,
+      `  Source: ${diag.service?.source}`,
+      `  Sensor events received: ${diag.service?.sensorEventCount}`,
+      `  Seconds since last sensor event: ${diag.service?.secondsSinceLastSensorEvent}`,
+      '',
+      '── Step State (SharedPreferences) ──',
+      `  Baseline: ${diag.stepState?.baseline}`,
+      `  Daily steps: ${diag.stepState?.dailySteps}`,
+      `  Reboot offset: ${diag.stepState?.rebootOffset}`,
+      `  Stored date: ${diag.stepState?.storedDate}`,
+      `  Last cumulative: ${diag.stepState?.lastCumulative}`,
+      '',
+      '── Battery ──',
+      `  Ignoring battery optimization: ${diag.battery?.ignoringBatteryOptimization}`,
+      `  Device idle (Doze): ${diag.battery?.isDeviceIdleMode}`,
+      `  Power save mode: ${diag.battery?.isPowerSaveMode}`,
+      '',
+      '── Time ──',
+      `  Current date: ${diag.time?.currentDate}`,
+      `  Timezone: ${diag.time?.timezone}`,
+      '',
+      '── Debug Log (native) ──',
+      diag.debugLog ?? '(empty)',
+      '',
+      '═══════════════════════════════════════════════════',
+    ];
+
+    console.log(`[StepService:Diagnostics]\n${lines.join('\n')}`);
+    return diag;
+  }
+}
+
+export interface StepDiagnostics {
+  device?: {
+    apiLevel: number;
+    androidVersion: string;
+    manufacturer: string;
+    model: string;
+    brand: string;
+    device: string;
+    hardware: string;
+    board: string;
+    soc: string;
+  };
+  permission?: {
+    activityRecognitionRequired: boolean;
+    activityRecognitionGranted: boolean;
+    permissionStatus: string;
+    retryCount: number;
+    retryExhausted: boolean;
+  };
+  sensor?: {
+    sensorManagerAvailable: boolean;
+    stepCounterAvailable: boolean;
+    stepDetectorAvailable: boolean;
+    sensorName?: string;
+    sensorVendor?: string;
+    sensorVersion?: number;
+    sensorMaxRange?: number;
+    sensorResolution?: number;
+    sensorMinDelay?: number;
+    sensorMaxDelay?: number;
+    isWakeUpSensor?: boolean;
+    fifoMaxCount?: number;
+    fifoReservedCount?: number;
+  };
+  service?: {
+    liveStepCount: number;
+    serviceRunning: boolean;
+    displayStepFloor: number;
+    source: string;
+    lastSensorEventTime: number;
+    sensorEventCount: number;
+    secondsSinceLastSensorEvent: number;
+  };
+  stepState?: {
+    baseline: number;
+    dailySteps: number;
+    rebootOffset: number;
+    storedDate: string;
+    lastCumulative: number;
+    lastSyncTime: number;
+    lastSyncedSteps: number;
+    inflationFixV2: boolean;
+    inflationFixV4: boolean;
+    inflationFixV5: boolean;
+    inflationFixV6: boolean;
+  };
+  battery?: {
+    ignoringBatteryOptimization: boolean;
+    isDeviceIdleMode: boolean;
+    isPowerSaveMode: boolean;
+  };
+  time?: {
+    currentTimeMs: number;
+    currentDate: string;
+    timezone: string;
+  };
+  debugLog?: string;
 }
 
 export const stepService = new StepService();

@@ -169,6 +169,8 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             StepCounterService.start(context)
             // Schedule periodic keepalive worker to restart service if killed by OEM
             StepServiceScheduler.schedule(context)
+            // Schedule periodic midnight reset check as a reliable backup
+            MidnightResetWorker.enqueue(context)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("START_ERROR", e.message, e)
@@ -535,6 +537,134 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             Log.e(TAG, "openBatterySettings failed: ${e.message}", e)
             promise.resolve(false)
+        }
+    }
+
+    // ─── Diagnostics ──────────────────────────────────────────────────────────
+
+    /**
+     * Returns comprehensive diagnostic information for debugging step counting issues.
+     * Covers: device info, permission state, sensor availability, service status,
+     * battery optimization, step state, and recent debug log.
+     *
+     * Designed for Android 10 (API 29) debugging where steps may not update.
+     */
+    @ReactMethod
+    fun getDiagnostics(promise: Promise) {
+        try {
+            val context = reactApplicationContext
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val diag = Arguments.createMap()
+
+            // ── Device Info ──
+            val deviceInfo = Arguments.createMap().apply {
+                putInt("apiLevel", Build.VERSION.SDK_INT)
+                putString("androidVersion", Build.VERSION.RELEASE)
+                putString("manufacturer", Build.MANUFACTURER)
+                putString("model", Build.MODEL)
+                putString("brand", Build.BRAND)
+                putString("device", Build.DEVICE)
+                putString("hardware", Build.HARDWARE)
+                // Chipset info (helps identify Mediatek batching issues)
+                putString("board", Build.BOARD)
+                putString("soc", if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else "unknown (API<31)")
+            }
+            diag.putMap("device", deviceInfo)
+
+            // ── Permission State ──
+            val permInfo = Arguments.createMap().apply {
+                putBoolean("activityRecognitionRequired", StepPermissionManager.needsPermission())
+                putBoolean("activityRecognitionGranted", StepPermissionManager.isGranted(context))
+                putString("permissionStatus", StepPermissionManager.getStatus(context))
+                putInt("retryCount", StepPermissionManager.getRetryCount())
+                putBoolean("retryExhausted", StepPermissionManager.isRetryExhausted())
+            }
+            diag.putMap("permission", permInfo)
+
+            // ── Sensor Info ──
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            val stepSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+            val stepDetector = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+            val sensorInfo = Arguments.createMap().apply {
+                putBoolean("sensorManagerAvailable", sensorManager != null)
+                putBoolean("stepCounterAvailable", stepSensor != null)
+                putBoolean("stepDetectorAvailable", stepDetector != null)
+                if (stepSensor != null) {
+                    putString("sensorName", stepSensor.name)
+                    putString("sensorVendor", stepSensor.vendor)
+                    putInt("sensorVersion", stepSensor.version)
+                    putDouble("sensorMaxRange", stepSensor.maximumRange.toDouble())
+                    putDouble("sensorResolution", stepSensor.resolution.toDouble())
+                    putInt("sensorMinDelay", stepSensor.minDelay)
+                    putInt("sensorMaxDelay", stepSensor.maxDelay)
+                    putBoolean("isWakeUpSensor", stepSensor.isWakeUpSensor)
+                    putInt("fifoMaxCount", stepSensor.fifoMaxEventCount)
+                    putInt("fifoReservedCount", stepSensor.fifoReservedEventCount)
+                }
+            }
+            diag.putMap("sensor", sensorInfo)
+
+            // ── Service State ──
+            val serviceInfo = Arguments.createMap().apply {
+                putInt("liveStepCount", StepCounterService.liveStepCount)
+                putBoolean("serviceRunning", StepCounterService.liveStepCount >= 0)
+                putInt("displayStepFloor", StepCounterService.displayStepFloor)
+                putString("source", StepSourceResolver.resolve(context).name)
+                // Sensor event tracking (key for Android 10 silence detection)
+                putDouble("lastSensorEventTime", StepCounterService.lastSensorEventTimeStatic.toDouble())
+                putDouble("sensorEventCount", StepCounterService.sensorEventCountStatic.toDouble())
+                val lastEvtMs = StepCounterService.lastSensorEventTimeStatic
+                if (lastEvtMs > 0L) {
+                    val silenceSec = (System.currentTimeMillis() - lastEvtMs) / 1000
+                    putDouble("secondsSinceLastSensorEvent", silenceSec.toDouble())
+                } else {
+                    putDouble("secondsSinceLastSensorEvent", (-1).toDouble())
+                }
+            }
+            diag.putMap("service", serviceInfo)
+
+            // ── Persisted Step State ──
+            val stateInfo = Arguments.createMap().apply {
+                putDouble("baseline", prefs.getLong("baseline", 0L).toDouble())
+                putInt("dailySteps", prefs.getInt("dailySteps", 0))
+                putInt("rebootOffset", prefs.getInt("rebootOffset", 0))
+                putString("storedDate", prefs.getString("storedDate", "") ?: "")
+                putDouble("lastCumulative", prefs.getLong("lastCumulative", 0L).toDouble())
+                putDouble("lastSyncTime", prefs.getLong("lastSyncTime", 0L).toDouble())
+                putInt("lastSyncedSteps", prefs.getInt("lastSyncedSteps", -1))
+                putBoolean("inflationFixV2", prefs.getBoolean("inflationFixV2", false))
+                putBoolean("inflationFixV4", prefs.getBoolean("inflationFixV4", false))
+                putBoolean("inflationFixV5", prefs.getBoolean("inflationFixV5", false))
+                putBoolean("inflationFixV6", prefs.getBoolean("inflationFixV6", false))
+            }
+            diag.putMap("stepState", stateInfo)
+
+            // ── Battery Optimization ──
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val batteryInfo = Arguments.createMap().apply {
+                putBoolean("ignoringBatteryOptimization", pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true)
+                putBoolean("isDeviceIdleMode", pm?.isDeviceIdleMode ?: false)
+                putBoolean("isPowerSaveMode", pm?.isPowerSaveMode ?: false)
+            }
+            diag.putMap("battery", batteryInfo)
+
+            // ── Timestamp Info ──
+            val now = System.currentTimeMillis()
+            val timeInfo = Arguments.createMap().apply {
+                putDouble("currentTimeMs", now.toDouble())
+                putString("currentDate", java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE))
+                putString("timezone", java.util.TimeZone.getDefault().id)
+            }
+            diag.putMap("time", timeInfo)
+
+            // ── Debug Log (last 50 lines) ──
+            val debugLog = prefs.getString("stepDebugLog", "(no logs)") ?: "(no logs)"
+            diag.putString("debugLog", debugLog)
+
+            promise.resolve(diag)
+        } catch (e: Exception) {
+            Log.e(TAG, "getDiagnostics failed: ${e.message}", e)
+            promise.reject("DIAGNOSTICS_ERROR", e.message, e)
         }
     }
 }

@@ -46,6 +46,7 @@ const StepSourcesScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugLog, setDebugLog] = useState<string>('');
+  const [diagnostics, setDiagnostics] = useState<any>(null);
 
   const loadSources = useCallback(async () => {
     try {
@@ -212,6 +213,9 @@ const StepSourcesScreen: React.FC = () => {
         const { stepService } = await import('../../../services/stepService');
         const log = await stepService.getDebugLog();
         setDebugLog(log);
+        // Load full diagnostics
+        const diag = await stepService.getDiagnostics();
+        setDiagnostics(diag);
       } catch { setDebugLog('(failed to load)'); }
     }
   }, []);
@@ -404,6 +408,36 @@ const StepSourcesScreen: React.FC = () => {
             multiline
           />
         </View>
+
+        {/* Device Diagnostics */}
+        {diagnostics && (
+          <>
+            <AppText variant="headline" weight="semiBold" style={{ marginTop: 24, marginBottom: 12 }}>
+              Device Diagnostics
+            </AppText>
+            <View style={[styles.debugCard, { backgroundColor: cardBg, borderColor }]}>
+              <DebugRow label="API Level" value={`${diagnostics.device?.apiLevel} (Android ${diagnostics.device?.androidVersion})`} colors={colors} />
+              <DebugRow label="Manufacturer" value={diagnostics.device?.manufacturer ?? '—'} colors={colors} />
+              <DebugRow label="Model" value={diagnostics.device?.model ?? '—'} colors={colors} />
+              <DebugRow label="SoC / Board" value={`${diagnostics.device?.soc ?? '?'} / ${diagnostics.device?.board ?? '?'}`} colors={colors} />
+              <DebugRow label="Permission" value={`${diagnostics.permission?.permissionStatus} (required: ${diagnostics.permission?.activityRecognitionRequired})`} colors={colors} />
+              <DebugRow label="Sensor Available" value={`Counter: ${diagnostics.sensor?.stepCounterAvailable}, Detector: ${diagnostics.sensor?.stepDetectorAvailable}`} colors={colors} />
+              <DebugRow label="Sensor Name" value={diagnostics.sensor?.sensorName ?? 'N/A'} colors={colors} />
+              <DebugRow label="Wake-up Sensor" value={String(diagnostics.sensor?.isWakeUpSensor ?? 'N/A')} colors={colors} />
+              <DebugRow label="FIFO (max/reserved)" value={`${diagnostics.sensor?.fifoMaxCount ?? '?'} / ${diagnostics.sensor?.fifoReservedCount ?? '?'}`} colors={colors} />
+              <DebugRow label="Service Running" value={String(diagnostics.service?.serviceRunning)} colors={colors} />
+              <DebugRow label="Live Steps" value={String(diagnostics.service?.liveStepCount)} colors={colors} />
+              <DebugRow label="Sensor Events" value={String(diagnostics.service?.sensorEventCount ?? 0)} colors={colors} />
+              <DebugRow label="Last Event (sec ago)" value={diagnostics.service?.secondsSinceLastSensorEvent >= 0 ? `${diagnostics.service.secondsSinceLastSensorEvent}s` : 'never'} colors={colors} />
+              <DebugRow label="Battery Exempt" value={String(diagnostics.battery?.ignoringBatteryOptimization)} colors={colors} />
+              <DebugRow label="Doze Mode" value={String(diagnostics.battery?.isDeviceIdleMode)} colors={colors} />
+              <DebugRow label="Power Save" value={String(diagnostics.battery?.isPowerSaveMode)} colors={colors} />
+              <DebugRow label="Baseline" value={String(diagnostics.stepState?.baseline ?? 0)} colors={colors} />
+              <DebugRow label="Reboot Offset" value={String(diagnostics.stepState?.rebootOffset ?? 0)} colors={colors} />
+              <DebugRow label="Stored Date" value={diagnostics.stepState?.storedDate ?? '—'} colors={colors} />
+            </View>
+          </>
+        )}
 
         {/* Native Service Debug Log */}
         {debugLog ? (

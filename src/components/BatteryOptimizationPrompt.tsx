@@ -24,7 +24,7 @@ const BatteryOptimizationPrompt: React.FC = () => {
       visible={shouldPrompt}
       onClose={dismiss}
       title="Background Activity"
-      snapHeight="45%"
+      // snapHeight="45%"
       closeOnBackdrop={false}
     >
       <View style={styles.content}>
