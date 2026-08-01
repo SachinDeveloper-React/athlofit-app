@@ -141,7 +141,9 @@ export function useSyncHealth() {
 
         // Push total steps (device + bonus) to notification and widget
         // so they also reflect the bonus-adjusted count.
-        if (d.totalSteps && d.totalSteps > 0) {
+        // CRITICAL: Only push if sync response is for today — prevents pushing
+        // yesterday's cached steps after midnight reset.
+        if (d.totalSteps && d.totalSteps > 0 && d.date === today) {
           import('../../../services/stepService').then(({ stepService }) => {
             stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
           });
@@ -154,11 +156,16 @@ export function useSyncHealth() {
       // useHealth's loadData which overwrites the store on every poll.
       // The next loadData (90s max) will read the correct value via
       // server baseline. Updating store here causes oscillation.
+      // CRITICAL: Only push if sync response is for today — prevents pushing
+      // yesterday's cached steps after midnight reset.
       if (d?.totalSteps && d.totalSteps > 0) {
-        // Push to notification and widget
-        import('../../../services/stepService').then(({ stepService }) => {
-          stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
-        });
+        const today = getLocalToday();
+        if (d.date === today) {
+          // Push to notification and widget
+          import('../../../services/stepService').then(({ stepService }) => {
+            stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
+          });
+        }
       }
 
       // Always invalidate weekly-steps after a sync so the chart reflects

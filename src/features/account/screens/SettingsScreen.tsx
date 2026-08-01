@@ -1,9 +1,12 @@
 import React, { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { AppText, Screen, AppView, Header, Card } from '../../../components';
 import { useTheme } from '../../../hooks/useTheme';
 import { SettingsRow } from '../components/settings/SettingsRow';
 import { useSettingStyles } from '../styles/useSettingStyles';
 import { useSettingScreen } from '../hooks/useSettingScreen';
+
+const packageJson = require('../../../../package.json');
 
 type Props = {};
 
@@ -39,6 +42,13 @@ const SettingsScreen = (props: Props) => {
             </Card>
           </AppView>
         ))}
+        
+        {/* App Version */}
+        <AppView style={{ alignItems: 'center', marginTop: 16, marginBottom: 32 }}>
+          <AppText style={{ fontSize: 12, opacity: 0.5 }}>
+            Version {packageJson.version} ({Platform.OS === 'ios' ? 'iOS' : 'Android'})
+          </AppText>
+        </AppView>
       </AppView>
     </Screen>
   );

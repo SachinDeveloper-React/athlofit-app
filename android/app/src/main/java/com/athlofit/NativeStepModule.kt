@@ -620,6 +620,15 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 } else {
                     putDouble("secondsSinceLastSensorEvent", (-1).toDouble())
                 }
+                // ── Sensor health / fallback state ──
+                // hcPollingMode true while the sensor is silent and Health Connect
+                // is standing in. reregisterCount growing quickly means the sensor
+                // listener is being torn down repeatedly, which starves event
+                // delivery on sensor-hub devices.
+                putBoolean("hcPollingMode", StepCounterService.hcPollingModeStatic)
+                putBoolean("sensorSupportsFlush", StepCounterService.sensorSupportsFlushStatic)
+                putBoolean("pollByReregisterMode", StepCounterService.pollByReregisterStatic)
+                putInt("reregisterCount", StepCounterService.reregisterCountStatic)
             }
             diag.putMap("service", serviceInfo)
 
@@ -632,10 +641,10 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 putDouble("lastCumulative", prefs.getLong("lastCumulative", 0L).toDouble())
                 putDouble("lastSyncTime", prefs.getLong("lastSyncTime", 0L).toDouble())
                 putInt("lastSyncedSteps", prefs.getInt("lastSyncedSteps", -1))
-                putBoolean("inflationFixV2", prefs.getBoolean("inflationFixV2", false))
-                putBoolean("inflationFixV4", prefs.getBoolean("inflationFixV4", false))
-                putBoolean("inflationFixV5", prefs.getBoolean("inflationFixV5", false))
+                // Only V6 remains — the stacked V2/V4/V5 migrations were removed
+                // because V6 already applies a strict superset of their resets.
                 putBoolean("inflationFixV6", prefs.getBoolean("inflationFixV6", false))
+                putBoolean("ownHcRecordsPurged", prefs.getBoolean("ownHcRecordsPurged", false))
             }
             diag.putMap("stepState", stateInfo)
 

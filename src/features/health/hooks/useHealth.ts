@@ -937,7 +937,16 @@ export function useHealth(options: UseHealthOptions = {}) {
       // pushStepUpdate no longer changes liveStepCount (inflation loop broken).
       // This ensures widget/notification show HC value after reboot when native
       // sensor has fewer steps than HC (reboot resets the hardware counter).
-      if (Platform.OS === 'android' && result.steps > 0) {
+      //
+      // CRITICAL: Only push if midnight reset gate is NOT pending. During midnight
+      // reset, the native service has already set steps to 0. Pushing cached data
+      // from JS would overwrite that 0 with yesterday's steps.
+      // Also skip if steps are 0 (nothing to push) or result came from native sensor
+      // (would create circular update loop).
+      if (Platform.OS === 'android' && 
+          result.steps > 0 && 
+          p !== 'native_sensor' &&
+          !midnightResetPendingRef.current) {
         import('../../../services/stepService').then(({ stepService }) => {
           stepService.forceRefreshSteps(result.steps).catch(() => { /* non-fatal */ });
         });

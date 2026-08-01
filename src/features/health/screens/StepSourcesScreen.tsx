@@ -429,6 +429,10 @@ const StepSourcesScreen: React.FC = () => {
               <DebugRow label="Live Steps" value={String(diagnostics.service?.liveStepCount)} colors={colors} />
               <DebugRow label="Sensor Events" value={String(diagnostics.service?.sensorEventCount ?? 0)} colors={colors} />
               <DebugRow label="Last Event (sec ago)" value={diagnostics.service?.secondsSinceLastSensorEvent >= 0 ? `${diagnostics.service.secondsSinceLastSensorEvent}s` : 'never'} colors={colors} />
+              <DebugRow label="Re-registrations" value={String(diagnostics.service?.reregisterCount ?? 0)} colors={colors} />
+              <DebugRow label="HC Fallback Active" value={String(diagnostics.service?.hcPollingMode ?? false)} colors={colors} />
+              <DebugRow label="Poll-by-reregister" value={String(diagnostics.service?.pollByReregisterMode ?? false)} colors={colors} />
+              <DebugRow label="Flush Supported" value={String(diagnostics.service?.sensorSupportsFlush ?? false)} colors={colors} />
               <DebugRow label="Battery Exempt" value={String(diagnostics.battery?.ignoringBatteryOptimization)} colors={colors} />
               <DebugRow label="Doze Mode" value={String(diagnostics.battery?.isDeviceIdleMode)} colors={colors} />
               <DebugRow label="Power Save" value={String(diagnostics.battery?.isPowerSaveMode)} colors={colors} />

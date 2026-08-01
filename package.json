@@ -1,6 +1,6 @@
 {
   "name": "Athlofit",
-  "version": "0.0.58",
+  "version": "0.0.61",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

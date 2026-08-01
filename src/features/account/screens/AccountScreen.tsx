@@ -1,5 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import React, { useCallback } from 'react';
+import { Platform } from 'react-native';
 import { AppText, AppView, Card, Icon, Screen, NotificationBell } from '../../../components';
 import {
   AccountAvatar,
@@ -12,6 +13,8 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { useTheme } from '../../../hooks/useTheme';
 import { MenuRow } from '../types/account.types';
 import { useAccountScreen } from '../hooks/useAccountScreen';
+
+const packageJson = require('../../../../package.json');
 
 type Props = {};
 
@@ -93,7 +96,13 @@ const AccountScreen = (props: Props) => {
         ]}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <AppView style={s.sep} />}
-        ListFooterComponent={<AppView style={{ height: 24 }} />}
+        ListFooterComponent={
+          <AppView style={{ alignItems: 'center', marginTop: 24, marginBottom: 24 }}>
+            <AppText style={{ fontSize: 12, opacity: 0.5 }}>
+              Version {packageJson.version} ({Platform.OS === 'ios' ? 'iOS' : 'Android'})
+            </AppText>
+          </AppView>
+        }
       />
     </Screen>
   );

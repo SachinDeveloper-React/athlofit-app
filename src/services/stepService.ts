@@ -471,6 +471,14 @@ export interface StepDiagnostics {
     lastSensorEventTime: number;
     sensorEventCount: number;
     secondsSinceLastSensorEvent: number;
+    /** True while Health Connect is standing in for a silent hardware sensor. */
+    hcPollingMode: boolean;
+    /** True when the sensor has a hardware FIFO, so flush() is meaningful. */
+    sensorSupportsFlush: boolean;
+    /** True when this device only emits step events on listener re-registration. */
+    pollByReregisterMode: boolean;
+    /** Sensor listener re-registrations this session. High values mean churn. */
+    reregisterCount: number;
   };
   stepState?: {
     baseline: number;
@@ -480,10 +488,8 @@ export interface StepDiagnostics {
     lastCumulative: number;
     lastSyncTime: number;
     lastSyncedSteps: number;
-    inflationFixV2: boolean;
-    inflationFixV4: boolean;
-    inflationFixV5: boolean;
     inflationFixV6: boolean;
+    ownHcRecordsPurged: boolean;
   };
   battery?: {
     ignoringBatteryOptimization: boolean;
