@@ -32,3 +32,5 @@ export { default as SystemOverlay } from './common/SystemOverlay';
 export { default as ForceUpdateModal } from './common/ForceUpdateModal';
 export { ToastProvider, useToast } from './Toast';
 export { default as Typography } from './Typography';
+export { default as WhatsAppSupportButton } from './WhatsAppSupportButton';
+export { default as WhatsAppIcon } from './WhatsAppIcon';

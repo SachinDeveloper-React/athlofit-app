@@ -40,7 +40,7 @@ import {
   setupMidnightChannel,
 } from '../features/health/service/hydrationMidnightReset.service';
 import { setupNotifChannels } from '../features/health/hooks/useSyncHealth';
-import { SystemOverlay } from '../components';
+import { SystemOverlay, WhatsAppSupportButton } from '../components';
 import BatteryOptimizationPrompt from '../components/BatteryOptimizationPrompt';
 import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { linking } from '../navigation/linkingConfig';
@@ -219,6 +219,7 @@ const AppShell: React.FC = () => {
             <RootNavigator />
             <SystemOverlay />
             <BatteryOptimizationPrompt />
+            <WhatsAppSupportButton />
           </ToastProvider>
         </NavigationContainer>
       </KeyboardWrapper>

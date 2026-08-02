@@ -98,11 +98,11 @@ const EditStepsGoalScreen = memo(() => {
   const navigation = useNavigation();
   const { success, error } = useToast();
 
-  const cooldownDaysRemaining = useMemo(
-    () => getCooldownDaysRemaining(user?.lastStepGoalChangeDate),
-    [user?.lastStepGoalChangeDate],
-  );
-  const isOnCooldown = cooldownDaysRemaining > 0;
+  // const cooldownDaysRemaining = useMemo(
+  //   () => getCooldownDaysRemaining(user?.lastStepGoalChangeDate),
+  //   [user?.lastStepGoalChangeDate],
+  // );
+  // const isOnCooldown = cooldownDaysRemaining > 0;
   const lastChangedFormatted = useMemo(
     () => formatChangeDate(user?.lastStepGoalChangeDate),
     [user?.lastStepGoalChangeDate],
@@ -149,14 +149,14 @@ const EditStepsGoalScreen = memo(() => {
         </AppText>
       </AppView>
 
-      <AppView style={styles.warningBanner}>
+      {/* <AppView style={styles.warningBanner}>
         <AlertTriangle size={18} color="#D97706" />
         <AppText variant='caption1' style={styles.warningText}>
           {isOnCooldown
             ? `You changed your goal on ${lastChangedFormatted}. You can change it again after ${cooldownDaysRemaining} day${cooldownDaysRemaining === 1 ? '' : 's'}.`
             : 'After changing your goal, you won\u2019t be able to change it again for 90 days.'}
         </AppText>
-      </AppView>
+      </AppView> */}
 
       <AppView style={styles.divider} />
 
@@ -174,7 +174,7 @@ const EditStepsGoalScreen = memo(() => {
       <SaveButton
         onPress={handleSave}
         loading={saveMutation.isPending}
-        disabled={isOnCooldown}
+        // disabled={isOnCooldown}
       />
     </Screen>
   );

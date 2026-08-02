@@ -33,8 +33,10 @@ export const APP_CONFIG_DEFAULTS = {
     message: 'We are under maintenance. Back soon!',
   },
   support: {
-    email:   'support@athlofit.com',
-    website: 'athlofit.com/faq',
+    email:    'support@athlofit.com',
+    website:  'athlofit.com/faq',
+    whatsapp: '918700707668',
+    whatsappMessage: 'Hello, I need support with Athlofit app',
   },
   coin_config: {
     steps: {
@@ -82,6 +84,8 @@ export type AppConfig = {
   support: {
     email:   string;
     website: string;
+    whatsapp: string;
+    whatsappMessage: string;
   };
   coin_config: {
     steps: {
