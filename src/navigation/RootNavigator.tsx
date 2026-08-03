@@ -19,7 +19,11 @@ import { useHealthInitStore } from '../features/health/store/healthInitStore';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const RootNavigator: React.FC = () => {
+type RootNavigatorProps = {
+  onSplashComplete: () => void;
+};
+
+const RootNavigator: React.FC<RootNavigatorProps> = ({ onSplashComplete }) => {
   const { isAuthenticated, user, setTokensFromStorage } = useAuthStore();
   const hasFinishedOnboarding = useOnboardingStore(s => s.hasFinished);
   const [isBootstrapping, setIsBootstrapping] = useState<boolean>(true);
@@ -50,11 +54,14 @@ const RootNavigator: React.FC = () => {
         // Ensure splash shows for at least MIN_SPLASH_MS
         const elapsed = Date.now() - startTime;
         const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
-        setTimeout(() => setIsBootstrapping(false), remaining);
+        setTimeout(() => {
+          setIsBootstrapping(false);
+          onSplashComplete();
+        }, remaining);
       }
     }
     bootstrap();
-  }, [setTokensFromStorage]);
+  }, [setTokensFromStorage, onSplashComplete]);
 
   // ── Splash / bootstrap loader ─────────────────────────────────────────────
   if (isBootstrapping) {

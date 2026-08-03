@@ -14,11 +14,11 @@ import {
 import { useLogin } from '../hooks/useLogin';
 import { useGoogleLogin } from '../hooks/useGoogleLogin';
 import { LoginFormValues, loginSchema } from '../utils/authValidation';
+import { CONFIG } from '../../../config/appConfig';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.LOGIN>;
 
-const TERMS_URL = 'https://athlofit.com/legal/terms';
-const PRIVACY_URL = 'https://athlofit.com/legal/privacy';
+
 
 const useStyles = makeStyles(({ colors, spacing, radius }) => ({
   hero:    { alignItems: 'center' as const },
@@ -179,7 +179,7 @@ const LoginScreen: React.FC<Props> = () => {
                   <AppText
                     variant="footnote"
                     style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                    onPress={() => Linking.openURL(TERMS_URL)}
+                    onPress={() => Linking.openURL(CONFIG.TERMS_URL)}
                   >
                     Terms & Conditions
                   </AppText>
@@ -187,7 +187,7 @@ const LoginScreen: React.FC<Props> = () => {
                   <AppText
                     variant="footnote"
                     style={{ color: colors.primary, textDecorationLine: 'underline' }}
-                    onPress={() => Linking.openURL(PRIVACY_URL)}
+                    onPress={() => Linking.openURL(CONFIG.PRIVACY_URL)}
                   >
                     Privacy Policy
                   </AppText>

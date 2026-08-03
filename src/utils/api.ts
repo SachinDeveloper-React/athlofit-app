@@ -1,7 +1,3 @@
-// src/utils/api.ts
-//
-// Thin fetch wrapper — attaches Bearer token, handles 401 refresh,
-// and normalises errors. No axios dependency.
 
 import { tokenService } from '../features/auth/service/tokenService';
 import { useAuthStore } from '../features/auth/store/authStore';
@@ -9,17 +5,9 @@ import { useSystemStore } from '../store/systemStore';
 import { useNetworkStore } from '../store/networkStore';
 import { useSyncStore } from '../store/syncStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
+import { CONFIG } from '../config/appConfig';
 
-// BUG-044: Read BASE_URL from env variable with platform-aware localhost fallback.
-// Never hardcode the production URL — developers hitting prod from local is dangerous.
-// export const BASE_URL =
-//   process.env.REACT_APP_API_URL ??
-//   (Platform.OS === 'android'
-//     ? 'http://192.168.0.129:5001/'
-//     : 'http://localhost:5001/');
-// export const BASE_URL = 'http://192.168.1.37:5001/'
-
-export const BASE_URL = 'https://api.athlofit.com/'
+export const BASE_URL = CONFIG.BASE_URL
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

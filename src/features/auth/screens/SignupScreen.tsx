@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { TextInput } from 'react-native';
+import { Linking, TextInput } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigation } from '@react-navigation/native';
@@ -11,8 +11,11 @@ import { registerSchema, type RegisterFormValues } from '../utils/authValidation
 import { AuthRoutes } from '../../../navigation/routes';
 import type { AuthStackScreenProps } from '../../../types/navigation.types';
 import { Header, Input, AppView, AppText, Button, Screen } from '../../../components';
+import { CONFIG } from '../../../config/appConfig';
 
 type Props = AuthStackScreenProps<typeof AuthRoutes.SIGNUP>;
+
+
 
 const useStyles = makeStyles(({ colors, spacing, radius, fontSize, fontWeight }) => ({
   hero:     { paddingTop: spacing[8], paddingBottom: spacing[1] },
@@ -125,8 +128,8 @@ const SignupScreen: React.FC<Props> = () => {
 
         <AppText style={[styles.terms, { color: colors.mutedForeground }]}>
           By creating an account you agree to our{' '}
-          <AppText style={{ color: colors.primary }}>Terms of Service</AppText> and{' '}
-          <AppText style={{ color: colors.primary }}>Privacy Policy</AppText>
+          <AppText style={{ color: colors.primary }} onPress={() => Linking.openURL(CONFIG.TERMS_URL)}>Terms of Service</AppText> and{' '}
+          <AppText style={{ color: colors.primary }} onPress={() => Linking.openURL(CONFIG.PRIVACY_URL)}>Privacy Policy</AppText>
         </AppText>
 
         <Button label="Create Account" onPress={handleSubmit(onSubmit)}

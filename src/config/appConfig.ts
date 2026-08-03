@@ -4,37 +4,37 @@
 
 export const APP_CONFIG_DEFAULTS = {
   coin: {
-    conversionRate:  10,   // 10 coins = ₹1
-    dailyEarnLimit:  10,   // max passive coins/day from steps
+    conversionRate: 10,   // 10 coins = ₹1
+    dailyEarnLimit: 10,   // max passive coins/day from steps
     maxDailyRewards: 250,  // max claimable coins/day
-    coinsPerStepKm:  1,
+    coinsPerStepKm: 1,
     purchaseEnabled: true,
-    referrerBonus:   100,  // coins to referrer per successful referral
-    refereeBonus:    50,   // coins to new user on first referral use
+    referrerBonus: 100,  // coins to referrer per successful referral
+    refereeBonus: 50,   // coins to new user on first referral use
   },
   steps: {
     defaultDailyGoal: 8000,
-    maxDailyGoal:     30000,
+    maxDailyGoal: 30000,
   },
   rewards: {
-    stepGoalCoins:      50,    // coins for completing daily step goal
+    stepGoalCoins: 50,    // coins for completing daily step goal
     hydrationGoalCoins: 20,    // coins for completing daily water goal
-    hydrationGoalMl:    2000,  // water threshold in ml
+    hydrationGoalMl: 2000,  // water threshold in ml
   },
   features: {
-    shopEnabled:            true,
-    ordersEnabled:          true,
+    shopEnabled: true,
+    ordersEnabled: true,
     healthAnalyticsEnabled: true,
-    referralEnabled:        true,
-    leaderboardEnabled:     true,
+    referralEnabled: true,
+    leaderboardEnabled: true,
   },
   maintenance: {
     enabled: false,
     message: 'We are under maintenance. Back soon!',
   },
   support: {
-    email:    'support@athlofit.com',
-    website:  'athlofit.com/faq',
+    email: 'support@athlofit.com',
+    website: 'athlofit.com/faq',
     whatsapp: '918700707668',
     whatsappMessage: 'Hello, I need support with Athlofit app',
   },
@@ -53,36 +53,36 @@ export const APP_CONFIG_DEFAULTS = {
 
 export type AppConfig = {
   coin: {
-    conversionRate:  number;
-    dailyEarnLimit:  number;
+    conversionRate: number;
+    dailyEarnLimit: number;
     maxDailyRewards: number;
-    coinsPerStepKm:  number;
+    coinsPerStepKm: number;
     purchaseEnabled: boolean;
-    referrerBonus:   number;
-    refereeBonus:    number;
+    referrerBonus: number;
+    refereeBonus: number;
   };
   steps: {
     defaultDailyGoal: number;
-    maxDailyGoal:     number;
+    maxDailyGoal: number;
   };
   rewards: {
-    stepGoalCoins:      number;
+    stepGoalCoins: number;
     hydrationGoalCoins: number;
-    hydrationGoalMl:    number;
+    hydrationGoalMl: number;
   };
   features: {
-    shopEnabled:            boolean;
-    ordersEnabled:          boolean;
+    shopEnabled: boolean;
+    ordersEnabled: boolean;
     healthAnalyticsEnabled: boolean;
-    referralEnabled:        boolean;
-    leaderboardEnabled:     boolean;
+    referralEnabled: boolean;
+    leaderboardEnabled: boolean;
   };
   maintenance: {
     enabled: boolean;
     message: string;
   };
   support: {
-    email:   string;
+    email: string;
     website: string;
     whatsapp: string;
     whatsappMessage: string;
@@ -109,3 +109,13 @@ export const formatCoins = (n: number): string => {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return n.toFixed(2);
 };
+
+export const CONFIG = {
+  BASE_URL: "https://api.athlofit.com/",
+  SUPPORT_EMAIL: 'support@athlofit.com',
+  WEBSITE_FAQ: 'athlofit.com/faq',
+  WHATSAPP_NUMBER: '918700707668',
+  WHATSAPP_MESSAGE: 'Hello, I need support with Athlofit app',
+  TERMS_URL: 'https://athlofit.com/legal/terms',
+  PRIVACY_URL: 'https://athlofit.com/legal/privacy'
+}

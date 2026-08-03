@@ -146,10 +146,25 @@ const AppShell: React.FC = () => {
   }, [isAuthenticated]);
 
   // ── Hide boot splash on mount ─────────────────────────────────────────────
+  const [isSplashHidden, setIsSplashHidden] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);
+  
   useEffect(() => {
     if (!isConnectivityReady || !isHealthPreChecked) { return; }
-    BootSplash.hide({ fade: true }).catch(() => {});
+    BootSplash.hide({ fade: true })
+      .then(() => {
+        // Mark splash as hidden so WhatsApp button can appear
+        setIsSplashHidden(true);
+      })
+      .catch(() => {
+        // Even if hide fails, mark as hidden
+        setIsSplashHidden(true);
+      });
   }, [isConnectivityReady, isHealthPreChecked]);
+
+  const handleSplashComplete = useCallback(() => {
+    setIsAppReady(true);
+  }, []);
 
   // ── FCM + Notifee full pipeline (needs QueryClient) ───────────────────────
   useNotificationSetup();
@@ -216,10 +231,11 @@ const AppShell: React.FC = () => {
         />
         <NavigationContainer ref={navigationRef} linking={linking}>
           <ToastProvider>
-            <RootNavigator />
+            <RootNavigator onSplashComplete={handleSplashComplete} />
             <SystemOverlay />
             <BatteryOptimizationPrompt />
-            <WhatsAppSupportButton />
+            {/* Only show WhatsApp button after splash screen is hidden */}
+            {isAppReady && isSplashHidden && Platform.OS !== "ios" && <WhatsAppSupportButton />}
           </ToastProvider>
         </NavigationContainer>
       </KeyboardWrapper>
