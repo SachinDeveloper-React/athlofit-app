@@ -35,7 +35,7 @@ export const APP_CONFIG_DEFAULTS = {
   support: {
     email: 'support@athlofit.com',
     website: 'athlofit.com/faq',
-    whatsapp: '918700707668',
+    whatsapp: '919310777797',
     whatsappMessage: 'Hello, I need support with Athlofit app',
   },
   coin_config: {
@@ -114,7 +114,7 @@ export const CONFIG = {
   BASE_URL: "https://api.athlofit.com/",
   SUPPORT_EMAIL: 'support@athlofit.com',
   WEBSITE_FAQ: 'athlofit.com/faq',
-  WHATSAPP_NUMBER: '918700707668',
+  WHATSAPP_NUMBER: '919310777797',
   WHATSAPP_MESSAGE: 'Hello, I need support with Athlofit app',
   TERMS_URL: 'https://athlofit.com/legal/terms',
   PRIVACY_URL: 'https://athlofit.com/legal/privacy'

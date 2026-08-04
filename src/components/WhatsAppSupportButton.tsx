@@ -54,19 +54,31 @@ const WhatsAppSupportButton: React.FC<WhatsAppSupportButtonProps> = ({
   const openWhatsApp = async () => {
     try {
       const encodedMessage = encodeURIComponent(supportMessage);
-      const url = `https://wa.me/${supportNumber}?text=${encodedMessage}`;
       
-      const canOpen = await Linking.canOpenURL(url);
+      // Try native WhatsApp app first with whatsapp:// scheme
+      const whatsappUrl = `whatsapp://send?phone=${supportNumber}&text=${encodedMessage}`;
+      const webUrl = `https://wa.me/${supportNumber}?text=${encodedMessage}`;
       
-      if (canOpen) {
-        await Linking.openURL(url);
+      // Check if WhatsApp app is installed
+      const canOpenApp = await Linking.canOpenURL(whatsappUrl);
+      
+      if (canOpenApp) {
+        // WhatsApp app installed - open directly in app
+        await Linking.openURL(whatsappUrl);
       } else {
-        console.warn('WhatsApp is not installed on this device');
-        // Fallback to web WhatsApp
+        // WhatsApp not installed - fallback to web.whatsapp.com
+        console.warn('WhatsApp app not installed - opening web version');
         await Linking.openURL(`https://web.whatsapp.com/send?phone=${supportNumber}&text=${encodedMessage}`);
       }
     } catch (error) {
       console.error('Failed to open WhatsApp:', error);
+      // Final fallback to wa.me link (opens in browser)
+      try {
+        const encodedMessage = encodeURIComponent(supportMessage);
+        await Linking.openURL(`https://wa.me/${supportNumber}?text=${encodedMessage}`);
+      } catch (fallbackError) {
+        console.error('All WhatsApp open attempts failed:', fallbackError);
+      }
     }
   };
 

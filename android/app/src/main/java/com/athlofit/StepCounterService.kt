@@ -35,6 +35,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.LocalDateTime
 
 /**
  * StepCounterService
@@ -121,6 +122,13 @@ class StepCounterService : Service(), SensorEventListener {
         }
 
         /**
+         * Returns current timestamp in HH:mm:ss.SSS format for log messages
+         */
+        private fun timestamp(): String {
+            return java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+        }
+
+        /**
          * Live in-memory step count accessible from NativeStepModule.getCurrentSteps()
          * without waiting for the 90-second SharedPreferences persist cycle.
          * Returns -1 if the service is not running (caller should fall back to SharedPreferences).
@@ -199,7 +207,7 @@ class StepCounterService : Service(), SensorEventListener {
             if (rawSteps < 0 || rawSteps > MAX_SANE_DAILY_STEPS) {
                 Log.w(TAG, """
                     ════════════════════════════════════════════════════════════════
-                    ❌ PUSH_REJECTED: Out of range value
+                    [${timestamp()}] ❌ PUSH_REJECTED: Out of range value
                     ════════════════════════════════════════════════════════════════
                     Steps received: $rawSteps
                     Valid range: 0 to $MAX_SANE_DAILY_STEPS
@@ -220,7 +228,7 @@ class StepCounterService : Service(), SensorEventListener {
                 if (msSinceReset < 2 * 60_000L && rawSteps > 50) {
                     Log.w(TAG, """
                         ════════════════════════════════════════════════════════════════
-                        🛑 PUSH_REJECTED: Midnight reset gate active
+                        [${timestamp()}] 🛑 PUSH_REJECTED: Midnight reset gate active
                         ════════════════════════════════════════════════════════════════
                         Steps received from JS: $rawSteps
                         Time since midnight reset: ${msSinceReset/1000}s
@@ -608,7 +616,7 @@ class StepCounterService : Service(), SensorEventListener {
                 val elapsedSec = (now - serviceStartTime) / 1000
                 Log.d(TAG, """
                     ════════════════════════════════════════════════════════════════
-                    🔄 SENSOR_RETRY: Attempting sensor re-registration
+                    [${timestamp()}] 🔄 SENSOR_RETRY: Attempting sensor re-registration
                     ════════════════════════════════════════════════════════════════
                     Time since service start: ${elapsedSec}s
                     Current mode: Health Connect only (native sensor unavailable)
@@ -624,7 +632,7 @@ class StepCounterService : Service(), SensorEventListener {
                 if (registered) {
                     Log.d(TAG, """
                         ════════════════════════════════════════════════════════════════
-                        ✅ SENSOR_RETRY_SUCCESS: Sensor now available!
+                        [${timestamp()}] ✅ SENSOR_RETRY_SUCCESS: Sensor now available!
                         ════════════════════════════════════════════════════════════════
                         Time to recovery: ${elapsedSec}s
                         Previous mode: Health Connect only
@@ -637,7 +645,7 @@ class StepCounterService : Service(), SensorEventListener {
                 } else {
                     Log.w(TAG, """
                         ════════════════════════════════════════════════════════════════
-                        ⚠️ SENSOR_RETRY_FAIL: Sensor still unavailable
+                        [${timestamp()}] ⚠️ SENSOR_RETRY_FAIL: Sensor still unavailable
                         ════════════════════════════════════════════════════════════════
                         Time elapsed: ${elapsedSec}s
                         Current mode: Still on Health Connect only
@@ -867,7 +875,7 @@ class StepCounterService : Service(), SensorEventListener {
         if (sensorManager == null) {
             Log.e(TAG, """
                 ════════════════════════════════════════════════════════════════
-                ❌ SENSOR_FAIL: SensorManager unavailable
+                [${timestamp()}] ❌ SENSOR_FAIL: SensorManager unavailable
                 ════════════════════════════════════════════════════════════════
                 Reason: SensorManager system service returned null
                 Impact: Native sensor cannot be used - falling back to Health Connect
@@ -885,7 +893,7 @@ class StepCounterService : Service(), SensorEventListener {
         if (stepSensor == null) {
             Log.e(TAG, """
                 ════════════════════════════════════════════════════════════════
-                ❌ SENSOR_FAIL: Step counter sensor not available
+                [${timestamp()}] ❌ SENSOR_FAIL: Step counter sensor not available
                 ════════════════════════════════════════════════════════════════
                 Sensor type: TYPE_STEP_COUNTER
                 Reason: Device doesn't have step counter hardware sensor
@@ -909,7 +917,7 @@ class StepCounterService : Service(), SensorEventListener {
 
         Log.d(TAG, """
             ════════════════════════════════════════════════════════════════
-            📡 SENSOR_REGISTER: Attempting sensor registration
+            [${timestamp()}] 📡 SENSOR_REGISTER: Attempting sensor registration
             ════════════════════════════════════════════════════════════════
             Sensor type: TYPE_STEP_COUNTER
             Vendor: ${stepSensor!!.vendor}
@@ -932,7 +940,7 @@ class StepCounterService : Service(), SensorEventListener {
         if (!success) {
             Log.e(TAG, """
                 ════════════════════════════════════════════════════════════════
-                ❌ SENSOR_FAIL: registerListener returned false
+                [${timestamp()}] ❌ SENSOR_FAIL: registerListener returned false
                 ════════════════════════════════════════════════════════════════
                 Sensor: ${stepSensor!!.name} (${stepSensor!!.vendor})
                 Reason: One of the following:
@@ -952,7 +960,7 @@ class StepCounterService : Service(), SensorEventListener {
         } else {
             Log.d(TAG, """
                 ════════════════════════════════════════════════════════════════
-                ✅ SENSOR_SUCCESS: Sensor registered successfully
+                [${timestamp()}] ✅ SENSOR_SUCCESS: Sensor registered successfully
                 ════════════════════════════════════════════════════════════════
                 Sensor: ${stepSensor!!.name}
                 Status: Listening for step events
@@ -1197,7 +1205,7 @@ class StepCounterService : Service(), SensorEventListener {
             SensorManager.SENSOR_STATUS_UNRELIABLE -> {
                 Log.w(TAG, """
                     ════════════════════════════════════════════════════════════════
-                    ⚠️ SENSOR_ACCURACY: Unreliable
+                    [${timestamp()}] ⚠️ SENSOR_ACCURACY: Unreliable
                     ════════════════════════════════════════════════════════════════
                     Sensor: ${sensor?.name ?: "unknown"}
                     Accuracy: UNRELIABLE
@@ -1216,7 +1224,7 @@ class StepCounterService : Service(), SensorEventListener {
             SensorManager.SENSOR_STATUS_NO_CONTACT -> {
                 Log.w(TAG, """
                     ════════════════════════════════════════════════════════════════
-                    ❌ SENSOR_ACCURACY: No contact
+                    [${timestamp()}] ❌ SENSOR_ACCURACY: No contact
                     ════════════════════════════════════════════════════════════════
                     Sensor: ${sensor?.name ?: "unknown"}
                     Accuracy: NO_CONTACT
@@ -1581,7 +1589,7 @@ class StepCounterService : Service(), SensorEventListener {
 
         Log.d(TAG, """
             ════════════════════════════════════════════════════════════════
-            🌙 MIDNIGHT_RESET: Starting midnight reset
+            [${timestamp()}] 🌙 MIDNIGHT_RESET: Starting midnight reset
             ════════════════════════════════════════════════════════════════
             Previous date: $previousDate
             New date: $today
@@ -1638,7 +1646,7 @@ class StepCounterService : Service(), SensorEventListener {
 
         Log.d(TAG, """
             ════════════════════════════════════════════════════════════════
-            ✅ MIDNIGHT_RESET: Reset complete
+            [${timestamp()}] ✅ MIDNIGHT_RESET: Reset complete
             ════════════════════════════════════════════════════════════════
             New date: $today
             New baseline: $baseline
@@ -1877,7 +1885,27 @@ class StepCounterService : Service(), SensorEventListener {
      * StepNotificationService to avoid inflated counts from multiple apps.
      */
     private fun pollHealthConnectAndUpdateNotification() {
-        // Check midnight reset state first
+        // CRITICAL: Respect 2-minute midnight reset gate.
+        // HC reads data from platform which may contain yesterday's cached records.
+        // Block HC updates during the gate period to prevent overwriting notification's 0.
+        if (lastMidnightResetTime > 0) {
+            val msSinceReset = System.currentTimeMillis() - lastMidnightResetTime
+            if (msSinceReset < 2 * 60_000L) {
+                Log.d(TAG, """
+                    ════════════════════════════════════════════════════════════════
+                    🛑 HC_POLL_BLOCKED: Midnight reset gate active
+                    ════════════════════════════════════════════════════════════════
+                    Time since midnight reset: ${msSinceReset/1000}s
+                    Gate duration: 120s (2 minutes)
+                    Reason: Preventing HC from reading stale cached data
+                    Action: Skipping this poll cycle, will retry in ${HC_POLL_INTERVAL_MS/1000}s
+                    ════════════════════════════════════════════════════════════════
+                """.trimIndent())
+                return
+            }
+        }
+        
+        // Check midnight reset state first (legacy check for date mismatch)
         val stepPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val storedDateVal = stepPrefs.getString("storedDate", "") ?: ""
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -1967,7 +1995,7 @@ class StepCounterService : Service(), SensorEventListener {
                 if (isDenied) {
                     Log.e(TAG, """
                         ════════════════════════════════════════════════════════════════
-                        ❌ HC_PERMISSION_DENIED: Cannot read Health Connect data
+                        [${timestamp()}] ❌ HC_PERMISSION_DENIED: Cannot read Health Connect data
                         ════════════════════════════════════════════════════════════════
                         Error: ${e.message}
                         Reason: Health Connect read permission not granted
@@ -1983,7 +2011,7 @@ class StepCounterService : Service(), SensorEventListener {
                 } else {
                     Log.w(TAG, """
                         ════════════════════════════════════════════════════════════════
-                        ⚠️ HC_POLL_ERROR: Health Connect read failed
+                        [${timestamp()}] ⚠️ HC_POLL_ERROR: Health Connect read failed
                         ════════════════════════════════════════════════════════════════
                         Error: ${e.message}
                         Error type: ${e.javaClass.simpleName}

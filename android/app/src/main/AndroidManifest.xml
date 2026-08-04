@@ -62,6 +62,19 @@
   <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
   <uses-permission android:name="android.permission.health.READ_WEIGHT" />
 
+  <!-- Queries declaration for Android 11+ to detect WhatsApp app -->
+  <queries>
+    <!-- WhatsApp -->
+    <package android:name="com.whatsapp" />
+    <!-- WhatsApp Business -->
+    <package android:name="com.whatsapp.w4b" />
+    <!-- Intent for WhatsApp deep links -->
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="whatsapp" />
+    </intent>
+  </queries>
+
   <application
     android:enableOnBackInvokedCallback="false"
     android:name=".MainApplication"
