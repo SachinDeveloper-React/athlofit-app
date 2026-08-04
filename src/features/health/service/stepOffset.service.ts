@@ -109,6 +109,20 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
     // The inflation guard in useHealth (server > 2x local) and the server-side
     // anti-cheat (validateSteps) are sufficient protection against stale data.
 
+    // CRITICAL FIX: Detect circular inflation from the old additive bug.
+    // If the server baseline has unreasonably high steps (> 100k), it's almost
+    // certainly inflated data from the circular additive loop. Reject it completely
+    // to prevent further inflation and allow the device to start fresh.
+    const MAX_PLAUSIBLE_DAILY_STEPS = 100_000; // Marathon = ~50k steps
+    if (record.steps > MAX_PLAUSIBLE_DAILY_STEPS) {
+      console.warn(
+        `[StepOffset] Server baseline ${record.steps} exceeds max plausible (${MAX_PLAUSIBLE_DAILY_STEPS}) — ` +
+        `likely inflated data. Rejecting baseline to allow device to reset.`
+      );
+      useHealthDataStore.getState().setStepOffsetFetched(true);
+      return;
+    }
+
     // Store the full server health baseline (calories, distance, activeMinutes,
     // heart rate, blood pressure, hydration, sleep, etc.) for cross-device/reinstall
     // continuity. useHealth will use max(local, baseline) for each metric.
@@ -137,64 +151,21 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
       useHealthDataStore.getState().setBonusSteps(record.bonusSteps, today);
     }
 
-    // Step offset calculation (for native sensor real-time updates)
-    if (typeof record.steps === 'number' && record.steps > 0) {
-      const { stepService } = await import('../../../services/stepService');
-      const currentNativeSteps = await stepService.getCurrentSteps();
-
-      // Store the native sensor's step count at login time so the onStepUpdate
-      // handler can compute post-login deltas for real-time live updates.
-      // This prevents the native sensor's pre-login steps from being double-counted
-      // with the server baseline in the additive calculation.
-      useHealthDataStore.getState().setNativeStepsAtLogin(currentNativeSteps);
-
-      // ── FIX: Inflation guard ───────────────────────────────────────────────
-      // If the server's step count is more than 2x the native sensor's reading,
-      // the server likely has inflated data from the previous circular write bug.
-      // In that case, don't trust the server steps for offset/floor calculations.
-      //
-      // IMPORTANT: This guard should NOT fire during a fresh login session.
-      // On login, the native service was just (re)started so it has very few
-      // steps, while the server legitimately has the full day's accumulated
-      // steps from before login. The server being >> native is EXPECTED here.
-      // We detect "fresh login" by checking if loginTimestamp is recent (< 5 min ago).
-      const loginTs = useHealthDataStore.getState().loginTimestamp;
-      const isFreshLogin = loginTs ? (Date.now() - loginTs < 5 * 60_000) : false;
-
-      const isLikelyInflated = !isFreshLogin && currentNativeSteps > 100 && record.steps > currentNativeSteps * 2;
-      if (isLikelyInflated) {
-        console.warn(
-          `[StepOffset] Inflation guard: server=${record.steps}, native=${currentNativeSteps}. ` +
-          `Server is ${(record.steps / currentNativeSteps).toFixed(1)}x native — likely inflated. ` +
-          `Skipping offset and floor injection.`
-        );
-        useHealthDataStore.getState().setStepOffsetFetched(true);
-        return;
-      }
-
-      const offset = Math.max(0, record.steps - currentNativeSteps);
-
-      if (offset > 0) {
-        useHealthDataStore.getState().setSyncedStepOffset(offset, today);
-        console.log(`[StepOffset] Server: ${record.steps}, native: ${currentNativeSteps}, offset: ${offset} for ${today}`);
-      }
-
-      // Push server floor to native service so notification and widget also
-      // show at least the server's step count (covers re-login, cross-device,
-      // and scenarios where Health Connect data is unavailable).
-      await stepService.setServerStepFloor(record.steps);
-
-      // Immediately push server steps to the widget so it doesn't stay at 0
-      // while waiting for the 15-min background worker or the first sensor event.
-      // First ensure logged-out state is cleared, then push the step count.
-      try {
-        const { widgetService } = await import('../../../services/widgetService');
-        await widgetService.setLoggedOut(false); // ensure widget is in normal mode
-        const { useAuthStore } = await import('../../auth/store/authStore');
-        const goal = useAuthStore.getState().user?.dailyStepGoal || 10000;
-        await widgetService.updateWidget(record.steps, goal);
-      } catch { /* non-fatal */ }
-    }
+    // DEPRECATED: Step offset calculation removed.
+    // Previously, step offset = server_steps - native_steps was calculated and
+    // added to native sensor readings for cross-device continuity. However, this
+    // created circular inflation:
+    //   1. Device syncs 5000 steps → server stores 5000
+    //   2. Login fetches baseline → offset = 5000 - 100 = 4900
+    //   3. Native shows 200 → displayed = 200 + 4900 = 5100
+    //   4. Sync sends 5100 → server updates to 5100
+    //   5. Re-fetch baseline → offset = 5100 - 200 = 4900
+    //   6. Native shows 300 → displayed = 300 + 4900 = 5200 → INFLATION LOOP
+    //
+    // FIX: Use server baseline as a FLOOR (max) in useHealth, not an additive offset.
+    // Cross-device continuity is preserved: server baseline ensures steps never drop
+    // below the last synced value, even if native sensor resets after login.
+    // No explicit offset storage or addition needed.
 
     useHealthDataStore.getState().setStepOffsetFetched(true);
 

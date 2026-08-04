@@ -551,10 +551,17 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
-          // FIX: Skip inflation guard when login was today — HC/HK only has
+          // FIX: Additive mode should ONLY apply within the first 10 minutes after login.
+          // After that window, the server has already synced the post-login steps and
+          // the server baseline includes them. Using additive mode after the first sync
+          // creates circular inflation: HK post-login steps + server baseline (which
+          // already contains those steps) = 2x inflation.
+          const isRecentLogin = loginTs ? (Date.now() - loginTs < 10 * 60_000) : false;
+
+          // FIX: Skip inflation guard when login was RECENT — HK only has
           // post-login steps so server being > 2x local is EXPECTED.
           const serverStepsTrusted = (
-            !isLoginToday && result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
+            !isRecentLogin && result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
           ) ? result.steps : syncedServerBaseline.steps;
 
           if (serverStepsTrusted !== syncedServerBaseline.steps) {
@@ -570,7 +577,8 @@ export function useHealth(options: UseHealthOptions = {}) {
           // doubling. If HK steps are much less, HK has only post-login data → additive.
           const hkHasFullDay = isLoginToday && serverStepsTrusted > 0
             && result.steps >= serverStepsTrusted * 0.8;
-          const useAdditive = isLoginToday && !hkHasFullDay;
+          // CRITICAL FIX: Only use additive mode if login was RECENT (< 10 min ago).
+          const useAdditive = isLoginToday && isRecentLogin && !hkHasFullDay;
 
           const combinedSteps = useAdditive
             ? serverStepsTrusted + result.steps
@@ -654,12 +662,21 @@ export function useHealth(options: UseHealthOptions = {}) {
         // Use the higher of native sensor and HC fallback
         const effectiveSteps = Math.max(nativeSensorSteps, hcFallbackSteps);
 
-        // Add synced step offset from server (cross-device continuity).
-        // If the user walked on another device today, those steps carry over.
-        const { syncedStepOffset, syncedStepOffsetDate } = useHealthDataStore.getState();
-        const today = getLocalToday();
-        const offset = syncedStepOffsetDate === today ? syncedStepOffset : 0;
-        const steps = effectiveSteps + offset;
+        // DEPRECATED: Step offset logic removed.
+        // Previously, syncedStepOffset was added to native sensor steps to provide
+        // cross-device continuity (steps from another device carried over on login).
+        // However, this created circular inflation:
+        //   1. Device A syncs 5000 steps → server stores 5000
+        //   2. Device B logs in → fetches server baseline (5000) as step offset
+        //   3. Device B native sensor shows 100 steps → offset applied → total 5100
+        //   4. Device B syncs 5100 → server updates to 5100
+        //   5. Device B re-fetches baseline → offset becomes 5100
+        //   6. Next native reading: 200 + 5100 = 5300 → INFLATION LOOP
+        //
+        // FIX: Use server baseline as a FLOOR (max), NOT an additive offset.
+        // This is handled below in the "Apply server baseline" section.
+        const steps = effectiveSteps;
+        const today = getLocalToday(); // YYYY-MM-DD format for date comparison
 
         const STEPS_PER_MINUTE = 100;
         const STRIDE_M = gender === 'F' ? 0.70 : 0.78; // gender-based stride
@@ -675,11 +692,16 @@ export function useHealth(options: UseHealthOptions = {}) {
         };
 
         // Apply server baseline for all metrics (cross-device / reinstall continuity).
-        // Use max(local, server) so we never lose data that was already synced.
+        // CRITICAL: Server baseline is a FLOOR (minimum value), NOT an additive offset.
+        // Use max(local, server) to ensure steps never drop below the server's last
+        // known value, but NEVER add server steps on top of local steps.
+        // The server baseline already represents the device's actual step count from
+        // the previous sync — adding it again would cause circular inflation.
         const { syncedServerBaseline, syncedServerBaselineDate } = useHealthDataStore.getState();
         if (syncedServerBaseline && syncedServerBaselineDate === today) {
           // FIX: Inflation guard — if server baseline steps are more than 2x
-          // the local native sensor result, the server likely has inflated data.
+          // the local native sensor result, the server likely has inflated data
+          // from the previous circular bug. Reject it to prevent further inflation.
           const serverStepsTrusted = (
             result.steps > 100 && syncedServerBaseline.steps > result.steps * 2
           ) ? result.steps : syncedServerBaseline.steps;
@@ -689,9 +711,11 @@ export function useHealth(options: UseHealthOptions = {}) {
               `[useHealth] Inflation guard (native_sensor): server baseline ${syncedServerBaseline.steps} is ` +
               `${(syncedServerBaseline.steps / result.steps).toFixed(1)}x local ${result.steps} — ignoring server steps`
             );
+            // Clear the inflated baseline immediately so it doesn't persist
             useHealthDataStore.getState().setSyncedServerBaseline(null, '');
           }
 
+          // Use MAX (floor logic), NOT ADD (which causes circular inflation)
           result = {
             steps: Math.max(result.steps, serverStepsTrusted),
             calories: Math.max(result.calories, syncedServerBaseline.calories),
@@ -809,6 +833,15 @@ export function useHealth(options: UseHealthOptions = {}) {
                    ld.getDate() === now.getDate();
           })() : false;
 
+          // FIX: Additive mode should ONLY apply within the first 10 minutes after login.
+          // After that window, the server has already synced the post-login steps and
+          // the server baseline includes them. Using additive mode after the first sync
+          // creates circular inflation: HC post-login steps + server baseline (which
+          // already contains those steps) = 2x inflation.
+          // Time window: 10 minutes is generous enough to cover slow network / background
+          // sync delays, but short enough to prevent inflation during normal app usage.
+          const isRecentLogin = loginTs ? (Date.now() - loginTs < 10 * 60_000) : false;
+
           // FIX: Inflation guard — if server baseline steps are more than 2x
           // the local HC/native result, the server likely has inflated data from
           // the circular write bug. Don't use inflated server steps as a floor.
@@ -845,7 +878,9 @@ export function useHealth(options: UseHealthOptions = {}) {
 
           const hcHasFullDay = isLoginToday && serverDeviceSteps > 0
             && result.steps >= serverDeviceSteps * 0.8;
-          const useAdditive = isLoginToday && !hcHasFullDay;
+          // CRITICAL FIX: Only use additive mode if login was RECENT (< 10 min ago).
+          // This prevents circular inflation when the app stays running for hours.
+          const useAdditive = isLoginToday && isRecentLogin && !hcHasFullDay;
 
           const combinedSteps = useAdditive
             ? serverDeviceSteps + result.steps  // Server device steps (before login) + HC (after login)

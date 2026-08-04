@@ -463,7 +463,7 @@ export const StepProgressCard = memo(
         />
 
         {/* View Step Sources — debugging link */}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.viewSourcesBtn}
           activeOpacity={0.7}
           onPress={() => {
@@ -475,7 +475,7 @@ export const StepProgressCard = memo(
           <AppText variant="caption2" style={{ color: colors.primary, textDecorationLine: 'underline' }}>
             View Step Sources
           </AppText>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Bonus steps indicator */}
         {todayBonusSteps > 0 && (
