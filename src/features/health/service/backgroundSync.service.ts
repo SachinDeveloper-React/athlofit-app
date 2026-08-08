@@ -214,7 +214,7 @@ async function syncOneDayAndroid(
   }
 }
 
-// ─── Core sync — last 7 days from login date ─────────────────────────────────
+// ─── Core sync — last 7 days from account creation ───────────────────────────
 
 export async function runHealthSync(): Promise<void> {
   const token = await tokenService.getAccessToken();
@@ -222,19 +222,22 @@ export async function runHealthSync(): Promise<void> {
 
   const now = new Date();
 
-  // ── Read loginTimestamp from persisted store ──────────────────────────────
-  const { useHealthDataStore } = await import('../store/healthDataStore');
-  const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
-
-  // Determine the earliest date to sync: login date or 7 days ago, whichever is later.
+  // ── Read user's account creation date from auth store ────────────────────
+  const { useAuthStore } = await import('../../auth/store/authStore');
+  const accountCreatedAt = useAuthStore.getState().user?.createdAt;
+  
+  // Determine the earliest date to sync: account creation date or 7 days ago,
+  // whichever is LATER (more recent).
   const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(now.getDate() - 6); // today + 6 previous = 7 days
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  // FIX: Always sync from 7 days ago (or account start), regardless of loginTimestamp.
-  // loginTimestamp filtering is no longer needed client-side — the server handles
-  // the accountCreatedDate guard independently.
-  const syncStartDate = sevenDaysAgo;
+  const accountCreationDate = accountCreatedAt 
+    ? new Date(new Date(accountCreatedAt).toISOString().slice(0, 10))
+    : sevenDaysAgo;
+  
+  // Use the more recent date (closer to today) as the start point
+  const syncStartDate = accountCreationDate > sevenDaysAgo ? accountCreationDate : sevenDaysAgo;
 
   // Build the list of days to sync (from syncStartDate to today)
   const daysToSync: { dateStr: string; start: Date; end: Date }[] = [];
@@ -245,6 +248,7 @@ export async function runHealthSync(): Promise<void> {
   // health data store still has stale (yesterday's) data, skip syncing today
   // to prevent yesterday's steps from being written under today's date.
   const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+  const { useHealthDataStore } = await import('../store/healthDataStore');
   const lastFetchedAt = useHealthDataStore.getState().lastFetchedAt;
   const isStaleData = lastFetchedAt ? (() => {
     const fetchDate = new Date(lastFetchedAt);
@@ -259,6 +263,7 @@ export async function runHealthSync(): Promise<void> {
   // today. This prevents the background sync from pushing stale Health Connect
   // data (which may include yesterday's cached records) before the foreground
   // app has had a chance to do a proper fresh fetch.
+  const loginTimestamp = useHealthDataStore.getState().loginTimestamp;
   const loginTs = loginTimestamp || 0;
   const msSinceLogin = now.getTime() - loginTs;
   const isFreshLogin = loginTs > 0 && msSinceLogin < 2 * 60 * 1000; // < 2 min
@@ -289,12 +294,13 @@ export async function runHealthSync(): Promise<void> {
     current.setDate(current.getDate() + 1);
   }
 
+  console.log(`[BackgroundSync] Syncing ${daysToSync.length} days from ${syncStartDate.toISOString().slice(0, 10)} to today`);
+
   // ── iOS — HealthKit ───────────────────────────────────────────────────────
   if (Platform.OS === 'ios') {
     const ready = await initializeHealthKit();
     if (!ready) return;
 
-    const { useAuthStore } = await import('../../auth/store/authStore');
     const weightKg = useAuthStore.getState().user?.weight ?? 70;
     const gender = useAuthStore.getState().user?.gender;
 
@@ -322,7 +328,6 @@ export async function runHealthSync(): Promise<void> {
   // Give the Health Connect IPC binding time to settle before reading
   await new Promise<void>(r => setTimeout(r, 300));
 
-  const { useAuthStore } = await import('../../auth/store/authStore');
   const weightKg = useAuthStore.getState().user?.weight ?? 70;
   const gender = useAuthStore.getState().user?.gender;
 
@@ -336,6 +341,8 @@ export async function runHealthSync(): Promise<void> {
       gender,
     );
   }
+  
+  console.log(`[BackgroundSync] Completed syncing ${daysToSync.length} days`);
 }
 
 // ─── Register periodic background fetch ──────────────────────────────────────

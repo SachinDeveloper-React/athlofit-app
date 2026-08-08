@@ -1082,6 +1082,16 @@ export function useHealth(options: UseHealthOptions = {}) {
           // If not login today or no baseline, use newSteps as-is (raw hardware count)
         }
 
+        // Re-derive calories/distance/activeMinutes from updated step count so the
+        // dashboard always shows all metrics live, not just steps. Without this,
+        // onStepUpdate only patches data.steps and leaves calories/distance/activeTime
+        // at their last loadData value (which can be 0 before the first batch read).
+        const deriveMetrics = (steps: number) => {
+          const { deriveFromSteps: derive } = getHealthConnectService();
+          const d = derive(steps, weightKg, gender ?? undefined);
+          return { calories: d.calories, distance: d.distanceKm, activeMinutes: d.activeMinutes };
+        };
+
         setData(prev => {
           if (prev.steps === totalSteps) return prev;
           // In healthconnect/healthkit mode, the native sensor is a supplementary
@@ -1104,7 +1114,7 @@ export function useHealth(options: UseHealthOptions = {}) {
               if (totalSteps > lastLoadDataStepsRef.current) {
                 lastLoadDataStepsRef.current = totalSteps;
               }
-              return { ...prev, steps: totalSteps };
+              return { ...prev, steps: totalSteps, ...deriveMetrics(totalSteps) };
             }
             // Native is below displayed value (HC/watch set a higher floor).
             // Check if native is INCREASING from its last known raw value.
@@ -1124,7 +1134,7 @@ export function useHealth(options: UseHealthOptions = {}) {
                   stepService.forceRefreshSteps(newTotal).catch(() => {});
                 });
               }
-              return { ...prev, steps: newTotal };
+              return { ...prev, steps: newTotal, ...deriveMetrics(newTotal) };
             }
             // Native not increasing or first event — keep displayed value
             return prev;
@@ -1132,7 +1142,7 @@ export function useHealth(options: UseHealthOptions = {}) {
           if (totalSteps > lastLoadDataStepsRef.current) {
             lastLoadDataStepsRef.current = totalSteps;
           }
-          return { ...prev, steps: totalSteps };
+          return { ...prev, steps: totalSteps, ...deriveMetrics(totalSteps) };
         });
         setLastUpdated(new Date());
       });

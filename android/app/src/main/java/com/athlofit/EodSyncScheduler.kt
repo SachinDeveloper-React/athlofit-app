@@ -11,7 +11,11 @@ import java.util.Calendar
 /**
  * EodSyncScheduler
  *
- * Schedules an exact AlarmManager alarm at 23:59:50 every night.
+ * Schedules an exact AlarmManager alarm at 23:58:00 every night.
+ * Moved from 23:59:50 to 23:58:00 to provide a 2-minute safety buffer before
+ * midnight, reducing the chance of the alarm firing after 00:00 (which would
+ * skip yesterday's data due to native reset pending guard).
+ *
  * When it fires, EodSyncReceiver enqueues EodSyncWorker which reads
  * Health Connect and POSTs the day's data to /health/sync.
  *
@@ -76,12 +80,12 @@ object EodSyncScheduler {
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    /** Returns the next 23:59:50 in millis. If already past today's, returns tomorrow's. */
+    /** Returns the next 23:58:00 in millis. If already past today's, returns tomorrow's. */
     private fun nextEodAlarmMillis(): Long {
         val cal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 23)
-            set(Calendar.MINUTE, 59)
-            set(Calendar.SECOND, 50)
+            set(Calendar.MINUTE, 58)
+            set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
         if (cal.timeInMillis <= System.currentTimeMillis()) {

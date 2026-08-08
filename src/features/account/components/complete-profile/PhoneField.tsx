@@ -118,7 +118,7 @@ export const PhoneField: React.FC<PhoneFieldProps> = ({
         <TextInput
           ref={inputRef}
           style={[styles.input, { color: colors.foreground }]}
-          placeholder="98765 43210"
+          placeholder="XXXXX XXXXX"
           placeholderTextColor={colors.mutedForeground}
           value={localNumber.startsWith('+') ? localNumber : localNumber}
           onChangeText={handleChange}

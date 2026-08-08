@@ -67,10 +67,14 @@ object HealthSyncHelper {
         // Sync each day from startDate to today
         var current = startDate
         while (!current.isAfter(today)) {
-            // Skip today if native reset is pending — prevents stale steps
-            // from yesterday being synced under today's date
-            if (current == today && nativeResetPending) {
-                Log.d(TAG, "[$current] Skipping — native midnight reset pending (storedDate=$storedDate)")
+            // FIX: Skip ONLY current day if native reset is pending AND we're syncing
+            // today's date. ALWAYS sync historical days (yesterday and before) — the
+            // native reset pending flag should NOT block historical data.
+            // This prevents the Aug 7 zero-steps bug where EOD alarm fires after
+            // midnight and skips yesterday's data because storedDate has already flipped.
+            val isCurrentDayToday = current.isEqual(today)
+            if (isCurrentDayToday && nativeResetPending) {
+                Log.d(TAG, "[$current] Skipping TODAY only — native midnight reset pending (storedDate=$storedDate)")
                 current = current.plusDays(1)
                 continue
             }

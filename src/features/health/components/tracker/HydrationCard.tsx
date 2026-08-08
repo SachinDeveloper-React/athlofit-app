@@ -112,15 +112,15 @@ export const HydrationCard = memo(({ value = 0, onUpdate }: Props) => {
                 <Button 
                   size="sm" 
                   variant="tinted" 
-                  label={claimPending ? "Claiming..." : "🪙 Claim 20 Coins"} 
+                  label={claimPending ? "Claiming..." : "🎉 Goal Reached!"} 
                   onPress={handleClaim} 
                   disabled={claimPending} 
-                  style={{ backgroundColor: withOpacity('#F5C518', 0.15) }}
-                  labelStyle={{ color: '#F5C518' }}
+                  style={{ backgroundColor: withOpacity('#10B981', 0.15) }}
+                  labelStyle={{ color: '#10B981' }}
                 />
               ) : isClaimed ? (
                 <View style={{ paddingVertical: 8 }}>
-                  <AppText variant="caption1" style={{ color: colors.primary, fontWeight: '600' }}>✓ Coins claimed today!</AppText>
+                  <AppText variant="caption1" style={{ color: colors.primary, fontWeight: '600' }}>✓ Daily goal achieved!</AppText>
                 </View>
               ) : (
                 <>
