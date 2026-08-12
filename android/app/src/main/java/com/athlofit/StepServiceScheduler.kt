@@ -26,11 +26,17 @@ class StepServiceRestartWorker(
         val context = applicationContext
 
         // Don't resurrect the service after logout.
-        // BootReceiver has always checked this; the keepalive worker did not, so it
-        // kept restarting the step service every 15 minutes for logged-out users.
+        //
+        // The token is read through SecureTokenStore because that is where it lives.
+        // Reading `StepsWidgetPrefs.accessToken` directly (as this did) always
+        // returned null once SecureTokenStore.saveToken() migrated the token to the
+        // encrypted store and deleted the legacy key — so this worker treated every
+        // logged-in user as logged out and never restarted the service. The keepalive
+        // was therefore dead on exactly the aggressive-OEM devices it exists for,
+        // which is a direct cause of "steps stopped counting mid-day".
         val widgetPrefs = context.getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
         if (widgetPrefs.getBoolean("loggedOut", false) ||
-            widgetPrefs.getString("accessToken", null).isNullOrBlank()
+            SecureTokenStore.getToken(context).isBlank()
         ) {
             Log.d(TAG, "User logged out — skipping keepalive restart")
             return Result.success()

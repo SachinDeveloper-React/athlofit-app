@@ -82,7 +82,7 @@ object HealthSyncHelper {
             // FIX: Always pass 0L so each day reads from midnight (full day).
             // loginTimestamp filtering is no longer needed client-side.
             val tsForDay = 0L
-            val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay)
+            val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay, context.packageName)
             if (dayData != null && dayData.optInt("steps") > 0) {
                 val ok = postSync(token, dayData)
                 Log.d(TAG, "[$current] sync ${if (ok) "OK" else "FAIL"} — ${dayData.optInt("steps")} steps")
@@ -102,6 +102,8 @@ object HealthSyncHelper {
         zone:     ZoneId,
         weightKg: Double,
         loginTs:  Long,
+        /** This app's package, so its own Health Connect records are excluded. */
+        ownPackage: String,
     ): JSONObject? {
         return try {
             val startOfDay = date.atStartOfDay(zone).toInstant()
@@ -133,13 +135,23 @@ object HealthSyncHelper {
                 ReadRecordsRequest(StepsRecord::class, stepsFilter)
             ).records
 
+            // Self-exclusion uses the runtime package name, not a hardcoded literal.
+            // The literal only matched the production applicationId, so on any variant
+            // with a suffix (.debug, .staging) our own records were treated as an
+            // external data source and could win the max() below — the app reading its
+            // own output back, which is the loop this filter exists to break.
             val stepsByOrigin = stepRecords
                 .groupBy { it.metadata.dataOrigin.packageName }
-                .filterKeys { it != "com.athlofit.athlofit" }
+                .filterKeys { it != ownPackage }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
-            val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
-            Log.d(TAG, "[$date] Steps by origin (excluding self): $stepsByOrigin → using $steps")
+            // Clamped like every other reader. This value is POSTed straight to the
+            // server, so an absurd total written by some other app on the device would
+            // otherwise reach the backend with only server-side validation in the way.
+            val steps = (stepsByOrigin.values.maxOrNull() ?: 0L)
+                .coerceIn(0L, MAX_SANE_DAILY_STEPS.toLong())
+                .toInt()
+            Log.d(TAG, "[$date] Steps by origin (excluding $ownPackage): $stepsByOrigin → using $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()

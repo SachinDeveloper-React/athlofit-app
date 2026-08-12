@@ -168,15 +168,24 @@ class StepCounterService : Service(), SensorEventListener {
             private set
 
         /**
-         * Display step floor pushed from the JS layer (app UI's combined value).
-         * The app UI combines native sensor + server baseline + HC offset, which
-         * can be higher than the raw native sensor count alone. The notification
-         * and widget should never show LESS than what the app is displaying.
+         * The app's current step total, pushed down from the JS layer.
          *
-         * maybeUpdateNotification() and updateWidget() use max(dailySteps, displayStepFloor)
-         * so the pushed value is never overwritten by a lower sensor reading.
+         * The app resolves across Health Connect, this sensor and the server, so its
+         * figure can exceed the raw sensor count on its own — a paired watch or a
+         * second device contributes steps this phone never saw. The notification and
+         * widget should not show less than the app does, hence the "floor" name.
          *
-         * Reset to 0 at midnight.
+         * Read via currentDisplaySteps(), which takes
+         * max(dailySteps, lastHcPollSteps, displayStepFloor) — so the hardware count
+         * independently prevents the display from dropping too low.
+         *
+         * pushStepUpdate ASSIGNS this rather than only raising it. It used to move
+         * upward only, which meant one inflated push locked the notification and
+         * widget to a wrong total for the whole day even after the app corrected
+         * itself. Because the max() above provides the lower bound, assignment is
+         * safe and lets a correction propagate to every surface.
+         *
+         * Reset to 0 at midnight and on service start.
          */
         @Volatile
         var displayStepFloor: Int = 0
@@ -188,6 +197,17 @@ class StepCounterService : Service(), SensorEventListener {
          */
         fun setLiveStepCountCorrected(steps: Int) {
             liveStepCount = steps
+        }
+
+        /**
+         * Drops the display floor back to a known-good value.
+         *
+         * Called alongside a step correction: lowering dailySteps without lowering
+         * the floor leaves the notification and widget showing the inflated total,
+         * because currentDisplaySteps() takes the max of the two.
+         */
+        fun resetDisplayFloor(steps: Int) {
+            displayStepFloor = maxOf(0, steps)
         }
 
         /**
@@ -248,19 +268,35 @@ class StepCounterService : Service(), SensorEventListener {
             // hardware sensor (onSensorChanged). Updating it from Health Connect or
             // server values creates a circular inflation loop:
             //   HC/server value → liveStepCount → getCurrentSteps() → fed back to HC
-            // Only the notification/widget DISPLAY is raised.
-            if (steps <= liveStepCount && liveStepCount >= 0) return false
+            // Only the notification/widget DISPLAY is affected.
 
-            // Only update displayStepFloor if the new value is higher — never decrease.
-            // This prevents a stale loadData result from lowering the notification.
-            if (steps > displayStepFloor) {
-                displayStepFloor = steps
-            }
+            // ── The floor is SET, not ratcheted ──────────────────────────────
+            // This used to only ever move upward ("never decrease"), which meant a
+            // single inflated push pinned the notification and widget to a wrong
+            // number for the rest of the day: once the app corrected itself back
+            // down, its lower value was discarded and those surfaces kept showing
+            // the old high total, permanently disagreeing with the app.
+            //
+            // Assigning it directly is safe because the floor is never used on its
+            // own — currentDisplaySteps() takes max(dailySteps, lastHcPollSteps,
+            // displayStepFloor), so the hardware count still stops the display from
+            // going too low. What the floor does is let the app RAISE the display to
+            // account for a watch or the server, and now also let it come back down
+            // when that turns out to have been wrong.
+            val floorChanged = displayStepFloor != steps
+            displayStepFloor = steps
+
+            // Never show less than the hardware has already counted.
+            val display = maxOf(steps, maxOf(liveStepCount, 0))
+
+            // Nothing to redraw when the pushed value changes neither the floor nor
+            // what would be displayed.
+            if (!floorChanged && steps <= liveStepCount && liveStepCount >= 0) return false
 
             // Update widget SharedPreferences
             val widgetPrefs = context.getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
             widgetPrefs.edit()
-                .putInt("steps", steps)
+                .putInt("steps", display)
                 .putLong("lastUpdated", System.currentTimeMillis())
                 .apply()
 
@@ -272,7 +308,7 @@ class StepCounterService : Service(), SensorEventListener {
             if (nm != null) {
                 ensureNotificationChannel(context, nm)
                 try {
-                    nm.notify(NOTIF_ID, buildNotification(context, steps))
+                    nm.notify(NOTIF_ID, buildNotification(context, display))
                 } catch (_: Exception) { /* non-fatal */ }
             }
 
@@ -1549,8 +1585,14 @@ class StepCounterService : Service(), SensorEventListener {
         val from = LocalDate.parse(fromDate, DateTimeFormatter.ISO_LOCAL_DATE)
         val to = LocalDate.parse(toDate, DateTimeFormatter.ISO_LOCAL_DATE)
 
-        // Persist the stored date's final step count
-        val finalSteps = dailySteps + rebootOffset
+        // Persist the stored date's final step count.
+        //
+        // `dailySteps` is the final total on its own — calculateSteps defines it as
+        // (cumulative - baseline) + rebootOffset, so the offset is already inside it.
+        // Adding rebootOffset again wrote every post-reboot day into local history
+        // inflated by exactly the offset amount, and persistStepHistory merges by max
+        // so the wrong figure could never be corrected afterwards.
+        val finalSteps = dailySteps
         persistStepHistory(fromDate, finalSteps)
         Log.d(TAG, "handleMultiDayGap — persisted $finalSteps steps for $fromDate")
 
@@ -1604,16 +1646,24 @@ class StepCounterService : Service(), SensorEventListener {
         dailySteps = 0
         rebootOffset = 0
         displayStepFloor = 0  // FIX: Reset display floor at midnight so notification shows 0
-        // Set baseline to last known cumulative sensor value.
-        // If no sensor event has been received yet (lastCumulative == 0),
-        // reset baseline to 0 so the first sensor event reinitializes it
-        // to the current cumulative. This prevents the old baseline from
-        // persisting across midnight and inflating next day's step count.
-        if (lastCumulative > 0L) {
-            baseline = lastCumulative
-        } else {
-            baseline = 0L
-            hasReceivedFirstEvent = false // Force reinitialization on next event
+
+        // Seed the new day's baseline from the last accepted sensor reading, but only
+        // when the heartbeat proves we were actually listening up to this point. If
+        // the service was dead for part of the evening, that reading predates steps
+        // the hardware counted without us, and using it would open the new day with
+        // yesterday's total. See resolveMidnightBaseline for the full reasoning.
+        val heartbeatAt = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(HEARTBEAT_KEY, 0L)
+        baseline = resolveMidnightBaseline(
+            lastCumulative = lastCumulative,
+            heartbeatAtMs = heartbeatAt,
+            nowMs = System.currentTimeMillis(),
+            heartbeatStaleMs = HEARTBEAT_STALE_MS,
+        )
+        if (baseline == 0L) {
+            // Force re-initialisation from the next sensor event.
+            hasReceivedFirstEvent = false
+            debugLog(this, "MIDNIGHT_RESET: baseline discarded (lastCum=$lastCumulative, heartbeat age=${if (heartbeatAt > 0) (System.currentTimeMillis() - heartbeatAt) / 1000 else -1}s) — re-seeding from next event")
         }
         storedDate = today
         debugLog(this, "MIDNIGHT_RESET: baseline=$baseline, lastCum=$lastCumulative, date=$today")
@@ -2021,12 +2071,31 @@ class StepCounterService : Service(), SensorEventListener {
                         ════════════════════════════════════════════════════════════════
                     """.trimIndent())
                 }
+                // Fall back to the cached widget value, but only when it belongs to
+                // today and only to RAISE the count.
+                //
+                // This path used to assign `liveStepCount = cachedSteps` with no date
+                // check and no comparison, unlike the success path above. Two problems
+                // followed from that: a Health Connect read failure could publish
+                // yesterday's cached total as today's live count, and because
+                // liveStepCount is what NativeStepModule.getCurrentSteps() returns, that
+                // number became the "native sensor" reading the app's step engine
+                // resolves against. A display-only cache could therefore re-enter the
+                // step pipeline as if it were a hardware measurement.
                 val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
                 val cachedSteps = widgetPrefs.getInt("steps", 0)
-                if (cachedSteps != lastHcPollSteps) {
+                val cachedLastUpdated = widgetPrefs.getLong("lastUpdated", 0)
+                val cachedIsFromToday = if (cachedLastUpdated > 0) {
+                    val updateCal = java.util.Calendar.getInstance().apply { timeInMillis = cachedLastUpdated }
+                    val nowCal = java.util.Calendar.getInstance()
+                    updateCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR) &&
+                        updateCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR)
+                } else false
+
+                if (cachedIsFromToday && cachedSteps != lastHcPollSteps) {
                     lastHcPollSteps = cachedSteps
-                    liveStepCount = cachedSteps
-                    val displaySteps = maxOf(cachedSteps, displayStepFloor)
+                    if (cachedSteps > dailySteps) liveStepCount = cachedSteps
+                    val displaySteps = maxOf(cachedSteps, maxOf(dailySteps, displayStepFloor))
                     val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
                     nm.notify(NOTIF_ID, buildStepNotification(displaySteps))
                 }

@@ -13,7 +13,6 @@ import {
   initialize,
   requestPermission,
   readRecords,
-  aggregateRecord,
   insertRecords,
   deleteRecordsByTimeRange,
   getSdkStatus,
@@ -231,51 +230,23 @@ export const todayRange = () => {
 };
 
 /**
- * Get time range for today's step reading.
+ * @deprecated Do not use this for steps. Kept only as a warning marker.
  *
- * ALWAYS filters from loginTimestamp when login was today.
- * This ensures that after any login (new or existing account), only steps
- * walked AFTER login are read from Health Connect.
+ * This returned `loginTimestamp → now` when the user had logged in today, so
+ * Health Connect reported only post-login steps. The pre-login part of the day
+ * then had to be recovered by ADDING the server's stored total, and that addition
+ * was the root of the step inflation: Health Connect is populated by the platform
+ * pedometer regardless of whether anyone is signed in, so it already had the whole
+ * day. The "gap" the addition filled did not exist.
  *
- * Steps from before login are handled separately via the server baseline
- * (syncedServerBaseline / syncedStepOffset) which is fetched on login and
- * added on top of the local Health Connect reading.
- *
- * Formula: displayed_steps = server_steps_before_login + HC_steps_after_login
- *
- * Next-day onwards: loginTimestamp is from a previous day, so todayRange()
- * is used, returning full-day steps (which is correct — user has been logged
- * in since yesterday, all of today's steps belong to them).
- *
- * @param loginTimestamp — epoch ms when user logged in this session
- * @param _accountCreatedAt — unused, kept for API compat
+ * Steps now always use {@link todayRange}. If you need to avoid attributing
+ * historical data to a new account, filter by the account creation DATE on the
+ * server, not by a within-day timestamp on the client.
  */
 export const sinceLoginRange = (
-  loginTimestamp: number | null,
+  _loginTimestamp: number | null,
   _accountCreatedAt?: string | null,
-) => {
-  if (!loginTimestamp) return todayRange();
-
-  const now = new Date();
-  const loginDate = new Date(loginTimestamp);
-
-  // Only filter from loginTimestamp if login was today
-  const isLoginToday =
-    loginDate.getFullYear() === now.getFullYear() &&
-    loginDate.getMonth() === now.getMonth() &&
-    loginDate.getDate() === now.getDate();
-
-  if (!isLoginToday) return todayRange();
-
-  // Login was today — read steps only from login time onwards.
-  // Steps from earlier today are already on the server and will be added
-  // via syncedServerBaseline / syncedStepOffset.
-  return {
-    operator: 'between' as const,
-    startTime: loginDate.toISOString(),
-    endTime: now.toISOString(),
-  };
-};
+) => todayRange();
 
 export const lastNDays = (n: number) => ({
   operator: 'between' as const,
@@ -374,226 +345,303 @@ export const writeDerivedActivity = async (
 // HealthSyncHelper.kt does and matches what Samsung Health shows.
 //
 
-// ─── FIX #5: Cache layer for readStepsDeduped ─────────────────────────────────
-// Avoids redundant Health Connect reads when called multiple times within 30s.
-// On devices with many health apps, each read can return dozens of records —
-// caching prevents unnecessary IPC overhead on the Binder.
-const STEP_CACHE_TTL_MS = 30_000; // 30 seconds
-let _stepCacheValue: number = 0;
-let _stepCacheTime: number = 0;
-let _stepCacheKey: string = ''; // startTime+endTime fingerprint
+/** Our own package — records we wrote are never counted as a data source. */
+export const OWN_PACKAGE = 'com.athlofit.athlofit';
+
+/** Slot width for time-aware deduplication. */
+const DEDUP_SLOT_MS = 30 * 60 * 1000;
+
+export interface StepOriginTotal {
+  packageName: string;
+  steps: number;
+}
+
+export interface StepsReadResult {
+  /** Deduplicated step total for the requested window. */
+  steps: number;
+  /**
+   * False when the Health Connect read itself failed. Callers must treat this as
+   * "no information" rather than "zero steps" — reporting 0 for a failed read is
+   * what used to make the count collapse and then get papered over by a floor.
+   */
+  available: boolean;
+  /** Per-origin totals, including our own package, for diagnostics. */
+  origins: StepOriginTotal[];
+  /** Largest single external origin — the guaranteed lower bound of `steps`. */
+  largestOrigin: number;
+  /** Sum of all external origins — the guaranteed upper bound of `steps`. */
+  originSum: number;
+  /** How the value was derived, surfaced in the debug screen. */
+  method: 'single-origin' | 'time-slot-dedup' | 'own-records-only' | 'no-records' | 'failed';
+}
+
+const EMPTY_READ: StepsReadResult = {
+  steps: 0, available: true, origins: [], largestOrigin: 0, originSum: 0, method: 'no-records',
+};
+
+// ─── Read cache ───────────────────────────────────────────────────────────────
+// Health Connect reads cross a Binder boundary and can return dozens of records
+// on devices with several fitness apps installed, so identical reads within a
+// short window are served from memory.
+//
+// Only SUCCESSFUL reads are cached. Caching a failure used to be actively
+// harmful: one transient error produced a bad value that was then served for 30s
+// and, because of the old monotonic floor, locked in for the rest of the day.
+const STEP_CACHE_TTL_MS = 30_000;
+let _stepCache: { key: string; at: number; value: StepsReadResult } | null = null;
 
 /** Reset the step cache — call on midnight reset to prevent stale data leaking. */
 export function resetStepCache(): void {
-  _stepCacheValue = 0;
-  _stepCacheTime = 0;
-  _stepCacheKey = '';
+  _stepCache = null;
 }
 
-export async function readStepsDeduped(
+/**
+ * Reads today's steps from Health Connect and deduplicates across data origins.
+ *
+ * ## The problem this solves
+ *
+ * Health Connect is a shared store. On a typical phone the Steps table contains
+ * records from the platform pedometer, possibly Samsung Health or Google Fit, and
+ * any third-party app the user installed (Sweatcoin is a common one). Those
+ * sources overlap in complicated ways:
+ *
+ *   * Samsung Health and the platform sensor record THE SAME walk. Summing them
+ *     roughly doubles the count.
+ *   * A phone and a paired watch record DIFFERENT periods. Taking the max of them
+ *     throws away real steps.
+ *
+ * So neither `aggregateRecord` (which sums everything) nor "largest single origin"
+ * is correct on its own. The day is split into 30-minute slots; within a slot the
+ * origins are assumed to describe the same activity, so we take the largest
+ * origin's total for that slot; across slots the periods are distinct, so we add
+ * them up.
+ *
+ * ## Why the result is bounded
+ *
+ * The previous implementation compared INDIVIDUAL RECORDS inside a slot instead of
+ * each origin's slot total. With one origin writing a single long record and
+ * another writing many short ones, the per-slot winner was essentially arbitrary,
+ * and the summed result could exceed anything actually present in the data — an
+ * unbounded function of its input, which is how it could return several times the
+ * largest source.
+ *
+ * The result is now explicitly clamped to `[largestOrigin, originSum]`:
+ *
+ *   * It cannot be lower than the biggest single source, since that source alone
+ *     genuinely recorded that many steps.
+ *   * It cannot be higher than every source added together, since the deduplicated
+ *     total is by definition a subset of the raw sum.
+ *
+ * Those two invariants make over-reporting structurally impossible rather than
+ * something to be caught downstream.
+ */
+export async function readTodayStepsDetailed(
   startTime: string,
   endTime: string,
-): Promise<number> {
-  // FIX #5: Return cached value if within TTL and same time range
+): Promise<StepsReadResult> {
   const cacheKey = `${startTime}|${endTime}`;
-  const now = Date.now();
-  if (cacheKey === _stepCacheKey && now - _stepCacheTime < STEP_CACHE_TTL_MS) {
-    return _stepCacheValue;
+  if (_stepCache && _stepCache.key === cacheKey && Date.now() - _stepCache.at < STEP_CACHE_TTL_MS) {
+    return _stepCache.value;
   }
 
+  let result: StepsReadResult;
+
   try {
-    // Read individual records and pick the single highest-count source.
-    // This prevents inflation from multiple apps (Samsung Health, Google Fit,
-    // platform sensor) that all write StepsRecord to Health Connect.
-    //
-    // NOTE: We previously used aggregateRecord() on API 34+ assuming the
-    // platform handles deduplication internally. However, Samsung devices
-    // (OneUI) treat Samsung Health and the platform sensor as separate valid
-    // sources and sum them, causing ~2x inflation. The readRecords + max-source
-    // approach matches what the native HealthSyncHelper.kt does and produces
-    // correct counts on all OEMs.
     const { records } = await readWithRetry(() =>
       readRecords('Steps', {
         timeRangeFilter: { operator: 'between' as const, startTime, endTime },
       }),
     );
 
-    if (!records.length) return 0;
-
     // ── Midnight bleed guard ─────────────────────────────────────────────────
-    // Health Connect returns records that OVERLAP with the requested time range.
-    // A record with startTime 11:55 PM yesterday and endTime 12:05 AM today
-    // will be included in a today query. Filter out any records whose startTime
-    // is before our requested startTime — these are previous day records that
-    // bleed into today and should NOT be counted.
+    // Health Connect returns records that merely OVERLAP the requested window, so
+    // a record running 11:55 PM → 12:05 AM shows up in a "today" query. Anything
+    // that started before the window belongs to the previous day.
     const requestedStart = new Date(startTime).getTime();
-    const filteredRecords = records.filter((r: any) => {
-      const recStart = new Date(r.startTime).getTime();
-      // Only count records that started ON or AFTER our requested start time.
-      // This eliminates cross-midnight records from the previous day.
-      return recStart >= requestedStart;
-    });
+    const inWindow = (records ?? []).filter(
+      (r: any) => new Date(r.startTime).getTime() >= requestedStart,
+    );
 
-    if (!filteredRecords.length) return 0;
-
-    // Group step totals by data origin (package name)
-    const totals: Record<string, number> = {};
-    for (const r of filteredRecords) {
-      const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
-      totals[origin] = (totals[origin] ?? 0) + ((r as any).count ?? 0);
-    }
-
-    console.log('[HealthConnect] Steps by origin (raw):', totals);
-
-    // ── FIX: Exclude our own app's package from the origin totals ────────────
-    // The native StepCounterService previously wrote steps to Health Connect
-    // under our package name (com.athlofit.athlofit). Exclude to prevent
-    // circular inflation.
-    const OWN_PACKAGE = 'com.athlofit.athlofit';
-    const externalTotals: Record<string, number> = {};
-    for (const [origin, steps] of Object.entries(totals)) {
-      if (origin !== OWN_PACKAGE) {
-        externalTotals[origin] = steps;
-      }
-    }
-
-    console.log('[HealthConnect] Steps by origin (excluding self):', externalTotals);
-
-    // If no external sources exist, fall back to our own written value
-    // (this handles cases where Health Connect only has our app's data)
-    const originsToUse = Object.keys(externalTotals).length > 0 ? externalTotals : totals;
-
-    // ── Time-aware deduplication ─────────────────────────────────────────────
-    // Problem: "max single source" works for Samsung devices where Samsung Health
-    // and platform sensor record the SAME walk (duplicates). But it fails for
-    // phone + watch scenarios where the watch records DIFFERENT time periods
-    // (complementary data). We need both: dedup overlapping + sum non-overlapping.
-    //
-    // Approach: Divide the day into time slots. For each slot, take the max
-    // across all origins (dedup). Then sum across all slots (complement).
-    // This correctly handles:
-    //   - Samsung phone: Samsung Health + platform sensor both record same walk → deduped
-    //   - Phone + Watch: phone records morning, watch records evening → summed
-    //
-    const externalRecords = filteredRecords.filter((r: any) => {
-      const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
-      return origin !== OWN_PACKAGE;
-    });
-
-    let result: number;
-
-    if (externalRecords.length === 0) {
-      // Fallback: only own records exist
-      result = Math.max(...Object.values(originsToUse), 0);
-    } else if (Object.keys(originsToUse).length <= 1) {
-      // Single external source — no dedup needed, just sum its records
-      result = Math.max(...Object.values(originsToUse), 0);
+    if (!inWindow.length) {
+      result = EMPTY_READ;
     } else {
-      // Multiple external sources — use time-slot deduplication
-      // Divide day into 30-min slots, take max per slot across origins, then sum slots
-      const SLOT_MS = 30 * 60 * 1000; // 30 minutes
-      const dayStart = new Date(startTime).getTime();
-      const dayEnd = new Date(endTime).getTime();
-      const numSlots = Math.ceil((dayEnd - dayStart) / SLOT_MS) || 1;
+      // Per-origin totals over the whole window.
+      const totals: Record<string, number> = {};
+      for (const r of inWindow) {
+        const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+        totals[origin] = (totals[origin] ?? 0) + Math.max(0, (r as any).count ?? 0);
+      }
 
-      // For each slot, track steps per origin
-      const slotMaxes: number[] = new Array(numSlots).fill(0);
+      const origins: StepOriginTotal[] = Object.entries(totals)
+        .map(([packageName, steps]) => ({ packageName, steps }))
+        .sort((a, b) => b.steps - a.steps);
 
-      for (const r of externalRecords) {
-        const recStart = new Date((r as any).startTime).getTime();
-        const recEnd = new Date((r as any).endTime).getTime();
-        const count = (r as any).count ?? 0;
-        if (count <= 0) continue;
+      const externalRecords = inWindow.filter(
+        (r: any) => ((r as any).metadata?.dataOrigin ?? 'unknown') !== OWN_PACKAGE,
+      );
+      const externalOrigins = origins.filter(o => o.packageName !== OWN_PACKAGE);
 
-        // Determine which slot(s) this record spans
-        const startSlot = Math.max(0, Math.floor((recStart - dayStart) / SLOT_MS));
-        const endSlot = Math.min(numSlots - 1, Math.floor((recEnd - dayStart) / SLOT_MS));
+      if (externalOrigins.length === 0) {
+        // Only our own historical records exist. Older builds wrote steps back
+        // into Health Connect, which made the app read its own output; those
+        // records are no longer written but may still be on the device. Report
+        // them so the day is not blank, and label it clearly.
+        const own = Math.max(0, ...origins.map(o => o.steps));
+        result = {
+          steps: own, available: true, origins,
+          largestOrigin: own, originSum: own, method: 'own-records-only',
+        };
+      } else {
+        const largestOrigin = Math.max(...externalOrigins.map(o => o.steps));
+        const originSum = externalOrigins.reduce((sum, o) => sum + o.steps, 0);
 
-        if (startSlot === endSlot) {
-          // Record fits in one slot — add to that slot's max tracking
-          slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
+        if (externalOrigins.length === 1) {
+          // One source: its own total is the answer, no dedup needed.
+          result = {
+            steps: largestOrigin, available: true, origins,
+            largestOrigin, originSum, method: 'single-origin',
+          };
         } else {
-          // Record spans multiple slots — distribute proportionally
-          const duration = recEnd - recStart;
-          if (duration <= 0) {
-            slotMaxes[startSlot] = Math.max(slotMaxes[startSlot], count);
-          } else {
-            for (let s = startSlot; s <= endSlot; s++) {
-              const slotStart = dayStart + s * SLOT_MS;
-              const slotEnd = slotStart + SLOT_MS;
-              const overlapStart = Math.max(recStart, slotStart);
-              const overlapEnd = Math.min(recEnd, slotEnd);
-              const overlapFraction = (overlapEnd - overlapStart) / duration;
-              const slotSteps = Math.round(count * overlapFraction);
-              slotMaxes[s] = Math.max(slotMaxes[s], slotSteps);
+          // ── Time-slot deduplication ────────────────────────────────────────
+          // Build steps-per-origin-per-slot, then take the largest ORIGIN in each
+          // slot (not the largest record, which was the bug) and sum the slots.
+          const dayStart = new Date(startTime).getTime();
+          const dayEnd = new Date(endTime).getTime();
+          const numSlots = Math.max(1, Math.ceil((dayEnd - dayStart) / DEDUP_SLOT_MS));
+
+          // slotTotals[slot] = { origin -> steps in that slot }
+          const slotTotals: Array<Record<string, number>> = Array.from(
+            { length: numSlots }, () => ({}),
+          );
+
+          const addToSlot = (slot: number, origin: string, steps: number) => {
+            if (slot < 0 || slot >= numSlots || steps <= 0) return;
+            slotTotals[slot][origin] = (slotTotals[slot][origin] ?? 0) + steps;
+          };
+
+          for (const r of externalRecords) {
+            const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
+            const count = Math.max(0, (r as any).count ?? 0);
+            if (count === 0) continue;
+
+            const recStart = new Date((r as any).startTime).getTime();
+            const recEnd = new Date((r as any).endTime).getTime();
+            const startSlot = Math.floor((recStart - dayStart) / DEDUP_SLOT_MS);
+            const endSlot = Math.floor((Math.max(recEnd, recStart) - dayStart) / DEDUP_SLOT_MS);
+
+            if (startSlot === endSlot || recEnd <= recStart) {
+              addToSlot(Math.min(startSlot, numSlots - 1), origin, count);
+              continue;
+            }
+
+            // Spread a multi-slot record over the slots it covers, in proportion
+            // to how much of its duration falls in each. Distributing (rather
+            // than assigning it wholesale to one slot) is what lets a long
+            // aggregate record from one app be compared fairly against another
+            // app's minute-by-minute records.
+            const duration = recEnd - recStart;
+            for (let s = Math.max(0, startSlot); s <= Math.min(endSlot, numSlots - 1); s++) {
+              const slotStart = dayStart + s * DEDUP_SLOT_MS;
+              const overlap =
+                Math.min(recEnd, slotStart + DEDUP_SLOT_MS) - Math.max(recStart, slotStart);
+              if (overlap <= 0) continue;
+              addToSlot(s, origin, Math.round(count * (overlap / duration)));
             }
           }
+
+          const dedupTotal = slotTotals.reduce((sum, slot) => {
+            const values = Object.values(slot);
+            return sum + (values.length ? Math.max(...values) : 0);
+          }, 0);
+
+          // Enforce the invariants described above. `originSum` in particular is
+          // the ceiling the old implementation lacked.
+          const steps = Math.min(originSum, Math.max(largestOrigin, dedupTotal));
+
+          if (dedupTotal > originSum) {
+            console.warn(
+              `[HealthConnect] Dedup total ${dedupTotal} exceeded the raw origin sum ` +
+              `${originSum} — clamped to ${steps}. Origins: ${JSON.stringify(totals)}`,
+            );
+          }
+
+          result = {
+            steps, available: true, origins,
+            largestOrigin, originSum, method: 'time-slot-dedup',
+          };
+          console.log(
+            `[HealthConnect] Steps dedup: slots=${dedupTotal}, largest=${largestOrigin}, ` +
+            `sum=${originSum} → ${steps}`,
+          );
         }
       }
-
-      const timeAwareTotal = slotMaxes.reduce((sum, v) => sum + v, 0);
-
-      // Safety: also compute simple max-source as a floor.
-      // Time-aware should always be >= max-source, but use max as safety net.
-      const maxSource = Math.max(...Object.values(originsToUse), 0);
-      result = Math.max(timeAwareTotal, maxSource);
-
-      console.log('[HealthConnect] Time-aware dedup:', timeAwareTotal, 'max-source:', maxSource, 'final:', result);
     }
 
-    // FIX #5: Store in cache
-    _stepCacheValue = result;
-    _stepCacheTime = Date.now();
-    _stepCacheKey = cacheKey;
-
+    _stepCache = { key: cacheKey, at: Date.now(), value: result };
     return result;
   } catch (e) {
-    console.warn('[HealthConnect] readStepsDeduped failed, falling back to aggregate:', e);
-    // Fallback to aggregate if readRecords fails
-    const aggResult = await aggregateRecord({
-      recordType: 'Steps',
-      timeRangeFilter: { operator: 'between' as const, startTime, endTime },
-    }).catch(() => ({ COUNT_TOTAL: 0 }));
-    const fallback = (aggResult as any).COUNT_TOTAL ?? 0;
-
-    // FIX #5: Cache the fallback value too
-    _stepCacheValue = fallback;
-    _stepCacheTime = Date.now();
-    _stepCacheKey = cacheKey;
-
-    return fallback;
+    // Deliberately no aggregateRecord fallback. `aggregateRecord` sums every
+    // origin including our own package, so it returns precisely the inflated
+    // number this function exists to avoid — and the old code cached it.
+    // Reporting the read as unavailable lets the step engine fall back to the
+    // other sources instead of accepting a wrong value.
+    console.warn('[HealthConnect] Steps read failed — reporting source unavailable:', e);
+    return {
+      steps: 0, available: false, origins: [],
+      largestOrigin: 0, originSum: 0, method: 'failed',
+    };
   }
+}
+
+/**
+ * Numeric convenience wrapper around {@link readTodayStepsDetailed}.
+ * Returns 0 for a failed read, so only use it where "no data" and "zero steps"
+ * are interchangeable (background sync, dev tooling).
+ */
+export async function readStepsDeduped(
+  startTime: string,
+  endTime: string,
+): Promise<number> {
+  const { steps } = await readTodayStepsDetailed(startTime, endTime);
+  return steps;
 }
 
 // ─── Main fetch ───────────────────────────────────────────────────────────────
 
+/** Health data plus the provenance of the step figure inside it. */
+export interface HealthConnectFetchResult extends HealthData {
+  /** Full detail of how `steps` was derived. Consumed by the step engine. */
+  stepRead: StepsReadResult;
+}
+
 export const fetchAllHealthConnectData = async (
   weightKg = DEFAULT_WEIGHT_KG,
-  loginTimestamp: number | null = null,
+  _loginTimestamp: number | null = null,
   gender?: GenderForStride,
-  accountCreatedAt?: string | null,
-): Promise<HealthData> => {
+  _accountCreatedAt?: string | null,
+): Promise<HealthConnectFetchResult> => {
   try {
-    // Use sinceLoginRange for steps to prevent syncing historical data to new accounts
-    const stepsTimeRange = sinceLoginRange(loginTimestamp, accountCreatedAt);
-    
+    // ── Steps are always read for the FULL local day ────────────────────────
+    // This used to read from `loginTimestamp` onwards, which meant that after a
+    // mid-day login Health Connect reported only post-login steps. The missing
+    // earlier steps then had to be recovered by ADDING the server's stored total,
+    // and that addition is what double counted: Health Connect already contains
+    // the whole day regardless of when the user signed in, because the platform
+    // pedometer writes continuously and independently of our app.
+    //
+    // Reading midnight → now removes the need for any additive path, which in
+    // turn removes the need for the "is login recent", "does HC have full day",
+    // and inflation-guard heuristics that used to surround it.
+    const stepsTimeRange = todayRange();
+
     const [
-      stepsResult,
+      stepRead,
       hrRecords,
       bpRecords,
       weightRecords,
       hydrationRecord,
     ] = await Promise.all([
-      // Steps via readStepsDeduped() — reads individual records and picks the
-      // single highest-count source. This prevents inflation from third-party
-      // apps (Sweatcoin, Google Fit, Samsung Health) that also write Steps to
-      // Health Connect. aggregate() sums all sources and over-counts.
-      readStepsDeduped(stepsTimeRange.startTime, stepsTimeRange.endTime)
-        .then(count => ({ COUNT_TOTAL: count }))
-        .catch(e => {
-          console.warn('Steps read failed:', e);
-          return { COUNT_TOTAL: 0 };
-        }),
+      readTodayStepsDetailed(stepsTimeRange.startTime, stepsTimeRange.endTime),
 
       readWithRetry(() => readRecords('HeartRate', { timeRangeFilter: lastNDays(1) })).catch(e => {
         console.warn('HeartRate read failed:', e);
@@ -629,8 +677,11 @@ export const fetchAllHealthConnectData = async (
 
   
     // ── Steps ─────────────────────────────────────────────────────────────
-    const steps: number = (stepsResult as any).COUNT_TOTAL ?? 0;
-    console.log(`[HealthConnect] Steps (aggregate): ${steps} since ${stepsTimeRange.startTime}`);
+    const steps: number = stepRead.steps;
+    console.log(
+      `[HealthConnect] Steps: ${steps} (${stepRead.method}, available=${stepRead.available}) ` +
+      `since ${stepsTimeRange.startTime}`,
+    );
 
     // ── Always derive calories / distance / activeMinutes from steps ────────
     // This ensures values are always consistent with current step count,
@@ -686,8 +737,9 @@ export const fetchAllHealthConnectData = async (
       return sum + liters * 1000; // convert → ml
     }, 0);
 
-    const result: HealthData = {
+    const result: HealthConnectFetchResult = {
       steps,
+      stepRead,
       calories,
       distance,
       activeMinutes,
@@ -719,7 +771,15 @@ export const fetchAllHealthConnectData = async (
     return result;
   } catch (e) {
     console.error('fetchAllHealthConnectData failed:', e);
-    return defaultHealthData;
+    // Mark steps unavailable rather than 0 so the step engine falls back to the
+    // native sensor instead of treating a failed fetch as "the user walked 0".
+    return {
+      ...defaultHealthData,
+      stepRead: {
+        steps: 0, available: false, origins: [],
+        largestOrigin: 0, originSum: 0, method: 'failed',
+      },
+    };
   }
 };
 

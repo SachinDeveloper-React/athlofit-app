@@ -12,6 +12,13 @@ import type { HealthData } from '../types/healthTypes';
 const CHANNEL_STEP_GOAL  = 'step_goal';
 const CHANNEL_CHALLENGES = 'challenges';
 
+/**
+ * How far below our own last reported figure a new figure must fall before it is
+ * treated as a correction rather than normal source jitter. Matches
+ * DECREASE_TOLERANCE in the backend's stepValidation.js.
+ */
+const STEP_CORRECTION_TOLERANCE = 100;
+
 // ─── Setup channels once ──────────────────────────────────────────────────────
 
 async function setupNotifChannels() {
@@ -107,11 +114,51 @@ export function useSyncHealth() {
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
 
   const mutation = useMutation({
-    mutationFn: (data: Partial<HealthData> & { date?: string; goalMet?: boolean }) =>
-      healthService.syncHealthData({ ...data, timezone: getTimezone() }),
+    mutationFn: (data: Partial<HealthData> & { date?: string; goalMet?: boolean }) => {
+      // ── Flag a downward correction ──────────────────────────────────────────
+      // The server keeps the higher of stored and incoming steps, which is right
+      // for multiple devices but meant an over-reported figure could never be
+      // walked back: it stayed for the day and came back as the next login's
+      // baseline. When this device is now reporting materially FEWER steps than it
+      // itself last reported today, that is the self-heal case, and the server is
+      // told to accept the decrease.
+      //
+      // Only ever lowers the stored count, so it is not exploitable.
+      const { useHealthDataStore } = require('../store/healthDataStore');
+      const { lastPushedSteps, lastPushedStepsDate } = useHealthDataStore.getState();
+      const isCorrection =
+        lastPushedStepsDate === getLocalToday() &&
+        typeof data.steps === 'number' &&
+        lastPushedSteps > 0 &&
+        data.steps < lastPushedSteps - STEP_CORRECTION_TOLERANCE;
 
-    onSuccess: (response: any) => {
+      if (isCorrection) {
+        console.warn(
+          `[SyncHealth] Reporting a step correction: ${lastPushedSteps} → ${data.steps}`,
+        );
+      }
+
+      return healthService.syncHealthData({
+        ...data,
+        timezone: getTimezone(),
+        ...(isCorrection ? { stepsCorrection: true } : {}),
+      });
+    },
+
+    onSuccess: (response: any, variables) => {
       const d = response?.data;
+      const today = getLocalToday();
+
+      // ── Record what this device pushed, for server echo detection ──────────
+      // The app both writes and reads the server's step field, so on the next
+      // login/refresh it can be handed back its own number. Remembering what we
+      // sent lets stepEngine tell "another device added steps" (trust it) apart
+      // from "this is our own value returning" (ignore it), which is what stops a
+      // value from circulating between device and server and growing each lap.
+      if (typeof variables?.steps === 'number' && variables.steps >= 0) {
+        const { useHealthDataStore } = require('../store/healthDataStore');
+        useHealthDataStore.getState().setLastPushedSteps(variables.steps, today);
+      }
 
       // Always sync the server's coinsBalance to the local store.
       // The server is the single source of truth for balance — the frontend
@@ -133,39 +180,26 @@ export function useSyncHealth() {
         useGamificationStore.getState().syncWithService({ coinBlocked: null });
       }
 
-      // Store bonus steps from server so the UI shows walked + bonus
-      if (d?.bonusSteps !== undefined && d.bonusSteps > 0) {
-        const today = getLocalToday();
+      // ── Bonus steps ─────────────────────────────────────────────────────────
+      // Written unconditionally (not only when > 0) so that a bonus being revoked
+      // clears the local copy instead of leaving it stuck on the old amount.
+      if (typeof d?.bonusSteps === 'number') {
         const { useHealthDataStore } = require('../store/healthDataStore');
-        useHealthDataStore.getState().setBonusSteps(d.bonusSteps, today);
-
-        // Push total steps (device + bonus) to notification and widget
-        // so they also reflect the bonus-adjusted count.
-        // CRITICAL: Only push if sync response is for today — prevents pushing
-        // yesterday's cached steps after midnight reset.
-        if (d.totalSteps && d.totalSteps > 0 && d.date === today) {
-          import('../../../services/stepService').then(({ stepService }) => {
-            stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
-          });
-        }
+        useHealthDataStore.getState().setBonusSteps(Math.max(0, d.bonusSteps), today);
       }
 
-      // If server has more total steps than what the app currently displays,
-      // push to notification and widget immediately.
-      // NOTE: Do NOT update healthDataStore.data here — it conflicts with
-      // useHealth's loadData which overwrites the store on every poll.
-      // The next loadData (90s max) will read the correct value via
-      // server baseline. Updating store here causes oscillation.
-      // CRITICAL: Only push if sync response is for today — prevents pushing
-      // yesterday's cached steps after midnight reset.
-      if (d?.totalSteps && d.totalSteps > 0) {
-        const today = getLocalToday();
-        if (d.date === today) {
-          // Push to notification and widget
-          import('../../../services/stepService').then(({ stepService }) => {
-            stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
-          });
-        }
+      // Push the server's total to the notification and widget so every surface
+      // agrees. `d.date` is the date the server actually wrote, which is the only
+      // safe thing to compare against: without it these guards were comparing
+      // against `undefined` and never ran, so the widget silently stopped
+      // tracking the server total.
+      //
+      // healthDataStore.data is deliberately NOT written here — loadData owns it,
+      // and having two writers made the displayed value oscillate.
+      if (d?.totalSteps > 0 && d?.date === today) {
+        import('../../../services/stepService').then(({ stepService }) => {
+          stepService.forceRefreshSteps(d.totalSteps).catch(() => {});
+        });
       }
 
       // Always invalidate weekly-steps after a sync so the chart reflects

@@ -147,8 +147,13 @@ export async function fetchAndStoreTodayStepOffset(accessToken: string): Promise
     // Store bonus steps from the server record so the UI shows them immediately
     // (without waiting for the first sync response). This covers the case where
     // admin/system credits bonus steps while the user is logged out.
-    if (typeof record.bonusSteps === 'number' && record.bonusSteps > 0) {
-      useHealthDataStore.getState().setBonusSteps(record.bonusSteps, today);
+    //
+    // Written even when 0 so a revoked bonus clears the local copy. Guarding on
+    // `> 0` left a stale amount in place, and the step engine subtracts this value
+    // from the server baseline — so a bonus that no longer exists on the server
+    // would quietly reduce the baseline by its old amount.
+    if (typeof record.bonusSteps === 'number') {
+      useHealthDataStore.getState().setBonusSteps(Math.max(0, record.bonusSteps), today);
     }
 
     // DEPRECATED: Step offset calculation removed.

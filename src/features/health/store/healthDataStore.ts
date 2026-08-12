@@ -20,6 +20,17 @@ interface HealthDataStore {
   bonusSteps: number; // Bonus steps credited by admin/system for today
   bonusStepsDate: string | null; // Date the bonus applies to (resets daily)
   nativeStepsAtLogin: number; // Native sensor step count at login time (to compute post-login delta)
+  /**
+   * Device steps this device last successfully synced to the server today.
+   *
+   * Used for echo detection: this device both writes and reads the server's step
+   * field, so reading it back can feed the device its own output. When the server
+   * returns a value no higher than this, it carries no new information and is
+   * ignored. When it is higher, another device or session genuinely contributed
+   * and the value is trusted as a floor. See stepEngine.detectServerEcho.
+   */
+  lastPushedSteps: number;
+  lastPushedStepsDate: string | null;
   setData: (data: HealthData) => void;
   setLastUpdated: (date: Date | null) => void;
   setLoginTimestamp: (timestamp: number) => void;
@@ -29,6 +40,7 @@ interface HealthDataStore {
   setStepOffsetFetched: (fetched: boolean) => void;
   setBonusSteps: (steps: number, date: string) => void;
   setNativeStepsAtLogin: (steps: number) => void;
+  setLastPushedSteps: (steps: number, date: string) => void;
   reset: () => void;
 }
 
@@ -47,6 +59,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
       bonusSteps: 0,
       bonusStepsDate: null,
       nativeStepsAtLogin: 0,
+      lastPushedSteps: 0,
+      lastPushedStepsDate: null,
       
       setData: (data) => set({ data }),
       
@@ -65,6 +79,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
       setBonusSteps: (steps, date) => set({ bonusSteps: steps, bonusStepsDate: date }),
 
       setNativeStepsAtLogin: (steps) => set({ nativeStepsAtLogin: steps }),
+
+      setLastPushedSteps: (steps, date) => set({ lastPushedSteps: steps, lastPushedStepsDate: date }),
       
       reset: () => set({ 
         data: defaultHealthData, 
@@ -79,6 +95,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
         bonusSteps: 0,
         bonusStepsDate: null,
         nativeStepsAtLogin: 0,
+        lastPushedSteps: 0,
+        lastPushedStepsDate: null,
       }),
     }),
     {
@@ -98,6 +116,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
         bonusSteps: state.bonusSteps,
         bonusStepsDate: state.bonusStepsDate,
         nativeStepsAtLogin: state.nativeStepsAtLogin,
+        lastPushedSteps: state.lastPushedSteps,
+        lastPushedStepsDate: state.lastPushedStepsDate,
       }),
     }
   )

@@ -77,8 +77,19 @@ class MidnightResetWorker(
             // ── Midnight reset was missed! Perform it now. ───────────────────
             Log.w(TAG, "Midnight reset missed! storedDate=$storedDate, today=$today — resetting now")
 
+            // Same rule as the other two reset paths: only seed from the last sensor
+            // reading when the heartbeat proves the service was listening up to now.
+            // This worker specifically runs when a reset was MISSED, which is exactly
+            // the situation where the service was likely dead and that reading predates
+            // steps the hardware counted unobserved. See resolveMidnightBaseline.
             val lastCumulative = stepPrefs.getLong("lastCumulative", 0L)
-            val newBaseline = if (lastCumulative > 0L) lastCumulative else 0L
+            val heartbeatAt = stepPrefs.getLong(StepCounterService.HEARTBEAT_KEY, 0L)
+            val newBaseline = resolveMidnightBaseline(
+                lastCumulative = lastCumulative,
+                heartbeatAtMs = heartbeatAt,
+                nowMs = System.currentTimeMillis(),
+                heartbeatStaleMs = StepCounterService.HEARTBEAT_STALE_MS,
+            )
 
             stepPrefs.edit()
                 .putInt("dailySteps", 0)

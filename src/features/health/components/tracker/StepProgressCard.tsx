@@ -34,6 +34,7 @@ import { navigate } from '../../../../navigation/navigationRef';
 import { getStepColor } from '../../utils/stepColorUtils';
 import { HealthRoutes, RootRoutes } from '../../../../navigation/routes';
 import { useHealthDataStore } from '../../store/healthDataStore';
+import { getLocalToday } from '../../../../utils/date';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -444,9 +445,11 @@ export const StepProgressCard = memo(
       });
     }, []);
 
-    // Read bonus steps for today from store
+    // Read bonus steps for today from store.
+    // getLocalToday() rather than toISOString(), which yields the UTC date and so
+    // disagreed with the rest of the pipeline for the first hours of every local day.
     const todayBonusSteps = useHealthDataStore(s => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalToday();
       return s.bonusStepsDate === today ? s.bonusSteps : 0;
     });
 
@@ -463,7 +466,7 @@ export const StepProgressCard = memo(
         />
 
         {/* View Step Sources — debugging link */}
-        {/* <TouchableOpacity
+        <TouchableOpacity
           style={styles.viewSourcesBtn}
           activeOpacity={0.7}
           onPress={() => {
@@ -475,7 +478,7 @@ export const StepProgressCard = memo(
           <AppText variant="caption2" style={{ color: colors.primary, textDecorationLine: 'underline' }}>
             View Step Sources
           </AppText>
-        </TouchableOpacity> */}
+        </TouchableOpacity>
 
         {/* Bonus steps indicator */}
         {todayBonusSteps > 0 && (

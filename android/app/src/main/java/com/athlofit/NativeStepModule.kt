@@ -457,6 +457,12 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 // Update live count immediately
                 StepCounterService.setLiveStepCountCorrected(correctSteps)
 
+                // Bring the notification/widget floor down with it. Without this the
+                // corrected count applies only inside the app, while the notification
+                // and widget keep displaying the inflated total via
+                // currentDisplaySteps() = max(dailySteps, ..., displayStepFloor).
+                StepCounterService.resetDisplayFloor(correctSteps)
+
                 // Restart the service so it reloads corrected values from SharedPrefs.
                 // Without this, the running service's in-memory dailySteps/rebootOffset
                 // remain inflated, and the next onSensorChanged would re-inflate liveStepCount.

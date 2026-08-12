@@ -78,16 +78,24 @@ class BootReceiver : BroadcastReceiver() {
     /**
      * Checks if the user is logged in by verifying:
      * 1. The "loggedOut" flag is NOT set to true
-     * 2. An accessToken exists in SharedPreferences
+     * 2. An access token exists
      *
-     * This mirrors the same check used by WidgetUpdateWorker and EodSyncWorker.
+     * The token MUST be read through SecureTokenStore, which is where it now lives.
+     * This used to read `StepsWidgetPrefs.accessToken` directly, but
+     * SecureTokenStore.saveToken() writes to the encrypted store and then DELETES
+     * that legacy key — so on every device where encrypted prefs work (i.e. nearly
+     * all of them) this check saw a null token, concluded the user was logged out,
+     * and skipped starting the step service after every reboot and app update.
+     * That is one of the "steps stuck at 0" reports: counting simply never resumed
+     * until the user opened the app.
+     *
+     * WidgetUpdateWorker and EodSyncWorker already use SecureTokenStore; this now
+     * genuinely mirrors them.
      */
     private fun isUserLoggedIn(context: Context): Boolean {
         val prefs = context.getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-        val isLoggedOut = prefs.getBoolean("loggedOut", false)
-        if (isLoggedOut) return false
+        if (prefs.getBoolean("loggedOut", false)) return false
 
-        val accessToken = prefs.getString("accessToken", null)
-        return !accessToken.isNullOrBlank()
+        return SecureTokenStore.getToken(context).isNotBlank()
     }
 }

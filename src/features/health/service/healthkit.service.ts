@@ -202,40 +202,19 @@ export const getHydration = async (): Promise<number> => {
 
 // ─── Fetch All ──────────────────────────────────────────────────────────────
 export const fetchAllHealthKitData = async (
-  loginTimestamp?: number | null,
+  _loginTimestamp?: number | null,
   _accountCreatedAt?: string | null,
 ): Promise<HealthData> => {
   if (!isHealthKitAvailable) return defaultHealthData;
 
-  // Determine step reading range — after any login (new or existing account),
-  // only count steps walked AFTER login time. Steps from before login are
-  // provided by the server baseline (syncedServerBaseline / syncedStepOffset).
-  let stepStartDate: string;
-  let stepEndDate: string;
-  const now = new Date();
-
-  if (loginTimestamp) {
-    const loginDate = new Date(loginTimestamp);
-    const isLoginToday =
-      loginDate.getFullYear() === now.getFullYear() &&
-      loginDate.getMonth() === now.getMonth() &&
-      loginDate.getDate() === now.getDate();
-
-    if (isLoginToday) {
-      // Login was today — only count steps from login time onwards
-      stepStartDate = loginDate.toISOString();
-      stepEndDate = now.toISOString();
-    } else {
-      // Login was a previous day — full day for today
-      const { startDate, endDate } = todayRange();
-      stepStartDate = startDate;
-      stepEndDate = endDate;
-    }
-  } else {
-    const { startDate, endDate } = todayRange();
-    stepStartDate = startDate;
-    stepEndDate = endDate;
-  }
+  // ── Steps are always read for the FULL local day ──────────────────────────
+  // Previously this window started at `loginTimestamp` when the user had logged
+  // in today, so HealthKit reported only post-login steps and the earlier part of
+  // the day had to be recovered by ADDING the server's stored total. HealthKit
+  // records steps independently of our app and always holds the whole day, so the
+  // partial window created a gap that only existed because we asked for one — and
+  // closing it by addition is what double counted.
+  const { startDate: stepStartDate, endDate: stepEndDate } = todayRange();
 
   const [
     steps,

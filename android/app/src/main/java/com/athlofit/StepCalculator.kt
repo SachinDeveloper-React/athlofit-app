@@ -1,7 +1,17 @@
 package com.athlofit
 
-/** Hard ceiling for a single day's step count (defensive clamp). */
-const val MAX_SANE_DAILY_STEPS = 200_000
+/**
+ * Hard ceiling for a single day's step count (defensive clamp).
+ *
+ * Deliberately the same 100,000 the backend enforces in stepValidation.js and the
+ * app enforces in stepEngine.ts. It was previously 200,000, which meant the native
+ * service would happily persist and display a value that the app and the server
+ * both rejected — the layers disagreed about what was possible, so an impossible
+ * number could survive in one of them and keep re-entering the pipeline.
+ *
+ * For scale: a marathon is roughly 50,000 steps.
+ */
+const val MAX_SANE_DAILY_STEPS = 100_000
 
 /**
  * Pure data class representing the current step counter state.
@@ -82,4 +92,64 @@ fun calculateSteps(
         .toInt()
 
     return StepResult(newBaseline, newDailySteps, newRebootOffset)
+}
+
+/**
+ * Decides which baseline a new day should start from.
+ *
+ * ## The problem
+ *
+ * `dailySteps = (cumulative - baseline) + rebootOffset`, so the midnight reset has
+ * to move `baseline` up to the hardware counter's value AT the day boundary. Every
+ * reset path used to do `baseline = lastCumulative` unconditionally, and
+ * `lastCumulative` is only as fresh as the last sensor event we accepted.
+ *
+ * When the service is killed in the evening — routine on aggressive OEMs — that
+ * reading is hours old:
+ *
+ *   20:00  service dies, lastCumulative = 100,000
+ *   20:00–00:00  user walks 3,000 steps; hardware counts them, we do not see them
+ *   00:05  reset runs, baseline = 100,000
+ *   00:10  first event reports 103,000 → dailySteps = 3,000
+ *
+ * Yesterday evening's steps open the new day. That is a real inflation vector and
+ * it is invisible in the JS layer, because as far as the app is concerned the
+ * sensor genuinely reports 3,000 steps for today.
+ *
+ * ## Why the heartbeat is the right signal, and elapsed time is not
+ *
+ * An old reading is not automatically a wrong one. The sensor only emits while the
+ * user moves, so if someone sat still from 22:00 to midnight, a 22:00 reading is
+ * still exactly equal to the counter at midnight and is perfectly safe to use.
+ *
+ * What matters is not how old the reading is but whether we were LISTENING the
+ * whole time. The service writes a heartbeat every 60s while alive, so:
+ *
+ *   heartbeat fresh → we were listening; no events means no steps; reading is exact
+ *   heartbeat stale → we were dead; steps may have been walked unseen; reading is
+ *                     not usable as a boundary value
+ *
+ * ## Cost of the fallback
+ *
+ * Returning 0 makes the next sensor event re-seed the baseline from the live
+ * counter, which discards steps taken between midnight and that first event. Those
+ * are near zero in the case this applies to (service dead overnight), and the
+ * alternative is starting the day with yesterday's total already on the clock.
+ *
+ * @param lastCumulative  last accepted TYPE_STEP_COUNTER reading.
+ * @param heartbeatAtMs   epoch ms of the service's last heartbeat, 0 if never.
+ * @param nowMs           current epoch ms.
+ * @param heartbeatStaleMs age beyond which the service is considered to have died.
+ * @return the baseline to store, or 0 meaning "re-initialise from the next event".
+ */
+fun resolveMidnightBaseline(
+    lastCumulative: Long,
+    heartbeatAtMs: Long,
+    nowMs: Long,
+    heartbeatStaleMs: Long,
+): Long {
+    if (lastCumulative <= 0L) return 0L
+    if (heartbeatAtMs <= 0L) return 0L
+    if (nowMs - heartbeatAtMs > heartbeatStaleMs) return 0L
+    return lastCumulative
 }

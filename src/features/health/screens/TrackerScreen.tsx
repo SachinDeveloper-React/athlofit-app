@@ -38,6 +38,7 @@ import {
   RootRoutes,
 } from '../../../navigation/routes';
 import { useNetworkStore } from '../../../store/networkStore';
+import { getLocalToday } from '../../../utils/date';
 import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
 import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
@@ -220,12 +221,17 @@ const TrackerScreen = memo(() => {
   const { platform, isReady, isLoading, data, error, refresh, retrySetup, skipToNativeSensor, lastUpdated } =
     useHealth({ weightKg: Number(weightKg) || 70, gender: userGender });
 
-  // Bonus steps from admin/system — credited after login (not in baseline).
-  // The sync response returns bonusSteps which we store. Add them on top of
-  // device steps for display. This does NOT inflate because we don't send
-  // totalSteps back to server — we send data.steps (device-only from useHealth).
+  // Bonus steps credited by admin/system. `data.steps` from useHealth is always
+  // DEVICE steps with bonus excluded, so bonus is added here for display and the
+  // raw device value is what gets synced — one addition, in one place.
+  //
+  // The date comparison uses getLocalToday(), not toISOString(). toISOString()
+  // returns the UTC date, so for a user in IST every day between midnight and
+  // 05:30 local it reported yesterday, and the bonus silently vanished from the
+  // total for those five and a half hours while the rest of the pipeline (which
+  // already used local dates) still counted it.
   const bonusSteps = useHealthDataStore(s => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
     return s.bonusStepsDate === today ? s.bonusSteps : 0;
   });
   const totalSteps = data.steps + bonusSteps;
@@ -309,12 +315,12 @@ const TrackerScreen = memo(() => {
     }
 
     const isGoalMet = totalSteps >= (dailyStepGoal || 8000);
-    // Subtract bonusSteps before sending to server. data.steps from useHealth
-    // may include the server baseline (set at login) which itself contains bonus.
-    // If we send that as-is, server does: merge(X, existing-bonus) + bonus → inflation.
-    // By removing bonus client-side, server sees pure device steps and adds bonus correctly.
-    const stepsForServer = Math.max(0, data.steps - bonusSteps);
-    syncHealth({ ...data, steps: stepsForServer, goalMet: isGoalMet });
+    // `data.steps` is already device-only — the step engine strips bonus out of
+    // the server baseline before using it, so nothing needs subtracting here. The
+    // old `data.steps - bonusSteps` was compensating for bonus being baked into
+    // data.steps upstream; with that fixed, subtracting again would under-report
+    // by the bonus amount every sync.
+    syncHealth({ ...data, goalMet: isGoalMet });
     lastSyncedUserRef.current = userId;
     lastSyncTimeRef.current = now;
     lastSyncedStepsRef.current = data.steps;

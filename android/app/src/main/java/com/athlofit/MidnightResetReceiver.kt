@@ -43,11 +43,23 @@ class MidnightResetReceiver : BroadcastReceiver() {
         val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
         val storedDate = stepPrefs.getString("storedDate", "") ?: ""
         if (storedDate.isNotEmpty() && storedDate != today) {
-            // Read lastCumulative so we can set baseline correctly.
-            // baseline = lastCumulative ensures the next sensor event calculates
-            // (cumulative - baseline) = 0 + new steps, not yesterday's total.
+            // Seed the new baseline from the last accepted sensor reading, but only if
+            // the heartbeat shows the service was alive up to now. A reading taken
+            // before the service was killed predates steps the hardware counted
+            // unobserved, and using it as the boundary carries them into the new day.
+            // 0 means "re-seed from the next sensor event" — StepCounterService treats
+            // baseline == 0 as uninitialised. See resolveMidnightBaseline.
+            //
+            // This also no longer falls back to the OLD baseline, which was strictly
+            // worse than re-seeding: it left the whole of yesterday's count in place.
             val lastCumulative = stepPrefs.getLong("lastCumulative", 0L)
-            val newBaseline = if (lastCumulative > 0L) lastCumulative else stepPrefs.getLong("baseline", 0L)
+            val heartbeatAt = stepPrefs.getLong(StepCounterService.HEARTBEAT_KEY, 0L)
+            val newBaseline = resolveMidnightBaseline(
+                lastCumulative = lastCumulative,
+                heartbeatAtMs = heartbeatAt,
+                nowMs = System.currentTimeMillis(),
+                heartbeatStaleMs = StepCounterService.HEARTBEAT_STALE_MS,
+            )
             stepPrefs.edit()
                 .putInt("dailySteps", 0)
                 .putInt("rebootOffset", 0)

@@ -31,9 +31,14 @@ import {
 import {
   isHealthConnectAvailable,
   deriveFromSteps,
-  readStepsDeduped,
+  readTodayStepsDetailed,
   GenderForStride,
 } from './healthConnect.service';
+import {
+  MAX_PLAUSIBLE_DAILY_STEPS,
+  MAX_STEPS_PER_MINUTE,
+  minutesSinceLocalMidnight,
+} from './stepEngine';
 import {
   showStepGoalNotification,
   showChallengeNotifications,
@@ -104,6 +109,86 @@ async function postSync(token: string, body: object): Promise<any> {
   }
 }
 
+// ─── Plausibility ─────────────────────────────────────────────────────────────
+
+/**
+ * Rejects a step count that cannot belong to the day it claims to.
+ *
+ * Health Connect and HealthKit can both return yesterday's cached or batched records
+ * under a today range. The obvious case is just after midnight, and that is all the
+ * previous guard covered — it only ran in the first five minutes, so a device that
+ * surfaces a stale full-day total at 06:00 sailed straight through.
+ *
+ * Uses the same constants as the step engine so the background path cannot accept a
+ * figure the foreground pipeline would reject.
+ */
+function isPlausibleForDay(dateStr: string, steps: number): boolean {
+  if (steps > MAX_PLAUSIBLE_DAILY_STEPS) {
+    console.warn(
+      `[BackgroundSync] Skipping ${dateStr}: ${steps} exceeds the daily limit of ` +
+      `${MAX_PLAUSIBLE_DAILY_STEPS}`,
+    );
+    return false;
+  }
+
+  // Only today can be bounded by elapsed time; past days are complete by definition.
+  if (dateStr !== toISODate(new Date())) return true;
+
+  const minutes = minutesSinceLocalMidnight();
+  const bound = Math.min(MAX_PLAUSIBLE_DAILY_STEPS, minutes * MAX_STEPS_PER_MINUTE);
+  if (steps > bound) {
+    console.warn(
+      `[BackgroundSync] Skipping today: ${steps} steps ${minutes}min into the day ` +
+      `exceeds the ${MAX_STEPS_PER_MINUTE} steps/min bound (${bound})`,
+    );
+    return false;
+  }
+  return true;
+}
+
+// ─── Shared post step ─────────────────────────────────────────────────────────
+
+/**
+ * POSTs one day's payload and handles the follow-up both platforms need.
+ *
+ * ## Why recording the pushed value matters
+ *
+ * The step engine treats a server value as an "echo" — carrying no information this
+ * device does not already have — when it is no higher than what this device last
+ * pushed today. Only the foreground sync used to record that, so anything this
+ * background path pushed was invisible to it: the engine would later read the same
+ * number back from the server, conclude another device must have contributed it, and
+ * trust it as a floor. Recording it here closes that blind spot.
+ */
+async function postDayAndRecord(
+  token: string,
+  dateStr: string,
+  steps: number,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const result = await postSync(token, body);
+  if (!result) return;
+
+  const todayStr = toISODate(new Date());
+  if (dateStr === todayStr) {
+    const { useHealthDataStore } = await import('../store/healthDataStore');
+    const { lastPushedSteps, lastPushedStepsDate } = useHealthDataStore.getState();
+    // Only ever raise it. The foreground figure is the more complete one — it
+    // resolves across the native sensor too — so a lower background value from the
+    // same day must not mask it.
+    if (lastPushedStepsDate !== todayStr || steps > lastPushedSteps) {
+      useHealthDataStore.getState().setLastPushedSteps(steps, todayStr);
+    }
+  }
+
+  if (result.goalCoinsAwarded) {
+    await showStepGoalNotification(result.stepGoalCoins ?? 50);
+  }
+  if (result.newlyCompleted?.length) {
+    await showChallengeNotifications(result.newlyCompleted);
+  }
+}
+
 // ─── iOS single-day sync ──────────────────────────────────────────────────────
 
 /**
@@ -119,21 +204,12 @@ async function syncOneDayIOS(
   gender?: GenderForStride,
 ): Promise<void> {
   const data = await fetchHealthKitDataForRange(startTime, endTime, weightKg, gender);
-  if (data.steps === 0) return;
+  if (data.steps <= 0) return;
 
-  // ── Post-midnight stale data guard (iOS) ───────────────────────────────────
-  const now = new Date();
-  const todayStr = toISODate(now);
-  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
-  if (dateStr === todayStr && minutesSinceMidnight < 5) {
-    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
-    if (data.steps > maxPlausible) {
-      console.warn(
-        `[BackgroundSync] iOS: Skipping stale today sync: ${data.steps} steps at ${minutesSinceMidnight}min after midnight`
-      );
-      return;
-    }
-  }
+  // Plausibility guard, using the engine's constants and applying all day rather
+  // than only in the first five minutes after midnight — a device that batches its
+  // records can surface a stale full-day total at 06:00 just as easily.
+  if (!isPlausibleForDay(dateStr, data.steps)) return;
 
   const body = {
     ...data,
@@ -142,14 +218,7 @@ async function syncOneDayIOS(
     timezone: getTimezone(), // FIX #3: include device timezone
   };
 
-  const result = await postSync(token, body);
-
-  if (result?.goalCoinsAwarded) {
-    await showStepGoalNotification(result.stepGoalCoins ?? 50);
-  }
-  if (result?.newlyCompleted?.length) {
-    await showChallengeNotifications(result.newlyCompleted);
-  }
+  await postDayAndRecord(token, dateStr, data.steps, body);
 }
 
 // ─── Android single-day sync ──────────────────────────────────────────────────
@@ -166,31 +235,16 @@ async function syncOneDayAndroid(
   weightKg: number,
   gender?: GenderForStride,
 ): Promise<void> {
-  // readStepsDeduped() reads individual records and picks the single
-  // highest-count source. This prevents inflation from third-party apps
-  // (Sweatcoin, Google Fit, Samsung Health) that also write Steps to
-  // Health Connect. aggregate() sums all sources and over-counts.
-  const steps = await readStepsDeduped(startTime, endTime).catch(() => 0);
-  if (steps === 0) return;
+  // Same reader the foreground pipeline uses, so this path and the app can never
+  // disagree about what Health Connect says for a given day. Its result is bounded
+  // to [largest origin, sum of origins], which is what makes it safe to POST.
+  const read = await readTodayStepsDetailed(startTime, endTime).catch(() => null);
+  // A failed read is not "zero steps" — posting 0 would be a lie the server has no
+  // way to distinguish from a genuinely inactive day.
+  if (!read || !read.available || read.steps <= 0) return;
+  const steps = read.steps;
 
-  // ── Post-midnight stale data guard ─────────────────────────────────────────
-  // If syncing today and it's within the first 5 minutes after midnight,
-  // validate that the step count is plausible for the elapsed time.
-  // On some devices, Health Connect returns yesterday's cached/batched steps
-  // under today's time range shortly after midnight.
-  const now = new Date();
-  const todayStr = toISODate(now);
-  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
-  if (dateStr === todayStr && minutesSinceMidnight < 5) {
-    // Max plausible: ~180 steps/min * minutes since midnight + 100 buffer
-    const maxPlausible = Math.max(200, minutesSinceMidnight * 180 + 100);
-    if (steps > maxPlausible) {
-      console.warn(
-        `[BackgroundSync] Skipping stale today sync: ${steps} steps at ${minutesSinceMidnight}min after midnight (max plausible: ${maxPlausible})`
-      );
-      return;
-    }
-  }
+  if (!isPlausibleForDay(dateStr, steps)) return;
 
   const derived = deriveFromSteps(steps, weightKg, gender);
 
@@ -204,14 +258,7 @@ async function syncOneDayAndroid(
     timezone: getTimezone(), // FIX #3: include device timezone
   };
 
-  const result = await postSync(token, body);
-
-  if (result?.goalCoinsAwarded) {
-    await showStepGoalNotification(result.stepGoalCoins ?? 50);
-  }
-  if (result?.newlyCompleted?.length) {
-    await showChallengeNotifications(result.newlyCompleted);
-  }
+  await postDayAndRecord(token, dateStr, steps, body);
 }
 
 // ─── Core sync — last 7 days from account creation ───────────────────────────
