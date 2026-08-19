@@ -10,6 +10,7 @@ import {
 import { KeyboardAvoidingView } from './KeyboardAvoidingView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import { useHasTabBar, useTabBarSpace } from '../navigation/tabBarLayout';
 import AppView from './AppView';
 import { SyncIndicator } from './SyncIndicator';
 
@@ -79,7 +80,30 @@ const Screen = memo(
 
     const backgroundColor = colors[bg];
     const barStyle = isDark ? 'light-content' : 'dark-content';
-    const bottomInset = withBottomInset ? 100 : 0;
+
+    // ── How much room to leave at the bottom ──────────────────────────────────
+    //
+    // This was a flat `100`, which is the bug behind "content sits under the
+    // bottom navigation on some devices". The floating tab bar's footprint is
+    // `insets.bottom + gap + height`, so it GROWS with the bottom safe-area inset:
+    // about 100dp under gesture navigation, which a hardcoded 100 just cleared,
+    // but about 124dp under 3-button navigation, where it fell short and the last
+    // row of content ended up beneath the bar and untappable.
+    //
+    // Only tab screens need this. The tab navigator is a sibling of the pushed
+    // stacks in RootNavigator, so the ~30 screens pushed on top of it have no tab
+    // bar at all — they keep the original padding, since changing spacing there
+    // would be an unrelated visual change.
+    const hasTabBar = useHasTabBar();
+    const tabBarSpace = useTabBarSpace();
+    const bottomInset = withBottomInset ? (hasTabBar ? tabBarSpace : 100) : 0;
+
+    // `tabBarSpace` already contains insets.bottom, so the safe-area wrapper must
+    // not add it a second time — dropping the bottom edge lets one thing own the
+    // bottom instead of two things half-owning it.
+    const safeAreaEdges = hasTabBar
+      ? (['top', 'left', 'right'] as const)
+      : undefined;
 
     /**
      * keyboardVerticalOffset:
@@ -96,7 +120,10 @@ const Screen = memo(
       Platform.OS === 'ios' ? (StatusBar.currentHeight ?? 0) + keyboardGap : 0;
 
     return (
-      <Wrapper style={[{ flex: 1, backgroundColor }, style]}>
+      <Wrapper
+        edges={safeArea ? safeAreaEdges : undefined}
+        style={[{ flex: 1, backgroundColor }, style]}
+      >
         <StatusBar
           barStyle={barStyle}
           backgroundColor={backgroundColor}

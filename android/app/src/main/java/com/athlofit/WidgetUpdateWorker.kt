@@ -32,7 +32,6 @@ class WidgetUpdateWorker(
 
     companion object {
         const val TAG = "WidgetUpdateWorker"
-        private const val PREF_APP_INITIALISING = "appInitialising"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -41,7 +40,7 @@ class WidgetUpdateWorker(
         return@withContext try {
             Log.d(TAG, "Worker started")
 
-            if (prefs.getBoolean(PREF_APP_INITIALISING, false)) {
+            if (StepsWidgetProvider.isAppInitialising(context)) {
                 Log.d(TAG, "App is initialising — skipping")
                 return@withContext Result.success()
             }
@@ -52,7 +51,7 @@ class WidgetUpdateWorker(
                 return@withContext Result.success()
             }
 
-            val goal  = prefs.getInt("goal", 10000)
+            val goal  = prefs.getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
             // FIX #10: Read token from SecureTokenStore (encrypted)
             val token = SecureTokenStore.getToken(context).ifBlank { null }
 
@@ -88,12 +87,25 @@ class WidgetUpdateWorker(
         // Prefer the live in-memory step count from StepCounterService (real-time).
         // Use max(liveSteps, displayStepFloor) so the widget always shows at least
         // what the app UI displays (which includes server baseline + HC offset).
+        //
+        // liveStepCount is only trustworthy while the service is actually alive. It
+        // is a static in the app process, so when the system kills just the service
+        // and leaves the process running it keeps its last value — the same trap
+        // StepServiceRestartWorker.isServiceAlive() documents. Reading it unchecked
+        // meant a dead service's stale total could be rendered AND stamped with a
+        // fresh lastUpdated, turning a stale value into an apparently current one.
         val liveSteps = StepCounterService.liveStepCount
         val displayFloor = StepCounterService.displayStepFloor
-        if (liveSteps >= 0) {
+        val heartbeat = stepPrefs.getLong(StepCounterService.HEARTBEAT_KEY, 0L)
+        val heartbeatFresh = heartbeat > 0L &&
+            (System.currentTimeMillis() - heartbeat) <= StepCounterService.HEARTBEAT_STALE_MS
+        if (liveSteps >= 0 && heartbeatFresh) {
             val displaySteps = maxOf(liveSteps, displayFloor)
             Log.d(TAG, "Using live sensor steps: $liveSteps (floor=$displayFloor, display=$displaySteps)")
             return displaySteps
+        }
+        if (liveSteps >= 0) {
+            Log.d(TAG, "Ignoring liveStepCount=$liveSteps — heartbeat stale (age=${if (heartbeat > 0) (System.currentTimeMillis() - heartbeat) / 1000 else -1}s)")
         }
 
         // Fallback: try persisted value from StepCounterService
@@ -128,7 +140,13 @@ class WidgetUpdateWorker(
                 .filterKeys { it != applicationContext.packageName }
                 .mapValues { (_, records) -> records.sumOf { it.count } }
 
-            val steps = stepsByOrigin.values.maxOrNull()?.toInt() ?: 0
+            // Clamped like every other Health Connect reader in the app
+            // (HealthSyncHelper, StepCounterService's HC poll, the JS reader). This
+            // was the one path with no upper bound, so an absurd total written by
+            // some other app on the device landed on the widget unfiltered.
+            val steps = (stepsByOrigin.values.maxOrNull() ?: 0L)
+                .coerceIn(0L, MAX_SANE_DAILY_STEPS.toLong())
+                .toInt()
             Log.d(TAG, "Steps by origin (HC fallback, excluding self): $stepsByOrigin → using $steps")
             steps
         } catch (e: Exception) {

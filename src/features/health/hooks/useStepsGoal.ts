@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
 import { api } from '../../../utils/api';
 import { useAuthStore } from '../../auth/store/authStore';
+import { DEFAULT_DAILY_STEP_GOAL } from '../constants/tracker.constant';
 
 const PRESETS = [
   { label: '3K', value: 3000, tag: 'Easy' },
@@ -38,7 +39,7 @@ function calcStats(steps: number): StepsStats {
   };
 }
 
-export function useStepsGoal(initialSteps = 8000): UseStepsGoalReturn {
+export function useStepsGoal(initialSteps = DEFAULT_DAILY_STEP_GOAL): UseStepsGoalReturn {
   const user = useAuthStore(s => s.user);
   const updateUser = useAuthStore(s => s.updateUser);
 

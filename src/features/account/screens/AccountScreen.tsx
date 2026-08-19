@@ -13,6 +13,7 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { useTheme } from '../../../hooks/useTheme';
 import { MenuRow } from '../types/account.types';
 import { useAccountScreen } from '../hooks/useAccountScreen';
+import { useTabBarSpace } from '../../../navigation/tabBarLayout';
 
 const packageJson = require('../../../../package.json');
 
@@ -21,6 +22,7 @@ type Props = {};
 const AccountScreen = (props: Props) => {
   const { colors } = useTheme();
   const s = useAccountStyles(colors);
+  const tabBarSpace = useTabBarSpace();
 
   const {
     profile,
@@ -88,10 +90,14 @@ const AccountScreen = (props: Props) => {
             <AppText style={s.sectionTitle}>SETTINGS &amp; SHOP</AppText>
           </AppView>
         }
+        // Clears the floating tab bar. Was a hardcoded 100 — the same guess made
+        // independently in Screen.tsx, TrackerScreen and ShopScreen — which falls
+        // short once the bottom inset grows, leaving the last menu rows under the
+        // bar and untappable on 3-button-navigation phones.
         contentContainerStyle={[
           s.listContent,
           {
-            paddingBottom: 100,
+            paddingBottom: tabBarSpace,
           },
         ]}
         showsVerticalScrollIndicator={false}

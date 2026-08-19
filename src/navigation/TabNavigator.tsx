@@ -12,6 +12,7 @@ import TrackerScreen from '../features/health/screens/TrackerScreen';
 import { useTheme } from '../hooks/useTheme';
 import { withOpacity } from '../utils/withOpacity';
 import { SCREEN_WIDTH } from '../utils/measure';
+import { TAB_BAR_HEIGHT, TAB_BAR_GAP } from './tabBarLayout';
 import { Icon } from '../components';
 
 // Lazy-load non-initial tab screens to reduce startup bundle parse time
@@ -51,9 +52,13 @@ const TabNavigator: React.FC = () => {
       backgroundColor: withOpacity(colors.card, 0.8),
       borderTopColor: 'transparent',
       borderTopWidth: 0,
-      height: 60,
+      // Height and lift come from tabBarLayout so the screens behind this bar can
+      // reserve exactly the space it takes. They used to be written here and
+      // guessed at separately in Screen.tsx and TrackerScreen.tsx, which is how
+      // they drifted apart.
+      height: TAB_BAR_HEIGHT,
       marginHorizontal: SCREEN_WIDTH * 0.1,
-      marginBottom: Platform.OS === 'ios' ? bottom : bottom + 16,
+      marginBottom: bottom + TAB_BAR_GAP,
       borderRadius: radius.full,
       paddingBottom: 8,
       paddingTop: 4,

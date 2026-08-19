@@ -6,6 +6,7 @@ import { PresetSelector } from '../components/edit-steps-goal/PresetSelector';
 import { StatsRow } from '../components/edit-steps-goal/StatsRow';
 import { SaveButton } from '../components/edit-steps-goal/SaveButton';
 import { useStepsGoal } from '../hooks/useStepsGoal';
+import { DEFAULT_DAILY_STEP_GOAL } from '../constants/tracker.constant';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useNavigation } from '@react-navigation/native';
 import { useToast } from '../../../components/Toast';
@@ -117,7 +118,7 @@ const EditStepsGoalScreen = memo(() => {
     handleSlider,
     handlePreset,
     saveMutation,
-  } = useStepsGoal(user?.dailyStepGoal || 8000);
+  } = useStepsGoal(user?.dailyStepGoal || DEFAULT_DAILY_STEP_GOAL);
 
   const handleSave = () => {
     saveMutation.mutate(steps, {

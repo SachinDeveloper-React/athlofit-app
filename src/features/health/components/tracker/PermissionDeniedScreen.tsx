@@ -28,6 +28,7 @@ import {
 
 import { AppText } from '../../../../components';
 import { useTheme } from '../../../../hooks/useTheme';
+import { useTabBarSpace } from '../../../../navigation/tabBarLayout';
 import { withOpacity } from '../../../../utils/withOpacity';
 import { initializeHealthKit } from '../../service/healthkit.service';
 import { setHealthPreference } from '../../service/healthPreference.service';
@@ -235,6 +236,10 @@ PermissionRow.displayName = 'PermissionRow';
 
 const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGranted, onSkip }: Props) => {
   const { colors, isDark } = useTheme();
+  // This renders inside TrackerScreen, which is a tab screen, so the floating tab
+  // bar sits over the bottom of this scroll view — right where the action buttons
+  // are. The static 120 below could not track the bottom inset.
+  const tabBarSpace = useTabBarSpace();
   const [isRequesting, setIsRequesting] = useState(false);
   const denialCountRef = useRef(0);
   const cfg = CONFIGS[scenario];
@@ -348,7 +353,7 @@ const PermissionDeniedScreen = memo(({ scenario, errorMessage, onPermissionGrant
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
       showsVerticalScrollIndicator={false}
       bounces={false}
     >
@@ -550,7 +555,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     // paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 120,
+    // paddingBottom comes from useTabBarSpace() at the use site — it has to track
+    // the bottom safe-area inset, which a StyleSheet value cannot do.
     gap: 20,
   },
   iconSection: {

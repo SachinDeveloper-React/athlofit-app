@@ -33,7 +33,7 @@ class EodSyncWorker(
 
         val prefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
 
-        if (prefs.getBoolean("appInitialising", false)) {
+        if (StepsWidgetProvider.isAppInitialising(context)) {
             Log.d(TAG, "App is initialising — skipping EOD sync")
             return@withContext Result.success()
         }

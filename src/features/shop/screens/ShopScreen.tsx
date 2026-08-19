@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootRoutes, ShopRoutes } from '../../../navigation/routes';
 import type { RootStackParamList } from '../../../types/navigation.types';
 import { useTheme } from '../../../hooks/useTheme';
+import { useTabBarSpace } from '../../../navigation/tabBarLayout';
 import AppText from '../../../components/AppText';
 import { Icon } from '../../../components/Icon';
 import { CoinBadge } from '../../../components/CoinBadge';
@@ -260,6 +261,7 @@ DynamicSection.displayName = 'DynamicSection';
 const ShopScreen = () => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const tabBarSpace = useTabBarSpace();
   const navigation = useNavigation<ShopNavProp>();
   const { itemCount } = useCart();
   const isOnline = useNetworkStore(state => state.isOnline);
@@ -304,7 +306,10 @@ const ShopScreen = () => {
           refreshControl={
             <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={{ paddingBottom: 120 }}
+          // Was a hardcoded 120 — a third independent guess at the floating tab
+          // bar's footprint, alongside 100 in Screen.tsx and 100+16 in
+          // TrackerScreen. It falls short once the bottom inset grows.
+          contentContainerStyle={{ paddingBottom: tabBarSpace }}
           ListHeaderComponent={
             // Render as JSX directly — not a new component reference each render.
             // StaticHeader is memo so its entering animation only fires on mount.

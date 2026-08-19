@@ -181,11 +181,20 @@ class StepsWidgetModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setAppInitialising(initialising: Boolean, promise: Promise) {
         try {
-            reactApplicationContext
+            val edit = reactApplicationContext
                 .getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
                 .edit()
-                .putBoolean("appInitialising", initialising)
-                .apply()
+                .putBoolean(StepsWidgetProvider.PREF_APP_INITIALISING, initialising)
+            // Timestamp the flag so background workers can expire it. The JS callers
+            // clear it in a `finally`, which does not run if the process is killed
+            // mid-initialisation — and a stuck flag permanently disables both the
+            // widget worker and the end-of-day sync. See isAppInitialising().
+            if (initialising) {
+                edit.putLong(StepsWidgetProvider.PREF_APP_INITIALISING_AT, System.currentTimeMillis())
+            } else {
+                edit.remove(StepsWidgetProvider.PREF_APP_INITIALISING_AT)
+            }
+            edit.apply()
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("INIT_FLAG_ERROR", e.message, e)

@@ -206,6 +206,17 @@ object HealthSyncHelper {
 
             JSONObject().apply {
                 put("date",                   date.toString())
+                // Device timezone (IANA name), as every other sync path already
+                // sends. This payload used to omit it, and the omission was not
+                // harmless just because `date` is explicit: the server resolves the
+                // write target as `date || resolveClientDate(timezone)` but computes
+                // `actualToday = resolveClientDate(timezone)` SEPARATELY, and that
+                // helper falls back to hardcoded Asia/Kolkata when timezone is
+                // missing. For any user outside IST the two disagreed on the days
+                // the dates diverge, `isTodaySync` came out false, and today's coins
+                // were diverted to the retroactive award branch instead of the
+                // atomic same-day one.
+                put("timezone",               ZoneId.systemDefault().id)
                 put("steps",                  steps)
                 put("calories",               calories)
                 put("distance",               distanceKm)
@@ -219,7 +230,13 @@ object HealthSyncHelper {
                 put("weight",                 weight)
                 put("bloodGlucose",           bloodGlucose)
                 put("hydration",              hydrationMl)
-                put("goalMet",                false)
+                // `goalMet` is deliberately NOT sent. This worker does not know the
+                // user's current goal (it would have to guess a default) and it does
+                // not know about admin-credited bonus steps, both of which the server
+                // has. Sending a hardcoded `false` was worse than sending nothing: the
+                // server read it with `??`, which does not fall through on `false`, so
+                // a user who only ever syncs in the background could never have the
+                // goal recorded as met — no daily step-goal coins, and no streak.
             }
         } catch (e: Exception) {
             Log.e(TAG, "readDaySnapshot($date) failed: ${e.message}", e)

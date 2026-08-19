@@ -27,6 +27,7 @@ import { withOpacity } from '../../../utils/withOpacity';
 import { makeStyles } from '../../../hooks/makeStyles';
 import { useDayDetail } from '../hooks/useDayDetail';
 import { getStepColor } from '../utils/stepColorUtils';
+import { DEFAULT_DAILY_STEP_GOAL } from '../constants/tracker.constant';
 import { useHealthDataStore } from '../store/healthDataStore';
 import type { HealthStackParamList } from '../../../types/navigation.types';
 import { HealthRoutes } from '../../../navigation/routes';
@@ -308,7 +309,7 @@ const StepDetailScreen = memo(({ route }: Props) => {
     // Use the higher of local vs server for each metric (local is always fresher for today)
     const liveSteps = liveHealthData.steps ?? 0;
     const steps = Math.max(liveSteps, serverData.steps ?? 0);
-    const dailyGoal = serverData.dailyGoal ?? 10000;
+    const dailyGoal = serverData.dailyGoal ?? DEFAULT_DAILY_STEP_GOAL;
     const goalMet = steps >= dailyGoal;
     const progressPct = dailyGoal > 0 ? Math.min(100, Math.round((steps / dailyGoal) * 100)) : 0;
 
@@ -328,7 +329,7 @@ const StepDetailScreen = memo(({ route }: Props) => {
   }, [serverData, isToday, liveHealthData]);
 
   const { barColor } = useMemo(
-    () => getStepColor(data?.steps ?? 0, data?.dailyGoal ?? 10000, colors.muted, false),
+    () => getStepColor(data?.steps ?? 0, data?.dailyGoal ?? DEFAULT_DAILY_STEP_GOAL, colors.muted, false),
     [data?.steps, data?.dailyGoal, colors.muted],
   );
 

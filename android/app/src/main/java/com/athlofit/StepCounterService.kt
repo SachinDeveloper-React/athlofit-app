@@ -6,9 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.appwidget.AppWidgetManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -59,7 +61,15 @@ class StepCounterService : Service(), SensorEventListener {
     companion object {
         private const val TAG = "StepCounterService"
         private const val CHANNEL_ID = "step_counter_live"
-        private const val NOTIF_ID = 1001
+
+        /**
+         * Id of the ongoing step notification.
+         *
+         * Public so the midnight reset paths that run OUTSIDE this service
+         * (MidnightResetReceiver, MidnightResetWorker) can repaint it to 0 the
+         * instant the day rolls over, instead of waiting for the service to start.
+         */
+        const val NOTIF_ID = 1001
         private const val PREFS_NAME = "StepCounterPrefs"
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
         private const val STEP_HISTORY_KEY = "stepHistory"
@@ -293,10 +303,18 @@ class StepCounterService : Service(), SensorEventListener {
             // what would be displayed.
             if (!floorChanged && steps <= liveStepCount && liveStepCount >= 0) return false
 
-            // Update widget SharedPreferences
+            // Update widget SharedPreferences.
+            //
+            // The date stamp matters here specifically: this method renders the
+            // notification through buildNotification(), which applies the stale-date
+            // guard, but it used to write `display` to the widget raw. One call could
+            // therefore put yesterday's total on the widget while the notification it
+            // posted in the same breath showed 0. Stamping the day lets the widget
+            // apply the same guard.
             val widgetPrefs = context.getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
             widgetPrefs.edit()
                 .putInt("steps", display)
+                .putString(StepsWidgetProvider.PREF_STEPS_DATE, StepsWidgetProvider.todayStamp())
                 .putLong("lastUpdated", System.currentTimeMillis())
                 .apply()
 
@@ -327,6 +345,65 @@ class StepCounterService : Service(), SensorEventListener {
             } catch (_: Exception) { /* non-fatal */ }
 
             return true
+        }
+
+        /**
+         * Persists a step count record for a given date into the step history JSON
+         * array, merging by date and keeping the highest count seen for that date.
+         *
+         * History is stored in SharedPreferences as a JSON array of objects:
+         * [{"date": "2025-01-15", "steps": 8432}, ...]
+         *
+         * Merging by max (rather than appending) matters because the same date can
+         * legitimately be written several times: handleMultiDayGap re-records
+         * intermediate days, and a flip-flopping storedDate re-runs the midnight
+         * path. The old bare-append version also grew without bound, and the whole
+         * array is parsed into memory from one SharedPreferences string.
+         *
+         * Lives on the companion so the midnight reset paths that run OUTSIDE the
+         * service (MidnightResetReceiver, MidnightResetWorker) can record yesterday's
+         * total before they zero it. Both of them used to overwrite dailySteps with 0
+         * and never write history, so on any device where they won the race — which
+         * is precisely when the service was dead — the day's local total was lost.
+         */
+        fun persistStepHistory(context: Context, date: String, steps: Int) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val historyJson = prefs.getString(STEP_HISTORY_KEY, "[]") ?: "[]"
+            val existing = try {
+                JSONArray(historyJson)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse step history JSON, starting fresh", e)
+                JSONArray()
+            }
+
+            val byDate = LinkedHashMap<String, Int>()
+            for (i in 0 until existing.length()) {
+                val entry = existing.optJSONObject(i) ?: continue
+                val entryDate = entry.optString("date", "")
+                if (entryDate.isEmpty()) continue
+                val entrySteps = entry.optInt("steps", 0)
+                byDate[entryDate] = maxOf(byDate[entryDate] ?: 0, entrySteps)
+            }
+            byDate[date] = maxOf(byDate[date] ?: 0, maxOf(0, steps))
+
+            // Keep the most recent MAX_HISTORY_DAYS days (ISO dates sort chronologically).
+            val trimmed = byDate.entries
+                .sortedBy { it.key }
+                .takeLast(MAX_HISTORY_DAYS)
+
+            val result = JSONArray()
+            for ((entryDate, entrySteps) in trimmed) {
+                result.put(JSONObject().apply {
+                    put("date", entryDate)
+                    put("steps", entrySteps)
+                })
+            }
+
+            prefs.edit()
+                .putString(STEP_HISTORY_KEY, result.toString())
+                .apply()
+
+            Log.d(TAG, "persistStepHistory — saved $steps steps for $date (records: ${result.length()})")
         }
 
         /**
@@ -363,7 +440,7 @@ class StepCounterService : Service(), SensorEventListener {
             val safeSteps = if (storedDate.isNotEmpty() && storedDate != today) 0 else maxOf(0, steps)
 
             val goal = context.getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-                .getInt("goal", 10000)
+                .getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
             val percentage =
                 if (goal > 0) ((safeSteps.toLong() * 100) / goal).toInt().coerceIn(0, 100) else 0
             val stepsFormatted = String.format("%,d", safeSteps)
@@ -566,6 +643,89 @@ class StepCounterService : Service(), SensorEventListener {
     /** Timestamp of last midnight reset (used to gate JS updates for 2 minutes). */
     private var lastMidnightResetTime: Long = 0L
 
+    // ── System date/time change receiver ─────────────────────────────────────
+    // ACTION_DATE_CHANGED is the broadcast the OS sends when the calendar day
+    // rolls over (23:59 → 00:00). It cannot be declared in AndroidManifest.xml —
+    // implicit broadcasts have been blocked for manifest-declared receivers since
+    // Android 8 — so it has to be registered at runtime from a running component.
+    // That is why this app had no date-change trigger at all and depended entirely
+    // on AlarmManager waking a receiver that then had to get a foreground service
+    // started before anything was repainted.
+    //
+    // This is an ADDITIONAL trigger, deliberately not the primary one: delivery of
+    // ACTION_DATE_CHANGED is not dependable everywhere (long-standing AOSP quirk
+    // where it stops firing until the clock catches up if time is set backwards,
+    // plus OEM variation). The alarm stays primary and the 10-second watchdog is
+    // what actually bounds the worst case.
+    //
+    // ACTION_TIME_CHANGED / ACTION_TIMEZONE_CHANGED are handled here too. Both
+    // move the wall clock, which invalidates the ABSOLUTE trigger time already
+    // registered for the pending midnight alarm; without rescheduling, that alarm
+    // fires at the wrong instant after the user changes clock or travels.
+    private var dateChangeReceiverRegistered = false
+
+    private val dateChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            Log.d(TAG, "System broadcast received: $action")
+            debugLog(this@StepCounterService, "SYS_BROADCAST: $action")
+
+            // The wall clock moved — the pending alarm's absolute trigger time is
+            // no longer midnight, so re-arm it against the new clock.
+            if (action == Intent.ACTION_TIME_CHANGED || action == Intent.ACTION_TIMEZONE_CHANGED) {
+                scheduleMidnightAlarm()
+            }
+
+            val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            if (storedDate.isNotEmpty() && storedDate != today) {
+                Log.d(TAG, "$action — day changed ($storedDate → $today), resetting immediately")
+                handleMultiDayGap(storedDate, today)
+            } else {
+                // The reset already ran (the alarm won the race) — force a repaint
+                // so a stale post from before it cannot be what stays on screen.
+                lastNotifiedSteps = -1
+                maybeUpdateNotification(force = true)
+            }
+        }
+    }
+
+    /**
+     * Registers the system date/time change receiver. Idempotent.
+     *
+     * Registration is best-effort: failure only costs us this trigger, the alarm
+     * and the 10-second watchdog still cover the reset.
+     */
+    private fun registerDateChangeReceiver() {
+        if (dateChangeReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Mandatory from API 33+. These are protected system broadcasts,
+                // so the receiver must be declared not-exported.
+                registerReceiver(dateChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(dateChangeReceiver, filter)
+            }
+            dateChangeReceiverRegistered = true
+            Log.d(TAG, "Registered DATE_CHANGED / TIME_CHANGED / TIMEZONE_CHANGED receiver")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not register date change receiver: ${e.message}")
+        }
+    }
+
+    /** Unregisters the system date/time change receiver. Idempotent. */
+    private fun unregisterDateChangeReceiver() {
+        if (!dateChangeReceiverRegistered) return
+        try {
+            unregisterReceiver(dateChangeReceiver)
+        } catch (_: Exception) { /* already gone — non-fatal */ }
+        dateChangeReceiverRegistered = false
+    }
+
     /** True when the hardware step counter reports batching support (FIFO > 0). */
     private var sensorSupportsFlush: Boolean = false
 
@@ -643,6 +803,30 @@ class StepCounterService : Service(), SensorEventListener {
             // Prove liveness even while the sensor is silent — the watchdog ticking
             // is what makes the service "alive", not the arrival of step events.
             maybeWriteHeartbeat()
+
+            // ── Day rollover safety net (bounds reset latency to 10s) ──────────
+            // The watchdog is the only thing in this service that ticks
+            // unconditionally, and it used to never look at the date. Every other
+            // reset trigger needs something to happen first: the alarm needs its
+            // startForegroundService() to be permitted, the sensor check needs the
+            // user to actually walk, the HC check needs HC-only mode, and the
+            // WorkManager backup only runs hourly. On a phone sitting idle at
+            // midnight whose FGS start was refused, none of them fire and the
+            // notification sat on yesterday's total.
+            //
+            // Checking the IN-MEMORY storedDate is what makes this work. Only
+            // performMidnightReset() advances it, so it still reads yesterday even
+            // after MidnightResetReceiver has written today into SharedPreferences —
+            // which is precisely the "prefs were reset but the service never
+            // applied it" state that left stale steps on screen.
+            val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            if (storedDate.isNotEmpty() && storedDate != todayStr) {
+                Log.w(TAG, "Watchdog — day changed ($storedDate → $todayStr), midnight reset was missed; resetting now")
+                debugLog(this@StepCounterService, "WATCHDOG_RESET: $storedDate → $todayStr")
+                handleMultiDayGap(storedDate, todayStr)
+                flushHandler.postDelayed(this, FLUSH_INTERVAL_MS)
+                return
+            }
 
             // ── Retry sensor registration if in HC-only mode ────────────────────
             // If sensor registration failed on start, periodically retry. Sensor may
@@ -743,9 +927,19 @@ class StepCounterService : Service(), SensorEventListener {
             if (dailySteps > 0) {
                 if (dailySteps > liveStepCount) liveStepCount = dailySteps
                 NativeStepModule.emitStepUpdate(maxOf(dailySteps, liveStepCount), forceEmit = true)
-                maybeUpdateNotification()
-                updateWidget()
             }
+
+            // Repaint on every tick, not only while dailySteps > 0.
+            //
+            // Both calls are throttled and return early when the displayed value has
+            // not changed, so running them unconditionally is cheap. What it buys is
+            // a repaint path that still works in the two cases where the old
+            // `dailySteps > 0` guard went silent exactly when it was needed:
+            // immediately AFTER a midnight reset (dailySteps == 0), and in
+            // Health-Connect-only mode (dailySteps stays 0 all day because there is
+            // no hardware sensor feeding it).
+            maybeUpdateNotification()
+            updateWidget()
 
             flushHandler.postDelayed(this, FLUSH_INTERVAL_MS)
         }
@@ -773,7 +967,18 @@ class StepCounterService : Service(), SensorEventListener {
             // reading stale SharedPreferences. This prevents the notification
             // from briefly dropping to an old value on app resume.
             val notifSteps: Int
-            if (sensorManager != null && liveStepCount >= 0) {
+            if (isMidnightReset) {
+                // Midnight-triggered start: the day has just rolled over, so the only
+                // correct value is 0.
+                //
+                // This branch used to fall through to the "service already running"
+                // case below, which re-posted max(liveStepCount, displayStepFloor) —
+                // yesterday's total — as the foreground notification, and only then
+                // ran performMidnightReset() further down. On a device where the
+                // reset path was slow or refused, that post was the LAST thing to
+                // touch the notification, so yesterday's count stayed on screen.
+                notifSteps = 0
+            } else if (sensorManager != null && liveStepCount >= 0) {
                 // Service already running — use live count
                 notifSteps = maxOf(liveStepCount, displayStepFloor)
             } else {
@@ -838,6 +1043,9 @@ class StepCounterService : Service(), SensorEventListener {
         // Schedule midnight alarm as fallback reset trigger
         scheduleMidnightAlarm()
 
+        // Listen for the OS day-rollover broadcast (instant, alarm-independent).
+        registerDateChangeReceiver()
+
         // Register sensor listener (no-op if already registered)
         if (sensorManager == null) {
             val registered = registerSensorListener()
@@ -867,6 +1075,8 @@ class StepCounterService : Service(), SensorEventListener {
         stopHcPolling("service destroyed")
         // Stop sensor flush timer
         flushHandler.removeCallbacks(flushRunnable)
+        // Stop listening for system date/time changes
+        unregisterDateChangeReceiver()
         // Cancel coroutine scope
         serviceScope.cancel()
         // Persist current state before shutdown
@@ -1472,7 +1682,7 @@ class StepCounterService : Service(), SensorEventListener {
     private fun buildSyncPayload(): String {
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
         val weightKg = widgetPrefs.getFloat("weightKg", 70.0f).toDouble()
-        val dailyStepGoal = widgetPrefs.getInt("goal", 10000)
+        val dailyStepGoal = widgetPrefs.getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
 
         val steps = dailySteps
         val calories = Math.floor(steps * weightKg * 0.57 / 1000.0).toInt()
@@ -1760,52 +1970,8 @@ class StepCounterService : Service(), SensorEventListener {
      * History is stored in SharedPreferences as a JSON array of objects:
      * [{"date": "2025-01-15", "steps": 8432}, ...]
      */
-    private fun persistStepHistory(date: String, steps: Int) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val historyJson = prefs.getString(STEP_HISTORY_KEY, "[]") ?: "[]"
-        val existing = try {
-            JSONArray(historyJson)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse step history JSON, starting fresh", e)
-            JSONArray()
-        }
-
-        // Merge by date, keeping the highest count seen for that date.
-        //
-        // This used to be a bare append with no de-duplication and no cap. The same
-        // date could be written several times (handleMultiDayGap re-records
-        // intermediate days, and a flip-flopping storedDate re-runs the midnight
-        // path), and the array grew forever. It is stored as one JSON string in
-        // SharedPreferences, which is parsed into memory in full on first access.
-        val byDate = LinkedHashMap<String, Int>()
-        for (i in 0 until existing.length()) {
-            val entry = existing.optJSONObject(i) ?: continue
-            val entryDate = entry.optString("date", "")
-            if (entryDate.isEmpty()) continue
-            val entrySteps = entry.optInt("steps", 0)
-            byDate[entryDate] = maxOf(byDate[entryDate] ?: 0, entrySteps)
-        }
-        byDate[date] = maxOf(byDate[date] ?: 0, maxOf(0, steps))
-
-        // Keep the most recent MAX_HISTORY_DAYS days (ISO dates sort chronologically).
-        val trimmed = byDate.entries
-            .sortedBy { it.key }
-            .takeLast(MAX_HISTORY_DAYS)
-
-        val result = JSONArray()
-        for ((entryDate, entrySteps) in trimmed) {
-            result.put(JSONObject().apply {
-                put("date", entryDate)
-                put("steps", entrySteps)
-            })
-        }
-
-        prefs.edit()
-            .putString(STEP_HISTORY_KEY, result.toString())
-            .apply()
-
-        Log.d(TAG, "persistStepHistory — saved $steps steps for $date (records: ${result.length()})")
-    }
+    private fun persistStepHistory(date: String, steps: Int) =
+        Companion.persistStepHistory(this, date, steps)
 
     // ── Midnight Alarm Scheduling ─────────────────────────────────────────────
 
@@ -1906,10 +2072,13 @@ class StepCounterService : Service(), SensorEventListener {
         lastWidgetSteps = displaySteps
 
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
-        val goal = widgetPrefs.getInt("goal", 10000)
+        val goal = widgetPrefs.getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
         widgetPrefs.edit()
             .putInt("steps", displaySteps)
             .putInt("goal", goal)
+            // Stamp the tracking day so StepsWidgetProvider.renderWidget can apply
+            // the same stale-date guard the notification has.
+            .putString(StepsWidgetProvider.PREF_STEPS_DATE, StepsWidgetProvider.todayStamp())
             .putLong("lastUpdated", System.currentTimeMillis())
             .apply()
 
@@ -1935,9 +2104,48 @@ class StepCounterService : Service(), SensorEventListener {
      * StepNotificationService to avoid inflated counts from multiple apps.
      */
     private fun pollHealthConnectAndUpdateNotification() {
-        // CRITICAL: Respect 2-minute midnight reset gate.
-        // HC reads data from platform which may contain yesterday's cached records.
-        // Block HC updates during the gate period to prevent overwriting notification's 0.
+        // ── Pending-reset check runs BEFORE the 2-minute gate ─────────────────
+        // These two blocks used to be the other way round, so a poll that landed
+        // while a reset was still pending hit the gate's `return` and skipped the
+        // zeroing below it entirely. In Health-Connect-only mode this poll is the
+        // ONLY thing that repaints the notification, so that ordering meant the
+        // notification held yesterday's count for the full 120s of the gate — the
+        // 2-minute delay this whole path was supposed to prevent.
+        //
+        // The check also consults the in-memory storedDate now, not just the
+        // persisted one: MidnightResetReceiver writes today into SharedPreferences
+        // before the service applies the reset, so the persisted value alone reports
+        // "already reset" while the in-memory counters still hold yesterday's total.
+        val stepPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val storedDateVal = stepPrefs.getString("storedDate", "") ?: ""
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val resetPending = (storedDateVal.isNotEmpty() && storedDateVal != today) ||
+            (storedDate.isNotEmpty() && storedDate != today)
+
+        if (resetPending) {
+            // Midnight reset pending — show 0 on every surface.
+            if (lastHcPollSteps != 0) {
+                lastHcPollSteps = 0
+                liveStepCount = 0
+                dailySteps = 0
+                displayStepFloor = 0
+                lastNotifiedSteps = -1
+                lastWidgetSteps = -1
+                maybeUpdateNotification(force = true)
+                updateWidget(force = true)
+                NativeStepModule.emitStepUpdate(0, forceEmit = true)
+                Log.d(TAG, "HC poll: reset to 0 (midnight reset pending)")
+            }
+            return
+        }
+
+        // ── 2-minute post-reset gate ──────────────────────────────────────────
+        // Health Connect can still serve yesterday's cached records for a short
+        // while after the day rolls over, so a read taken immediately after the
+        // reset would overwrite the notification's 0 with yesterday's total.
+        //
+        // Reaching this point means no reset is pending, so the notification is
+        // already showing the correct 0 and skipping the read costs nothing.
         if (lastMidnightResetTime > 0) {
             val msSinceReset = System.currentTimeMillis() - lastMidnightResetTime
             if (msSinceReset < 2 * 60_000L) {
@@ -1953,28 +2161,6 @@ class StepCounterService : Service(), SensorEventListener {
                 """.trimIndent())
                 return
             }
-        }
-        
-        // Check midnight reset state first (legacy check for date mismatch)
-        val stepPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val storedDateVal = stepPrefs.getString("storedDate", "") ?: ""
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-
-        if (storedDateVal.isNotEmpty() && storedDateVal != today) {
-            // Midnight reset pending — show 0 on every surface.
-            if (lastHcPollSteps != 0) {
-                lastHcPollSteps = 0
-                liveStepCount = 0
-                dailySteps = 0
-                displayStepFloor = 0
-                lastNotifiedSteps = -1
-                lastWidgetSteps = -1
-                maybeUpdateNotification(force = true)
-                updateWidget(force = true)
-                NativeStepModule.emitStepUpdate(0, forceEmit = true)
-                Log.d(TAG, "HC poll: reset to 0 (midnight reset pending)")
-            }
-            return
         }
 
         serviceScope.launch {

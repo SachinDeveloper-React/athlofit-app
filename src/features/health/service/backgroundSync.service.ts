@@ -214,7 +214,11 @@ async function syncOneDayIOS(
   const body = {
     ...data,
     date: dateStr,
-    goalMet: false, // server recalculates
+    // `goalMet` is deliberately omitted so the server decides. It used to be sent
+    // as a literal `false` under the comment "server recalculates", which it did
+    // not: the server read it with `??`, and `false ?? x` is `false`. A user who
+    // only ever syncs in the background therefore never had the goal recorded as
+    // met, never received the daily step-goal coins, and never advanced a streak.
     timezone: getTimezone(), // FIX #3: include device timezone
   };
 
@@ -254,7 +258,11 @@ async function syncOneDayAndroid(
     calories: derived.calories,
     distance: derived.distanceKm,
     activeMinutes: derived.activeMinutes,
-    goalMet: false, // server recalculates
+    // `goalMet` is deliberately omitted so the server decides. It used to be sent
+    // as a literal `false` under the comment "server recalculates", which it did
+    // not: the server read it with `??`, and `false ?? x` is `false`. A user who
+    // only ever syncs in the background therefore never had the goal recorded as
+    // met, never received the daily step-goal coins, and never advanced a streak.
     timezone: getTimezone(), // FIX #3: include device timezone
   };
 

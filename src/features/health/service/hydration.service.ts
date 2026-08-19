@@ -4,9 +4,30 @@
 import { HistoryEntry } from '../types/hydration.type';
 import { BASE_URL as API_BASE_URL } from '../../../utils/api';
 import { getLocalToday } from '../../../utils/date';
+import { getTimezone } from '../../../utils/timezone';
 
 // Strip trailing slash so we can append paths cleanly
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');
+
+/**
+ * Fields every POST /health/sync body from this file carries.
+ *
+ * These calls post to the same endpoint the step sync uses, and they used to omit
+ * `timezone` and send a hardcoded `goalMet: false`. Both mattered:
+ *
+ *  - Without `timezone` the server resolves "today" from a hardcoded Asia/Kolkata
+ *    fallback while `date` below is the device's local day. For any user outside
+ *    IST the two disagree for part of every day, `isTodaySync` comes out false,
+ *    and a plain water log is routed into the retroactive-award branch.
+ *  - `goalMet: false` was read by the server with `??`, which does not fall
+ *    through on `false`, so logging a glass of water reset that day's goalMet flag
+ *    even when the step goal had already been reached. The field is now omitted
+ *    entirely: these payloads carry no steps and have no business voting on it.
+ */
+const syncEnvelope = () => ({
+  date: getLocalToday(),
+  timezone: getTimezone(),
+});
 
 export const hydrationService = {
   /**
@@ -48,8 +69,6 @@ export const hydrationService = {
     amount: number,
     source: HistoryEntry['source'] = 'manual',
   ): Promise<HistoryEntry> {
-    const today = getLocalToday();
-
     const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
       headers: {
@@ -57,9 +76,8 @@ export const hydrationService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        date: today,
+        ...syncEnvelope(),
         hydration: amount,
-        goalMet: false,
       }),
     });
 
@@ -79,8 +97,6 @@ export const hydrationService = {
    * Reset today's hydration data on backend
    */
   async resetToday(authToken: string): Promise<void> {
-    const today = getLocalToday();
-
     const res = await fetch(`${BASE_URL}/health/sync`, {
       method: 'POST',
       headers: {
@@ -88,9 +104,8 @@ export const hydrationService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        date: today,
+        ...syncEnvelope(),
         hydration: 0,
-        goalMet: false,
       }),
     });
 
@@ -108,7 +123,6 @@ export const hydrationService = {
   ): Promise<void> {
     if (entries.length === 0) return;
 
-    const today = getLocalToday();
     const totalHydration = entries.reduce((sum, e) => sum + e.amount, 0);
 
     const res = await fetch(`${BASE_URL}/health/sync`, {
@@ -118,9 +132,8 @@ export const hydrationService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        date: today,
+        ...syncEnvelope(),
         hydration: totalHydration,
-        goalMet: false,
       }),
     });
 

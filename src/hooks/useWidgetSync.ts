@@ -18,8 +18,9 @@ interface UseWidgetSyncOptions {
  * Syncs the current step count to the home-screen widget AND notification.
  *
  * Rules:
- *  - Never push 0 steps — the background worker may have already written a
- *    valid non-zero value; overwriting it with 0 on cold start looks broken.
+ *  - Never overwrite a known count with 0 — the background worker may already
+ *    have written a valid value and a cold start would blank it. A goal-only
+ *    change still goes through, carrying the last known count.
  *  - Only push when the value actually changed since the last successful sync.
  *  - Re-push when the app comes to foreground (in case the widget was reset).
  *  - Also pushes to the native notification so all surfaces stay in sync.
@@ -41,14 +42,27 @@ export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOpti
   const syncToWidget = useCallback(async (s: number, g: number) => {
     if (!enabledRef.current)          return; // not ready yet
     if (!widgetService.isAvailable()) return; // iOS or module missing
-    if (s <= 0)                       return; // never overwrite with 0
 
     // Skip if nothing changed since last successful push
     if (lastSyncedSteps.current === s && lastSyncedGoal.current === g) return;
 
-    const ok = await widgetService.updateWidget(s, g);
+    // Never overwrite a non-zero count with 0 — the background worker may
+    // already have written a valid value and a cold start would blank it.
+    //
+    // But a goal change still has to get through. The goal reaches the widget
+    // only from here, and this used to bail on `s <= 0` before the write, so any
+    // goal edit made while steps were 0 (early morning, straight after midnight,
+    // before the first Health Connect read) never arrived — the widget kept
+    // rendering the old goal, and on a fresh install the 10,000 default, until
+    // the user happened to change it again after walking.
+    const goalOnly = s <= 0;
+    if (goalOnly && lastSyncedGoal.current === g) return;
+
+    const stepsToWrite = goalOnly ? Math.max(0, lastSyncedSteps.current ?? 0) : s;
+
+    const ok = await widgetService.updateWidget(stepsToWrite, g);
     if (ok) {
-      lastSyncedSteps.current = s;
+      if (!goalOnly) lastSyncedSteps.current = s;
       lastSyncedGoal.current  = g;
     }
 
@@ -58,9 +72,11 @@ export function useWidgetSync({ steps, goal, enabled = true }: UseWidgetSyncOpti
     // updates directly from the hardware pedometer.
   }, []);
 
-  // Push whenever steps, goal, or enabled changes — but only if steps > 0
+  // Push whenever steps, goal, or enabled changes. Zero steps no longer skip the
+  // push outright — syncToWidget keeps the last known count in that case and lets
+  // a goal change through on its own.
   useEffect(() => {
-    if (!enabled || steps <= 0) return;
+    if (!enabled) return;
     syncToWidget(steps, goal);
   }, [steps, goal, enabled, syncToWidget]);
 

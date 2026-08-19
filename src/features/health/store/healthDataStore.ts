@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { mmkvStorage } from '../../../store';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
+import { getLocalToday } from '../../../utils/date';
 
 interface HealthDataStore {
   data: HealthData;
@@ -17,6 +18,17 @@ interface HealthDataStore {
   syncedServerBaseline: HealthData | null; // Full health data from server for today (cross-device/reinstall)
   syncedServerBaselineDate: string | null; // Date the baseline applies to
   stepOffsetFetched: boolean; // Whether the step offset fetch has completed (success or fail)
+  /**
+   * Local day the {@link stepOffsetFetched} flag was set for.
+   *
+   * The flag is persisted, and without a date it stayed true forever after the
+   * first login. loadData uses it to decide whether to wait (up to 3s) for
+   * today's /health/today fetch, so on every subsequent day it skipped the wait
+   * and could resolve the step count before the server baseline had arrived —
+   * the exact race the wait exists to prevent. Every other cross-day value in
+   * this store is date-stamped for the same reason.
+   */
+  stepOffsetFetchedDate: string | null;
   bonusSteps: number; // Bonus steps credited by admin/system for today
   bonusStepsDate: string | null; // Date the bonus applies to (resets daily)
   nativeStepsAtLogin: number; // Native sensor step count at login time (to compute post-login delta)
@@ -38,6 +50,8 @@ interface HealthDataStore {
   setSyncedStepOffset: (steps: number, date: string) => void;
   setSyncedServerBaseline: (baseline: HealthData | null, date: string) => void;
   setStepOffsetFetched: (fetched: boolean) => void;
+  /** True only when the fetch flag was set for the current local day. */
+  isStepOffsetFetchedToday: () => boolean;
   setBonusSteps: (steps: number, date: string) => void;
   setNativeStepsAtLogin: (steps: number) => void;
   setLastPushedSteps: (steps: number, date: string) => void;
@@ -46,7 +60,7 @@ interface HealthDataStore {
 
 export const useHealthDataStore = create<HealthDataStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       data: defaultHealthData,
       lastUpdated: null,
       loginTimestamp: null,
@@ -56,6 +70,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
       syncedServerBaseline: null,
       syncedServerBaselineDate: null,
       stepOffsetFetched: false,
+      stepOffsetFetchedDate: null,
       bonusSteps: 0,
       bonusStepsDate: null,
       nativeStepsAtLogin: 0,
@@ -74,7 +89,16 @@ export const useHealthDataStore = create<HealthDataStore>()(
 
       setSyncedServerBaseline: (baseline, date) => set({ syncedServerBaseline: baseline, syncedServerBaselineDate: date }),
 
-      setStepOffsetFetched: (fetched) => set({ stepOffsetFetched: fetched }),
+      setStepOffsetFetched: (fetched) =>
+        set({
+          stepOffsetFetched: fetched,
+          stepOffsetFetchedDate: fetched ? getLocalToday() : null,
+        }),
+
+      isStepOffsetFetchedToday: () => {
+        const s = get();
+        return s.stepOffsetFetched && s.stepOffsetFetchedDate === getLocalToday();
+      },
 
       setBonusSteps: (steps, date) => set({ bonusSteps: steps, bonusStepsDate: date }),
 
@@ -92,6 +116,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
         syncedServerBaseline: null,
         syncedServerBaselineDate: null,
         stepOffsetFetched: false,
+        stepOffsetFetchedDate: null,
         bonusSteps: 0,
         bonusStepsDate: null,
         nativeStepsAtLogin: 0,
@@ -113,6 +138,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
         syncedServerBaseline: state.syncedServerBaseline,
         syncedServerBaselineDate: state.syncedServerBaselineDate,
         stepOffsetFetched: state.stepOffsetFetched,
+        stepOffsetFetchedDate: state.stepOffsetFetchedDate,
         bonusSteps: state.bonusSteps,
         bonusStepsDate: state.bonusStepsDate,
         nativeStepsAtLogin: state.nativeStepsAtLogin,

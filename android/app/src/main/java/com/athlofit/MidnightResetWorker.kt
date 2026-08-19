@@ -91,6 +91,16 @@ class MidnightResetWorker(
                 heartbeatStaleMs = StepCounterService.HEARTBEAT_STALE_MS,
             )
 
+            // Archive the missed day's total before zeroing it. This worker runs
+            // precisely when a reset was MISSED, so it is often the only chance to
+            // record that day at all — and it used to drop the count on the floor.
+            // History merges by max, so this cannot conflict with a later in-service
+            // reset for the same date.
+            val closingSteps = stepPrefs.getInt("dailySteps", 0)
+            if (closingSteps > 0) {
+                StepCounterService.persistStepHistory(context, storedDate, closingSteps)
+            }
+
             stepPrefs.edit()
                 .putInt("dailySteps", 0)
                 .putInt("rebootOffset", 0)
@@ -98,12 +108,18 @@ class MidnightResetWorker(
                 .putString("storedDate", today)
                 .apply()
 
-            StepCounterService.debugLog(context, "WORKER_RESET: $storedDate → $today, baseline=$newBaseline")
+            StepCounterService.debugLog(context, "WORKER_RESET: $storedDate → $today, baseline=$newBaseline, archived=$closingSteps")
 
             // Reset the widget to 0 immediately
             val widgetPrefs = context.getSharedPreferences("StepsWidgetPrefs", Context.MODE_PRIVATE)
-            val goal = widgetPrefs.getInt("goal", 10000)
+            val goal = widgetPrefs.getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
             StepsWidgetProvider.updateWidget(context, 0, goal)
+
+            // Repaint the notification to 0 immediately as well. Like the alarm
+            // receiver, this used to zero only the widget and leave the notification
+            // to the service start below — which is refused on exactly the
+            // restricted devices that make this worker necessary in the first place.
+            MidnightResetReceiver.zeroNotificationNow(context)
 
             // Try to start StepCounterService with midnight reset flag so it
             // can perform the full reset (emit events to JS, update notification, etc.)

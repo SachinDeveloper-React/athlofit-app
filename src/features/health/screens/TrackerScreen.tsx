@@ -20,7 +20,8 @@ import SkeletonPlaceholder from '../components/tracker/SkeletonPlaceholder';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useHealth } from '../hooks/useHealth';
 import { WeeklyStepEntry, type HealthData, defaultHealthData } from '../types/healthTypes';
-import { TabId, TABS } from '../constants/tracker.constant';
+import { TabId, TABS, DEFAULT_DAILY_STEP_GOAL } from '../constants/tracker.constant';
+import { useTabBarSpace } from '../../../navigation/tabBarLayout';
 import { useWeeklySteps } from '../hooks/useWeeklySteps';
 import { toISODate } from '../utils/healthFormatters';
 import { useGamification } from '../hooks/useGamification';
@@ -203,6 +204,7 @@ function resolvePermissionScenario(
 }
 
 const TrackerScreen = memo(() => {
+  const tabBarSpace = useTabBarSpace();
   const [activeTab, setActiveTab] = useState<TabId>(TabId.DailyStats);
   const [gateReason, setGateReason] = useState<HealthGateReason | null>(null);
   // ── Track whether the current load was triggered by the user pulling down ──
@@ -281,9 +283,14 @@ const TrackerScreen = memo(() => {
   const MIN_STEP_DELTA = 10; // only re-sync if steps changed by at least 10
 
   // Sync widget with current steps and goal
+  // Same fallback the in-app ring and the goal-met check use. These had drifted
+  // to 10000 here and 8000 below, so the widget and the app disagreed about both
+  // the percentage and whether the goal was reached.
+  const effectiveStepGoal = dailyStepGoal || DEFAULT_DAILY_STEP_GOAL;
+
   useWidgetSync({
     steps: totalSteps,
-    goal: dailyStepGoal || 10000,
+    goal: effectiveStepGoal,
     enabled: isAuthenticated && isReady,
   });
 
@@ -314,7 +321,7 @@ const TrackerScreen = memo(() => {
       return;
     }
 
-    const isGoalMet = totalSteps >= (dailyStepGoal || 8000);
+    const isGoalMet = totalSteps >= effectiveStepGoal;
     // `data.steps` is already device-only — the step engine strips bonus out of
     // the server baseline before using it, so nothing needs subtracting here. The
     // old `data.steps - bonusSteps` was compensating for bonus being baked into
@@ -324,7 +331,7 @@ const TrackerScreen = memo(() => {
     lastSyncedUserRef.current = userId;
     lastSyncTimeRef.current = now;
     lastSyncedStepsRef.current = data.steps;
-  }, [data, isReady, lastUpdated, dailyStepGoal, syncHealth, isAuthenticated, userId, refresh]);
+  }, [data, isReady, lastUpdated, effectiveStepGoal, totalSteps, syncHealth, isAuthenticated, userId, refresh]);
 
   // ── Gate reason ────────────────────────────────────────────────────────────
 
@@ -504,13 +511,15 @@ const TrackerScreen = memo(() => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={true}
-          contentInset={{ bottom: 100 }}
+          // Was a hardcoded 100 (+16 on Android) for the floating tab bar. The
+          // bar's footprint is insets.bottom + gap + height, so it grows with the
+          // bottom inset and a constant cannot track it — that shortfall is what
+          // put content under the bar on 3-button-navigation phones. This screen
+          // renders with safeArea={false}, so the full space applies here.
+          contentInset={{ bottom: tabBarSpace }}
           contentContainerStyle={{
             flexGrow: 1,
-            paddingBottom:
-              Platform.OS === 'android'
-                ? 100 + 16
-                : 100,
+            paddingBottom: tabBarSpace,
           }}
           refreshControl={<RefreshControl
             refreshing={isManualRefreshing}
@@ -526,7 +535,7 @@ const TrackerScreen = memo(() => {
           <BatteryOptimizationBanner />
           <Tabs tabs={TABS} activeTab={activeTab} onPress={handleTabPress} />
           <TabPanels
-            goal={dailyStepGoal || 8000}
+            goal={effectiveStepGoal}
             activeTab={activeTab}
             data={displayData}
             weekData={adjustedWeekData || []}

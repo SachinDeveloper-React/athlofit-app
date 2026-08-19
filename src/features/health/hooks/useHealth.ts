@@ -9,6 +9,7 @@ import {
   resolveSteps,
   detectServerEcho,
   minutesSinceLocalMidnight,
+  MAX_STEPS_PER_MINUTE,
   type StepSourceInput,
   type ServerSourceInput,
   type StepResolution,
@@ -182,6 +183,11 @@ export function useHealth(options: UseHealthOptions = {}) {
      * exactly the time the batch source has not caught up with yet.
      */
     nativeAtResolve: number;
+    /**
+     * When this resolve happened. Bounds the live projection by the steps that
+     * could physically have been walked since — see the live handler.
+     */
+    at: number;
   } | null>(null);
 
   // ── Boot ──────────────────────────────────────────────────────────────────
@@ -592,18 +598,22 @@ export function useHealth(options: UseHealthOptions = {}) {
       // 0 steps on fresh install/reinstall while the server fetch is in-flight.
       // This solves the race condition where loadData runs before setAuth's
       // fetchAndStoreTodayStepOffset has finished writing the offset to store.
-      if (!useHealthDataStore.getState().stepOffsetFetched) {
+      // The flag is checked against today's date, not just its boolean value: it
+      // is persisted, so once set it used to read true forever and every day
+      // after the first skipped this wait entirely — resolving the step count
+      // before today's server baseline had arrived.
+      if (!useHealthDataStore.getState().isStepOffsetFetchedToday()) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 3000); // Don't block more than 3s
           const unsubscribe = useHealthDataStore.subscribe((state) => {
-            if (state.stepOffsetFetched) {
+            if (state.stepOffsetFetched && state.stepOffsetFetchedDate === getLocalToday()) {
               clearTimeout(timeout);
               unsubscribe();
               resolve();
             }
           });
           // Re-check in case it was set between the if-check and subscribe
-          if (useHealthDataStore.getState().stepOffsetFetched) {
+          if (useHealthDataStore.getState().isStepOffsetFetchedToday()) {
             clearTimeout(timeout);
             unsubscribe();
             resolve();
@@ -742,6 +752,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         bonusSteps: todayBonus,
         date: today,
         nativeAtResolve: nativeRead.available ? nativeRead.steps : 0,
+        at: Date.now(),
       };
       useStepDebugStore.getState().setSnapshot({
         resolution,
@@ -932,9 +943,32 @@ export function useHealth(options: UseHealthOptions = {}) {
         // a pure function of the current sensor value — walk 100 steps and it reads
         // +100, not +100 on top of the last +100. Every loadData discards it and
         // starts again from a real Health Connect read.
-        const liveIncrement = cached
+        // The increment is additionally bounded by what could physically have been
+        // walked since the resolve, which closes the one hole in the reasoning
+        // above: the anchor is only a valid anchor if it was a real reading.
+        //
+        // getCurrentSteps() returns 0 both for "no steps yet" and for "the service
+        // is not running", and loadData records the reading as available either way.
+        // So a cycle that ran while the foreground service was dead anchors at 0,
+        // and when the service comes back reporting 7,000 the "increment" is the
+        // whole day — projecting Health Connect to roughly double. The elapsed-time
+        // bound turns that into at most a few hundred steps, and the next loadData
+        // re-anchors from a real reading.
+        const elapsedMinSinceResolve = cached
+          ? Math.max(1, (Date.now() - cached.at) / 60_000)
+          : 0;
+        const maxIncrement = Math.ceil(elapsedMinSinceResolve * MAX_STEPS_PER_MINUTE);
+        const rawIncrement = cached
           ? Math.max(0, newSteps - cached.nativeAtResolve)
           : 0;
+        const liveIncrement = Math.min(rawIncrement, maxIncrement);
+        if (rawIncrement > maxIncrement) {
+          console.warn(
+            `[useHealth] Live increment ${rawIncrement} exceeds the ` +
+            `${Math.round(elapsedMinSinceResolve)}min bound (${maxIncrement}) — ` +
+            `sensor anchor was ${cached?.nativeAtResolve}, clamping`,
+          );
+        }
         const projectedPrimary: StepSourceInput = cached?.primary.available
           ? { steps: cached.primary.steps + liveIncrement, available: true }
           : { steps: 0, available: false };

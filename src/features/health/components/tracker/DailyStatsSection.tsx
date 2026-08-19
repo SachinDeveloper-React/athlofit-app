@@ -16,6 +16,7 @@ import { WeeklyStepEntry } from '../../types/healthTypes';
 import type { StreaksResponseData } from '../../types/gamification.type';
 import { useEarnCoins } from '../../hooks/useEarnCoins';
 import { useBmiHistory } from '../../hooks/useBmi';
+import { DEFAULT_DAILY_STEP_GOAL } from '../../constants/tracker.constant';
 import { makeStyles } from '../../../../hooks/makeStyles';
 
 export type MetricRow = [MetricCardProps, MetricCardProps];
@@ -94,7 +95,7 @@ const DailyStatsSection = memo(
     const handleClaim = useCallback(
       (coinsToAdd: number) => {
         earnCoins(coinsToAdd);
-        syncDailyProgress(coinsToAdd, steps >= (goal ?? 10000));
+        syncDailyProgress(coinsToAdd, steps >= (goal ?? DEFAULT_DAILY_STEP_GOAL));
       },
       [earnCoins, syncDailyProgress, steps, goal],
     );
@@ -193,7 +194,7 @@ const DailyStatsSection = memo(
 
         <TrackerMotivation
           steps={steps}
-          goalSteps={goal || 10000}
+          goalSteps={goal || DEFAULT_DAILY_STEP_GOAL}
           streakDays={streakDays}
           onComputed={({ coinsToday, streakWillContinue }) => {
             syncDailyProgress(coinsToday, streakWillContinue);
