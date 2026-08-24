@@ -43,6 +43,15 @@ object HealthSyncHelper {
         prefs: SharedPreferences,
         token: String,
     ): Boolean {
+        // Step tracking switched off for this account by an admin. Checked here
+        // rather than only at the POST so we do not spend battery reading a
+        // week of Health Connect records to build payloads the server will
+        // reject anyway.
+        if (!StepTrackingGate.isEnabled(context)) {
+            Log.d(TAG, "Skipping sync — step tracking disabled for this account")
+            return false
+        }
+
         val client    = HealthConnectClient.getOrCreate(context)
         val weightKg  = prefs.getFloat("weightKg", 70.0f).toDouble()
         val zone      = ZoneId.systemDefault()
@@ -84,7 +93,7 @@ object HealthSyncHelper {
             val tsForDay = 0L
             val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay, context.packageName)
             if (dayData != null && dayData.optInt("steps") > 0) {
-                val ok = postSync(token, dayData)
+                val ok = postSync(token, dayData, context)
                 Log.d(TAG, "[$current] sync ${if (ok) "OK" else "FAIL"} — ${dayData.optInt("steps")} steps")
                 if (ok) anySuccess = true
             }
@@ -246,7 +255,14 @@ object HealthSyncHelper {
 
     // ─── POST /health/sync ────────────────────────────────────────────────────
 
-    fun postSync(token: String, body: JSONObject): Boolean {
+    /**
+     * @param context needed for the X-App-* identity headers and for acting on
+     *                a step-tracking rejection. Nullable so the existing
+     *                two-argument callers keep compiling; they simply post
+     *                without headers, which the server tolerates.
+     */
+    @JvmOverloads
+    fun postSync(token: String, body: JSONObject, context: android.content.Context? = null): Boolean {
         return try {
             val conn = (URL("${BASE_URL}health/sync").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -256,10 +272,22 @@ object HealthSyncHelper {
                 connectTimeout = 15_000
                 readTimeout    = 15_000
             }
+            // Identify the build behind this sync. This worker runs every 15
+            // minutes with the app closed, so without these headers the bulk of
+            // a user's step data would arrive with no version attached at all.
+            context?.let { DeviceHeaders.apply(conn, it, "worker") }
+
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
+            // Read the error body BEFORE disconnect() — the stream is closed with
+            // the connection.
+            val errorBody = if (code !in 200..299) StepTrackingGate.readErrorBody(conn) else null
             conn.disconnect()
             Log.d(TAG, "POST /health/sync [${body.optString("date")}] → HTTP $code")
+
+            if (context != null && errorBody != null) {
+                StepTrackingGate.handleSyncResponse(context, code, errorBody)
+            }
             code in 200..299
         } catch (e: Exception) {
             Log.e(TAG, "POST /health/sync failed: ${e.message}", e)

@@ -1,5 +1,6 @@
 apply plugin: "com.android.application"
 apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 /**
@@ -85,8 +86,8 @@ android {
         applicationId "com.athlofit.athlofit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 71
-        versionName "1.71"
+        versionCode 74
+        versionName "1.74"
     }
     signingConfigs {
         debug {
@@ -107,6 +108,13 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+
+            // Keep local development crashes out of the production dashboard.
+            // Uploading debug mappings is also pure build-time cost for reports
+            // nobody triages.
+            firebaseCrashlytics {
+                mappingFileUploadEnabled false
+            }
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
@@ -116,6 +124,14 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+
+            // Release builds are minified, so every stack trace Crashlytics
+            // receives is obfuscated unless the mapping file is uploaded with
+            // the build. Without this a crash report reads as a wall of a/b/c
+            // and is worth roughly nothing.
+            firebaseCrashlytics {
+                mappingFileUploadEnabled true
+            }
         }
     }
 }

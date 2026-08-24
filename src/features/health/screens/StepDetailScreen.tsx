@@ -22,6 +22,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { AppText, Header, Screen } from '../../../components';
+import StepTrackingDisabledBanner from '../components/tracker/StepTrackingDisabledBanner';
 import { useTheme } from '../../../hooks/useTheme';
 import { withOpacity } from '../../../utils/withOpacity';
 import { makeStyles } from '../../../hooks/makeStyles';
@@ -405,6 +406,11 @@ const StepDetailScreen = memo(({ route }: Props) => {
         />
       }
     >
+      {/* Paused-tracking warning, above the ring it explains — this screen shows
+          the step total in the largest type in the app, so a frozen number here
+          is the most confusing place to leave unexplained. */}
+      <StepTrackingDisabledBanner />
+
       {/* ── Progress ring ── */}
       <Animated.View entering={FadeInDown.duration(400)} style={styles.ringSection}>
         <ProgressRing

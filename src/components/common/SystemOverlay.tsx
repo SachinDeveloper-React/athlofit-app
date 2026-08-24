@@ -13,9 +13,7 @@ import { Icon } from '../Icon';
 import { BASE_URL } from '../../utils/api';
 import AppView from '../AppView';
 import ForceUpdateModal from './ForceUpdateModal';
-
-// App version from package.json — used for version check against backend
-const APP_VERSION = require('../../../package.json').version;
+import { getDeviceSnapshot } from '../../utils/deviceInfo';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -239,8 +237,26 @@ const SystemOverlay = () => {
     const checkAppVersion = async () => {
       try {
         const platform = Platform.OS; // 'android' | 'ios'
+
+        // The INSTALLED build's version, read from the native bundle.
+        //
+        // This used to be `require('package.json').version`, which is the JS
+        // package version and has nothing to do with what is installed: it read
+        // 0.0.72 while the shipped Android build was versionName 1.72 and iOS
+        // was 1.0. Nobody noticed because the server's minVersion/latestVersion
+        // defaults are 0.0.1, so 0.0.72 always compared as newer and the modal
+        // never appeared.
+        //
+        // It would have fired the first time anyone set latestVersion to a real
+        // value: 0.0.72 is below every 1.x, so EVERY user — including one who
+        // had just installed the newest build — would be told to update, and a
+        // `force` verdict has no dismiss, which would have made the app
+        // unusable for the entire install base from a single config change.
+        const appVersion = getDeviceSnapshot().appVersion;
+        if (!appVersion) return; // nothing meaningful to ask about
+
         const res = await fetch(
-          `${BASE_URL}config/check-version?platform=${platform}&version=${APP_VERSION}`,
+          `${BASE_URL}config/check-version?platform=${platform}&version=${appVersion}`,
         );
         const data = await res.json();
 

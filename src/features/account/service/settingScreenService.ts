@@ -1,5 +1,11 @@
-import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2, HeartPulse, Bell, Footprints, Camera, BatteryWarning } from 'lucide-react-native';
+import { FileText, LifeBuoy, LogOut, Mail, User, Shield, Trash2, HeartPulse, Bell, Footprints, Camera, BatteryWarning, Download } from 'lucide-react-native';
 import { Section } from '../types/setting.types';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  NotificationCategory,
+  NotificationPreferences,
+} from './notificationPrefs.service';
 import { DeletionStatus } from './accountDeletion.service';
 import type { PermissionStatuses } from './permissionStatus.service';
 
@@ -19,6 +25,11 @@ export const settingScreenService = {
       onConnectHealth?: () => void;
       onRequestPermission?: (key: string) => void;
       onBatteryOptimization?: () => void;
+      onExportData?: () => void;
+      isExportingData?: boolean;
+      notificationPrefs?: NotificationPreferences | null;
+      onToggleNotificationCategory?: (c: NotificationCategory, v: boolean) => void;
+      onToggleNotificationMaster?: (v: boolean) => void;
       deletionStatus?: DeletionStatus;
       scheduledDeletionDate?: string | null;
       healthConnectionStatus?: 'connected' | 'skipped' | 'not_set';
@@ -123,6 +134,41 @@ export const settingScreenService = {
           },
         ],
       }] : []),
+      // ── Notifications ────────────────────────────────────────────────────
+      // Rendered only once preferences have loaded: showing every switch as
+      // "on" before the real values arrive would flash the wrong state and,
+      // worse, a tap during that window would write a default the user never
+      // chose over their actual setting.
+      ...(callbacks.notificationPrefs
+        ? [{
+            title: 'NOTIFICATIONS',
+            rows: [
+              {
+                key: 'notif_master',
+                type: 'toggle' as const,
+                title: 'ALL NOTIFICATIONS',
+                icon: Bell,
+                value: callbacks.notificationPrefs.masterEnabled,
+                onValueChange: (v: boolean) =>
+                  callbacks.onToggleNotificationMaster?.(v),
+              },
+              // Per-category switches are hidden while the master is off. They
+              // would have no effect there, and a row that looks live but does
+              // nothing is worse than one that is absent.
+              ...(callbacks.notificationPrefs.masterEnabled
+                ? CATEGORY_ORDER.map((c) => ({
+                    key: `notif_${c}`,
+                    type: 'toggle' as const,
+                    title: CATEGORY_LABELS[c],
+                    icon: Bell,
+                    value: callbacks.notificationPrefs!.categories[c] !== false,
+                    onValueChange: (v: boolean) =>
+                      callbacks.onToggleNotificationCategory?.(c, v),
+                  }))
+                : []),
+            ],
+          }]
+        : []),
       {
         title: 'ADDITIONAL OPTION',
         rows: [
@@ -147,6 +193,21 @@ export const settingScreenService = {
             icon: Shield,
             onPress: callbacks.onPrivacy,
           },
+          // Sits with the legal rows rather than in DANGER ZONE: exporting your
+          // own data is a privacy right, not a destructive action, and putting
+          // it next to DELETE ACCOUNT would make it look like one.
+          ...(callbacks.onExportData
+            ? [{
+                key: 'export_data',
+                type: 'nav' as const,
+                title: 'DOWNLOAD MY DATA',
+                icon: Download,
+                onPress: callbacks.onExportData,
+                badge: callbacks.isExportingData
+                  ? { text: 'Sending', variant: 'warning' as const }
+                  : undefined,
+              }]
+            : []),
           {
             key: 'signout',
             type: 'nav',

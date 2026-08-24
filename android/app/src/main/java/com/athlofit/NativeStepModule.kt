@@ -165,6 +165,16 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
                 return
             }
 
+            // Refuse when an admin has paused step tracking for this account.
+            // Checked before scheduling as well as before starting: the
+            // keep-alive worker exists precisely to bring the service back, so
+            // scheduling it here would undo the pause a few minutes later.
+            if (!StepTrackingGate.isEnabled(context)) {
+                StepTrackingGate.stopEverything(context)
+                promise.resolve(false)
+                return
+            }
+
             // Start the foreground service
             StepCounterService.start(context)
             // Schedule periodic keepalive worker to restart service if killed by OEM
@@ -188,6 +198,67 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("STOP_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Mirrors the server's per-user step-tracking kill switch into native
+     * SharedPreferences, and stops every native step producer when disabled.
+     *
+     * JS cannot enforce this on its own. The foreground service and the two
+     * WorkManager jobs are restarted by the OS on boot, after a task-kill, and
+     * on their keep-alive schedule — all without any React context — so the
+     * flag has to live somewhere the native side can read on its own.
+     *
+     * Re-enabling only clears the flag here; JS restarts the service via
+     * start(), which owns the ACTIVITY_RECOGNITION permission flow.
+     */
+    @ReactMethod
+    fun setStepTrackingEnabled(enabled: Boolean, reason: String?, promise: Promise) {
+        try {
+            StepTrackingGate.setEnabled(reactApplicationContext, enabled, reason)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("STEP_TRACKING_TOGGLE_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Records that the server has barred the running BUILD from submitting
+     * steps, and stops every native step producer.
+     *
+     * Separate from setStepTrackingEnabled because the two states lift
+     * differently: an account pause is cleared by an admin and mirrored down
+     * from the profile fetch, whereas a build block is cleared only by
+     * installing an update. Routing a build block through the account flag
+     * would leave the device disabled after the user updated, until the next
+     * successful profile fetch happened to clear it.
+     */
+    @ReactMethod
+    fun setStepVersionBlocked(reason: String?, promise: Promise) {
+        try {
+            StepTrackingGate.setVersionBlocked(reactApplicationContext, reason)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("STEP_VERSION_BLOCK_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Reads the native-side kill-switch state. Useful when JS storage was
+     * cleared but the native flag survives (or vice versa) — the two are
+     * written independently and the app should trust "disabled" from either.
+     */
+    @ReactMethod
+    fun isStepTrackingEnabled(promise: Promise) {
+        try {
+            val map = com.facebook.react.bridge.Arguments.createMap().apply {
+                putBoolean("enabled", StepTrackingGate.isEnabled(reactApplicationContext))
+                putString("reason", StepTrackingGate.reason(reactApplicationContext))
+            }
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("STEP_TRACKING_READ_ERROR", e.message, e)
         }
     }
 

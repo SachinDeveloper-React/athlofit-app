@@ -28,6 +28,15 @@ object WidgetScheduler {
      *   - Device reboot (via BootReceiver)
      */
     fun schedule(context: Context) {
+        // Nothing to schedule while step tracking is paused for this account —
+        // the worker's only job is to read steps and POST them. Guarded here
+        // rather than at each of the six call sites (boot, login, widget added,
+        // …) so no path can quietly re-arm it.
+        if (!StepTrackingGate.isEnabled(context)) {
+            Log.d(TAG, "Not scheduling widget updates — step tracking disabled")
+            return
+        }
+
         Log.d(TAG, "Scheduling periodic widget updates (every 15 min)")
 
         val constraints = Constraints.Builder()

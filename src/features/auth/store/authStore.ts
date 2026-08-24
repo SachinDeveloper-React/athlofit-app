@@ -36,6 +36,18 @@ export const useAuthStore = create<AuthState>()(
           state.isAuthenticated = true;
         });
 
+        // Apply the account's step-tracking switch before anything starts the
+        // native step service below — otherwise a disabled user's device would
+        // count and sync for the rest of the session on every fresh login.
+        import('../../../services/stepTrackingGate').then(
+          ({ applyStepTrackingFromUser }) => applyStepTrackingFromUser(user),
+        );
+
+        // Tag crash reports with the account (id only — see setCrashUser).
+        import('../../../services/crashReporting').then(({ setCrashUser }) =>
+          setCrashUser(user?._id ?? null),
+        );
+
         const loginTs = Date.now();
 
         // Set login timestamp to filter historical Health Connect data
@@ -124,6 +136,15 @@ export const useAuthStore = create<AuthState>()(
         authService.me().then(res => {
           if (res.data) {
             set(state => { state.user = res.data; });
+            // Authoritative re-read of the step-tracking switch on every launch.
+            // This is the signal that catches a RE-enable: the 403 path only
+            // ever fires while disabled, and a push can be missed entirely.
+            import('../../../services/stepTrackingGate').then(
+              ({ applyStepTrackingFromUser }) => applyStepTrackingFromUser(res.data),
+            );
+            import('../../../services/crashReporting').then(({ setCrashUser }) =>
+              setCrashUser(res.data?._id ?? null),
+            );
           }
 
           // Set login timestamp if not already set
@@ -207,6 +228,18 @@ export const useAuthStore = create<AuthState>()(
             state.accessToken = null;
             state.isAuthenticated = false;
           });
+
+          // The step-tracking flag belongs to an account, not to the handset —
+          // clear it so a disabled user's block does not follow whoever signs
+          // in next on this device.
+          import('../../../store/stepTrackingStore').then(
+            ({ useStepTrackingStore }) => useStepTrackingStore.getState().reset(),
+          );
+
+          // Stop attributing crashes to an account that is no longer signed in.
+          import('../../../services/crashReporting').then(({ setCrashUser }) =>
+            setCrashUser(null),
+          );
 
           // Clear tokens from Keychain before any network calls so that
           // clearFcmToken's hasSession check returns null and skips its API call

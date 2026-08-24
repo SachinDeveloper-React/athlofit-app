@@ -11,6 +11,13 @@ export interface DeletionStatusData {
   reason: string | null;
   cancelledAt: string | null;
   completedAt: string | null;
+  /**
+   * Set when the scheduled date has passed but the purge could not run — an
+   * undelivered order, whose shipping address the purge would redact. Surfaced
+   * so a user whose deletion is taking longer than the promised 30 days can see
+   * why, rather than assuming the request was ignored.
+   */
+  blockedReason?: string | null;
 }
 
 export interface RequestDeletionPayload {

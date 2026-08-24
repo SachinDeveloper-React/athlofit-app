@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { getTimezone } from '../../../utils/timezone';
 import { getLocalToday } from '../../../utils/date';
 import { healthService } from '../service/health.service';
+import { isStepTrackingEnabled } from '../../../store/stepTrackingStore';
 import { useGamificationStore } from '../store/gamificationStore';
 import type { HealthData } from '../types/healthTypes';
 
@@ -115,6 +116,39 @@ export function useSyncHealth() {
 
   const mutation = useMutation({
     mutationFn: (data: Partial<HealthData> & { date?: string; goalMet?: boolean }) => {
+      // ── Step-tracking kill switch ───────────────────────────────────────────
+      // The server rejects a step-carrying sync with 403 when tracking is
+      // disabled for this account. Short-circuiting here avoids a guaranteed
+      // failed request every sync tick — and, more importantly, keeps the
+      // mutation's onError from surfacing a network-style failure for what is a
+      // deliberate, already-communicated state.
+      //
+      // Only the step fields are dropped; a hydration-only payload still goes
+      // through, because the switch pauses steps, not the rest of the app.
+      if (!isStepTrackingEnabled() && typeof data.steps === 'number') {
+        const { steps: _steps, ...withoutSteps } = data;
+        const hasOtherData = Object.values(withoutSteps).some(
+          v => v !== undefined && v !== null,
+        );
+        if (!hasOtherData) {
+          // `skipped` so onSuccess can bail out. Its side effects assume a real
+          // server response: the coin-block branch treats an absent
+          // `data.coinBlocked` as "the block expired" and clears the local flag,
+          // which on this synthetic response would hide the CoinBlockedBanner
+          // for a user whose block is still active server-side.
+          return Promise.resolve({
+            success: true,
+            message: 'Step tracking disabled',
+            data: null,
+            skipped: true,
+          });
+        }
+        return healthService.syncHealthData({
+          ...withoutSteps,
+          timezone: getTimezone(),
+        });
+      }
+
       // ── Flag a downward correction ──────────────────────────────────────────
       // The server keeps the higher of stored and incoming steps, which is right
       // for multiple devices but meant an over-reported figure could never be
@@ -146,6 +180,11 @@ export function useSyncHealth() {
     },
 
     onSuccess: (response: any, variables) => {
+      // Nothing was sent, so there is no server state to reconcile against —
+      // and reconciling against an empty response would actively undo correct
+      // local state. See the `skipped` sentinel in mutationFn.
+      if (response?.skipped) return;
+
       const d = response?.data;
       const today = getLocalToday();
 

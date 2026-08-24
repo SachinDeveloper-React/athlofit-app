@@ -16,6 +16,7 @@ import {
   displayPushNotification,
   handleNotificationNavigation,
 } from '../services/pushNotificationService';
+import { handleStepTrackingPush } from '../services/stepTrackingGate';
 import { NOTIF_KEY } from '../features/account/hooks/useNotifications';
 import { navigationRef } from '../navigation/navigationRef';
 
@@ -76,6 +77,10 @@ export function useNotificationSetup(): void {
   useEffect(() => {
     const messaging = getMessaging();
     const unsub = onMessage(messaging, async remoteMessage => {
+      // Control message: an admin toggled step tracking for this account.
+      // Applied before display so the native service stops immediately rather
+      // than after the notification finishes rendering.
+      handleStepTrackingPush(remoteMessage.data as Record<string, string>);
       await displayPushNotification(remoteMessage);
       if (isAuthenticated) {
         // Just invalidate to refresh the notification list

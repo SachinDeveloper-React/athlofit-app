@@ -44,6 +44,7 @@ import { Spacing } from '../../../constants/spacing';
 import { nutritionKeys } from '../hooks/useNutrition';
 import CoinBlockedBanner from '../components/tracker/CoinBlockedBanner';
 import ActivityPermissionBanner from '../components/tracker/ActivityPermissionBanner';
+import StepTrackingDisabledBanner from '../components/tracker/StepTrackingDisabledBanner';
 import BatteryOptimizationBanner from '../../../components/BatteryOptimizationBanner';
 
 const RIGHTACTION = memo(
@@ -530,6 +531,9 @@ const TrackerScreen = memo(() => {
 
         >
           <AppView style={{flex:1, paddingHorizontal: Spacing[4]}}>
+          {/* First: while tracking is paused the step count is frozen, so this
+              explains every other number on the screen. */}
+          <StepTrackingDisabledBanner />
           <CoinBlockedBanner />
           <ActivityPermissionBanner platform={platform} isReady={isReady} />
           <BatteryOptimizationBanner />

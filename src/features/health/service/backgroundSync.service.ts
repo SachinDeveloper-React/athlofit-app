@@ -24,6 +24,10 @@
 import BackgroundFetch from 'react-native-background-fetch';
 import { Platform } from 'react-native';
 import { tokenService } from '../../auth/service/tokenService';
+import { getDeviceHeaders } from '../../../utils/deviceInfo';
+import { isStepTrackingEnabled } from '../../../store/stepTrackingStore';
+import { handleStepTrackingError } from '../../../services/stepTrackingGate';
+import { recordError } from '../../../services/crashReporting';
 import {
   fetchHealthKitDataForRange,
   initializeHealthKit,
@@ -97,14 +101,33 @@ async function postSync(token: string, body: object): Promise<any> {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'X-Sync-Source': 'background', // Identifies this as a background sync for server-side stale data guard
+        // This path uses raw fetch rather than the api client, so it has to
+        // carry the build/device headers itself — without them the syncs that
+        // run while the app is closed would be the ones with no version on
+        // them, which is exactly the data hardest to explain after the fact.
+        ...getDeviceHeaders('worker'),
       },
       body: JSON.stringify(body),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // 403 STEPS_TRACKING_DISABLED — an admin paused this account's steps.
+      // Handled here too because a background sync may be the first caller to
+      // learn of it, and it must stop the native service rather than quietly
+      // retrying every fifteen minutes forever.
+      if (response.status === 403) {
+        const body403 = await response.json().catch(() => null);
+        handleStepTrackingError(body403);
+      }
+      return null;
+    }
     const json = await response.json();
     return json?.data ?? null;
   } catch (e) {
     console.warn('[BackgroundSync] postSync error:', e);
+    // This path runs with the app closed, so a console warning reaches nobody.
+    // Background sync silently failing for days is exactly the class of problem
+    // that took weeks to notice before.
+    recordError(e, 'backgroundSyncPost', { date: String((body as any)?.date ?? '') });
     return null;
   }
 }
@@ -274,6 +297,14 @@ async function syncOneDayAndroid(
 export async function runHealthSync(): Promise<void> {
   const token = await tokenService.getAccessToken();
   if (!token) return;
+
+  // Step tracking paused for this account by an admin — every day this
+  // function would post carries steps, so there is nothing here to do.
+  // Hydration and other non-step writes go through their own paths.
+  if (!isStepTrackingEnabled()) {
+    console.log('[BackgroundSync] Skipped — step tracking disabled for this account');
+    return;
+  }
 
   const now = new Date();
 

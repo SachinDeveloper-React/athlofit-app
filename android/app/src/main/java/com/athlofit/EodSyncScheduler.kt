@@ -34,6 +34,14 @@ object EodSyncScheduler {
      * Call this on login and after each alarm fires (in EodSyncReceiver).
      */
     fun schedule(context: Context) {
+        // The end-of-day alarm exists only to flush the day's steps to the
+        // server. With tracking paused there is nothing to flush, so leave the
+        // alarm unset rather than waking the device at 23:59:50 to no purpose.
+        if (!StepTrackingGate.isEnabled(context)) {
+            Log.d(TAG, "Not scheduling EOD sync — step tracking disabled")
+            return
+        }
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = buildPendingIntent(context) ?: return
 

@@ -87,6 +87,29 @@ export type AppConfig = {
     whatsapp: string;
     whatsappMessage: string;
   };
+  /**
+   * Store listing URLs, served by GET /config/app. Optional because the
+   * bundled defaults below do not carry them — a build that has not yet
+   * fetched config must still typecheck.
+   */
+  appLinks?: {
+    playStore?: string;
+    appStore?: string;
+    universal?: string;
+    showBadges?: boolean;
+  };
+  /**
+   * Build-level step-sync gate. Present so the app can read which versions the
+   * server is currently barring; enforcement itself is driven by the 403 the
+   * sync endpoint returns, not by this.
+   */
+  stepSync?: {
+    enabled: boolean;
+    blockedVersions: string[];
+    minVersion: string;
+    blockUnknownVersion: boolean;
+    message: string;
+  };
   coin_config: {
     steps: {
       rate_per_100_steps: number;

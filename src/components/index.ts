@@ -28,6 +28,7 @@ export {
   ProfileSkeleton,
   Skeleton,
 } from './SkeletonLoader';
+export { default as ErrorBoundary } from './common/ErrorBoundary';
 export { default as SystemOverlay } from './common/SystemOverlay';
 export { default as ForceUpdateModal } from './common/ForceUpdateModal';
 export { ToastProvider, useToast } from './Toast';

@@ -5,6 +5,8 @@ import { navigate } from '../../../navigation/navigationRef';
 import { AccountRoutes, RootRoutes } from '../../../navigation/routes';
 import { settingScreenService } from '../service/settingScreenService';
 import { useAccountDeletion } from './useAccountDeletion';
+import { useDataExport } from './useDataExport';
+import { useNotificationPreferences } from './useNotificationPreferences';
 import {
   getHealthPreference,
 } from '../../health/service/healthPreference.service';
@@ -218,6 +220,13 @@ export const useSettingScreen = () => {
     cancelDeletion();
   }, [cancelDeletion]);
 
+  const { requestExport, isExporting } = useDataExport();
+  const {
+    prefs: notificationPrefs,
+    setCategory: onToggleNotificationCategory,
+    setMaster: onToggleNotificationMaster,
+  } = useNotificationPreferences();
+
   const sections = useMemo(
     () =>
       settingScreenService.getSettingsSections(profile?.name, profile?.email, {
@@ -232,6 +241,11 @@ export const useSettingScreen = () => {
         onConnectHealth,
         onRequestPermission,
         onBatteryOptimization,
+        onExportData: requestExport,
+        isExportingData: isExporting,
+        notificationPrefs,
+        onToggleNotificationCategory,
+        onToggleNotificationMaster,
         deletionStatus: deletionStatus?.status,
         scheduledDeletionDate: deletionStatus?.scheduledDeletionDate,
         healthConnectionStatus,
@@ -252,6 +266,11 @@ export const useSettingScreen = () => {
       onConnectHealth,
       onRequestPermission,
       onBatteryOptimization,
+      requestExport,
+      isExporting,
+      notificationPrefs,
+      onToggleNotificationCategory,
+      onToggleNotificationMaster,
       deletionStatus?.status,
       deletionStatus?.scheduledDeletionDate,
       healthConnectionStatus,

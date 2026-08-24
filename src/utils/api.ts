@@ -6,6 +6,9 @@ import { useNetworkStore } from '../store/networkStore';
 import { useSyncStore } from '../store/syncStore';
 import { isLoggingOut, setIsLoggingOut } from './logoutGuard';
 import { CONFIG } from '../config/appConfig';
+import { getDeviceHeaders } from './deviceInfo';
+import { handleStepTrackingError } from '../services/stepTrackingGate';
+import { recordError } from '../services/crashReporting';
 
 export const BASE_URL = CONFIG.BASE_URL
 
@@ -20,6 +23,8 @@ interface ApiError {
   message: string;
   statusCode: number;
   data?: any;
+  /** Stable machine-readable failure identifier, e.g. 'STEPS_TRACKING_DISABLED'. */
+  code?: string | null;
 }
 
 // ─── Core fetch ───────────────────────────────────────────────────────────────
@@ -42,6 +47,12 @@ async function request<T>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // App build + device identity on every request. The backend records this
+    // against the user (deviceContext.middleware) so a bug report can be tied
+    // to the build that produced it — without it there is no way to tell
+    // whether a user has installed a released fix. Spread before the caller's
+    // own headers so an explicit override still wins.
+    ...getDeviceHeaders('app'),
     ...((fetchOptions.headers as Record<string, string>) ?? {}),
   };
 
@@ -134,8 +145,27 @@ async function request<T>(
 
   if (!response.ok) {
     if (!retry) { useSyncStore.getState().endSync(); }
+
+    // Step tracking switched off for this account by an admin. Handled here
+    // rather than at each call site so a rejection on ANY endpoint — not just
+    // /health/sync — stops the native step service and surfaces the warning.
+    handleStepTrackingError(json);
+
     const err = createError(json?.message ?? 'Something went wrong', response.status);
     err.data = json?.data ?? null;
+    err.code = json?.code ?? null;
+
+    // Report server faults only. 4xx responses are the API working as designed
+    // — validation, auth, the step gates above — and recording them would bury
+    // the real signal. A 5xx is a backend bug the user just hit, and nothing
+    // else currently tells us it happened.
+    if (response.status >= 500) {
+      recordError(err, 'apiServerError', {
+        endpoint,
+        status: response.status,
+      });
+    }
+
     throw err;
   }
 

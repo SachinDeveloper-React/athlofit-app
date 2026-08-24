@@ -40,7 +40,7 @@ import {
   setupMidnightChannel,
 } from '../features/health/service/hydrationMidnightReset.service';
 import { setupNotifChannels } from '../features/health/hooks/useSyncHealth';
-import { SystemOverlay, WhatsAppSupportButton } from '../components';
+import { ErrorBoundary, SystemOverlay, WhatsAppSupportButton } from '../components';
 import BatteryOptimizationPrompt from '../components/BatteryOptimizationPrompt';
 import { useNotificationSetup } from '../hooks/useNotificationSetup';
 import { linking } from '../navigation/linkingConfig';
@@ -49,6 +49,8 @@ import { registerBackgroundSync, stopBackgroundSync } from '../features/health/s
 import { connectivityMonitor } from '../services/connectivityMonitor';
 import { syncEngine } from '../services/syncEngine';
 import { stepService } from '../services/stepService';
+import { isStepTrackingEnabled, useStepTrackingStore } from '../store/stepTrackingStore';
+import { reconcileNativeStepTracking } from '../services/stepTrackingGate';
 
 enableScreens(true);
 
@@ -148,6 +150,11 @@ const AppShell: React.FC = () => {
   // ── Hide boot splash on mount ─────────────────────────────────────────────
   const [isSplashHidden, setIsSplashHidden] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
+
+  // Subscribed rather than read once, so an admin flipping the switch
+  // mid-session (via FCM or a 403) starts/stops the native service immediately
+  // instead of at next launch.
+  const stepTrackingEnabled = useStepTrackingStore(s => s.enabled);
   
   useEffect(() => {
     if (!isConnectivityReady || !isHealthPreChecked) { return; }
@@ -173,12 +180,25 @@ const AppShell: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) {
       registerBackgroundSync().catch(() => {});
-      // Initialize native step counter (requests permission on Android 10+ and starts service)
-      stepService.initialize().catch(() => {});
+      // Initialize native step counter (requests permission on Android 10+ and starts service).
+      // Skipped when an admin has switched step tracking off for this account —
+      // starting the foreground service would resume counting and re-POSTing
+      // regardless of the flag, since it runs outside React entirely.
+      // Adopt a disable the native side learned about while the app was closed
+      // (a background worker's 403), then start or stop accordingly.
+      reconcileNativeStepTracking()
+        .catch(() => {})
+        .finally(() => {
+          if (isStepTrackingEnabled()) {
+            stepService.initialize().catch(() => {});
+          } else {
+            stepService.stop().catch(() => {});
+          }
+        });
     } else {
       stopBackgroundSync().catch(() => {});
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, stepTrackingEnabled]);
 
   // ── Hydration midnight reset setup ───────────────────────────────────────
   useEffect(() => {
@@ -265,10 +285,14 @@ const App: React.FC = () => {
     return client;
   });
 
+  // Outermost, so a throw from any provider below it — navigation, query,
+  // safe-area — is caught rather than killing the JS thread.
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppShell />
-    </QueryClientProvider>
+    <ErrorBoundary context="appRoot">
+      <QueryClientProvider client={queryClient}>
+        <AppShell />
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

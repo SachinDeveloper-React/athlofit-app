@@ -482,6 +482,15 @@ class StepCounterService : Service(), SensorEventListener {
          * silently and the service was never revived.
          */
         fun start(context: Context): Boolean {
+            // Central refusal point for the kill switch. Every restart path
+            // funnels through here — BootReceiver, the keep-alive worker, the
+            // OEM restart handlers, NativeStepModule.start() — so guarding the
+            // single entry closes all of them at once, instead of relying on
+            // each caller to remember.
+            if (!StepTrackingGate.isEnabled(context)) {
+                Log.d(TAG, "start() refused — step tracking disabled for this account")
+                return false
+            }
             return try {
                 context.startForegroundService(Intent(context, StepCounterService::class.java))
                 true
@@ -1624,6 +1633,11 @@ class StepCounterService : Service(), SensorEventListener {
      * Also retries any pending sync payload from a previous failed attempt.
      */
     private fun maybeSync() {
+        // Step tracking paused for this account. The service may still be
+        // running — the OS restarts it on boot and after task-kills — so the
+        // check belongs on the sync path itself, not only where it is started.
+        if (!StepTrackingGate.isEnabled(this)) return
+
         val now = System.currentTimeMillis()
         if (now - lastSyncTime < SYNC_INTERVAL_MS) return
 
@@ -1741,9 +1755,28 @@ class StepCounterService : Service(), SensorEventListener {
                 readTimeout = 15_000
             }
 
+            // Identify the build behind this sync. This service posts every 15
+            // minutes with no React context involved, so it is the single
+            // biggest source of step data that would otherwise arrive with no
+            // version attached.
+            DeviceHeaders.apply(conn, this, "native_service")
+
             conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
             val responseCode = conn.responseCode
+            // Read the error body BEFORE disconnect() closes the stream.
+            val errorBody = if (responseCode !in 200..299) StepTrackingGate.readErrorBody(conn) else null
             conn.disconnect()
+
+            // An admin has paused step tracking for this account. Drop the
+            // pending payload rather than retaining it: keeping it would mean
+            // a queued burst is POSTed the moment tracking is re-enabled,
+            // re-crediting the very steps the pause was meant to exclude.
+            if (StepTrackingGate.handleSyncResponse(this, responseCode, errorBody)) {
+                pendingSyncPayload = ""
+                persistState()
+                stopSelf()
+                return
+            }
 
             if (responseCode in 200..299) {
                 Log.d(TAG, "performSync — success (HTTP $responseCode)")

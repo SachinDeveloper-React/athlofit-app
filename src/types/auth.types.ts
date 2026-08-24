@@ -70,6 +70,18 @@ export interface User {
   heightUnit?: 'cm' | 'ft';
   weightUnit?: 'kg' | 'lbs';
   referralCode?: string | null;
+
+  /**
+   * Per-user step-tracking kill switch, set from the admin panel. When
+   * `enabled` is false the device must stop counting and syncing steps and
+   * show `reason` to the user. Optional because older server builds omit it —
+   * absent means enabled.
+   */
+  stepsTracking?: {
+    enabled: boolean;
+    reason?: string | null;
+    disabledAt?: string | null;
+  } | null;
 }
 
 export interface CompleteProfileRequest {

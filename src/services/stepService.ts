@@ -123,6 +123,69 @@ class StepService {
   }
 
   /**
+   * Mirror the server's step-tracking kill switch into the native layer.
+   *
+   * Must be called on every state change, not just on stop(): the foreground
+   * service, the keep-alive worker, the widget worker and the EOD alarm are all
+   * restarted by Android without any React context, so a JS-only flag is
+   * overridden minutes later. The native side keeps its own copy in
+   * SharedPreferences and refuses to start or sync while it is set.
+   *
+   * No-op on iOS, where there is no native step service.
+   */
+  async setTrackingEnabled(enabled: boolean, reason?: string | null): Promise<boolean> {
+    if (!NativeStep?.setStepTrackingEnabled) {
+      return false;
+    }
+    try {
+      return await NativeStep.setStepTrackingEnabled(enabled, reason ?? '');
+    } catch (e) {
+      console.warn('[StepService] setTrackingEnabled failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Tell the native layer that the running BUILD is barred from submitting
+   * steps.
+   *
+   * Distinct from setTrackingEnabled(false): native stores the blocked version
+   * string and compares it against BuildConfig, so the block clears itself when
+   * the user installs an update. Recording a build block as an account pause
+   * would instead leave the device disabled after updating.
+   */
+  async setVersionBlocked(reason?: string | null): Promise<boolean> {
+    if (!NativeStep?.setStepVersionBlocked) {
+      return false;
+    }
+    try {
+      return await NativeStep.setStepVersionBlocked(reason ?? '');
+    } catch (e) {
+      console.warn('[StepService] setVersionBlocked failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Read the native-side kill-switch state.
+   *
+   * The native flag and the JS store are written independently — a 403 landing
+   * in a WorkManager job sets only the native one — so on launch the app should
+   * treat "disabled" from either side as authoritative.
+   */
+  async getNativeTrackingState(): Promise<{ enabled: boolean; reason: string } | null> {
+    if (!NativeStep?.isStepTrackingEnabled) {
+      return null;
+    }
+    try {
+      return await NativeStep.isStepTrackingEnabled();
+    } catch (e) {
+      console.warn('[StepService] getNativeTrackingState failed:', e);
+      return null;
+    }
+  }
+
+  /**
    * Get the current daily step count from the native data store.
    * Returns 0 if no data is available or if the native module is not present (iOS).
    */
