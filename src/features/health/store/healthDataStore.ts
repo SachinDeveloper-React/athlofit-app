@@ -43,6 +43,17 @@ interface HealthDataStore {
    */
   lastPushedSteps: number;
   lastPushedStepsDate: string | null;
+  /**
+   * Epoch ms of the last sync this device completed successfully, of any kind.
+   *
+   * Reported to the server as part of a sync's provenance. A large step jump has
+   * two very different explanations — a backlog flushed after the phone was
+   * offline, or a counting bug — and the gap since the last successful sync is
+   * what separates them. The server cannot infer it: it only sees the syncs that
+   * arrived, so a device that was offline and one that was idle look identical
+   * from that side.
+   */
+  lastSyncedAt: number | null;
   setData: (data: HealthData) => void;
   setLastUpdated: (date: Date | null) => void;
   setLoginTimestamp: (timestamp: number) => void;
@@ -55,6 +66,7 @@ interface HealthDataStore {
   setBonusSteps: (steps: number, date: string) => void;
   setNativeStepsAtLogin: (steps: number) => void;
   setLastPushedSteps: (steps: number, date: string) => void;
+  markSynced: (at?: number) => void;
   reset: () => void;
 }
 
@@ -76,6 +88,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
       nativeStepsAtLogin: 0,
       lastPushedSteps: 0,
       lastPushedStepsDate: null,
+      lastSyncedAt: null,
       
       setData: (data) => set({ data }),
       
@@ -105,6 +118,8 @@ export const useHealthDataStore = create<HealthDataStore>()(
       setNativeStepsAtLogin: (steps) => set({ nativeStepsAtLogin: steps }),
 
       setLastPushedSteps: (steps, date) => set({ lastPushedSteps: steps, lastPushedStepsDate: date }),
+
+      markSynced: (at = Date.now()) => set({ lastSyncedAt: at }),
       
       reset: () => set({ 
         data: defaultHealthData, 
@@ -122,6 +137,7 @@ export const useHealthDataStore = create<HealthDataStore>()(
         nativeStepsAtLogin: 0,
         lastPushedSteps: 0,
         lastPushedStepsDate: null,
+        lastSyncedAt: null,
       }),
     }),
     {
@@ -144,6 +160,10 @@ export const useHealthDataStore = create<HealthDataStore>()(
         nativeStepsAtLogin: state.nativeStepsAtLogin,
         lastPushedSteps: state.lastPushedSteps,
         lastPushedStepsDate: state.lastPushedStepsDate,
+        // Persisted deliberately: the gap this measures is usually a gap across
+        // app restarts, so an in-memory-only value would read as "never synced"
+        // in exactly the case it exists to describe.
+        lastSyncedAt: state.lastSyncedAt,
       }),
     }
   )

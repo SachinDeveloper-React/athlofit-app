@@ -14,7 +14,7 @@ import {
   type ServerSourceInput,
   type StepResolution,
 } from '../service/stepEngine';
-import type { StepOriginTotal } from '../service/healthConnect.service';
+import type { StepOriginTotal, StepsReadResult } from '../service/healthConnect.service';
 
 import {
   initializeHealthKit,
@@ -629,6 +629,10 @@ export function useHealth(options: UseHealthOptions = {}) {
       let primaryRead: StepSourceInput = { steps: 0, available: false };
       let hcOrigins: StepOriginTotal[] = [];
       let hcMethod = 'not-used';
+      // The whole Health Connect read, carried to the sync so the step count it
+      // posts arrives with the evidence for where it came from. Stays null on
+      // iOS and in the paths where Health Connect was never read.
+      let hcRead: StepsReadResult | null = null;
 
       if (p === 'healthkit') {
         const hk = await fetchAllHealthKitData();
@@ -648,6 +652,9 @@ export function useHealth(options: UseHealthOptions = {}) {
           : { steps: hc.steps ?? 0, available: (hc.steps ?? 0) > 0 };
         hcOrigins = hc.stepRead?.origins ?? [];
         hcMethod = hc.stepRead?.method ?? 'unknown';
+        // Kept whole, not just summarised: the sync needs the hour breakdown and
+        // the record timestamps to explain the number it is about to send.
+        hcRead = hc.stepRead ?? null;
       } else if (p === 'native_sensor' && Platform.OS === 'android') {
         // Native-sensor mode still tries Health Connect, because on devices where
         // the OEM kills our foreground service the platform keeps writing steps
@@ -661,6 +668,7 @@ export function useHealth(options: UseHealthOptions = {}) {
           primaryRead = { steps: read.steps, available: read.available };
           hcOrigins = read.origins;
           hcMethod = read.method;
+          hcRead = read;
         } catch {
           primaryRead = { steps: 0, available: false };
         }
@@ -758,6 +766,7 @@ export function useHealth(options: UseHealthOptions = {}) {
         resolution,
         hcOrigins,
         hcMethod,
+        stepRead: hcRead,
         platform: p,
         serverBaselineDate: syncedServerBaselineDate,
         bonusStepsDate,

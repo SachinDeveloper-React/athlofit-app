@@ -340,16 +340,69 @@ export const writeDerivedActivity = async (
 // aggregateRecord() sums all sources, which inflates the count on Samsung
 // devices where Samsung Health and the platform sensor both write steps.
 //
-// Fix: read individual StepsRecord entries, group by dataOrigin, and keep only
-// the single source with the highest step count. This mirrors what the native
-// HealthSyncHelper.kt does and matches what Samsung Health shows.
+// Two overlapping sources are almost always the SAME walk recorded twice; two
+// sources covering different parts of the day (a phone and a paired watch) are
+// different walks that must be added. So the question the dedup has to answer is
+// "did these origins record at the same TIME?", which is what the coverage rule
+// below measures.
+//
+// ── Why the previous time-slot version over-reported ─────────────────────────
+//
+// It split the day into 30-minute slots, took the largest origin in each slot and
+// summed the slots, then clamped the result to [largestOrigin, originSum].
+//
+// A multi-slot record was spread across its slots in proportion to its duration.
+// That is a fair comparison only if steps really are uniform across the record,
+// and for a long AGGREGATE record they are not: Samsung Health writes one record
+// covering the whole waking day, so 22,000 steps became ~647 in every 30-minute
+// slot from 06:00 to 23:00 — including the hours the user was sitting still.
+//
+// The platform sensor's granular records then won the slots where the user
+// actually walked, and Samsung's phantom ~647/slot won every other slot. The two
+// sets of wins were added together, so the SAME 22,000 steps were reported as
+// 37,529 — a 1.7x inflation.
+//
+// The `Math.min(originSum, ...)` clamp could not catch it, because `originSum` is
+// the sum of the duplicates (44,000 here) — it is precisely the number the dedup
+// exists to avoid, so it bounded nothing.
+//
+// Those inflated totals were POSTed to the server, cleared its rate limits (they
+// are physically possible figures), and minted passive step coins for steps that
+// were never walked.
+//
+// ── What replaces it ─────────────────────────────────────────────────────────
+//
+// Compare the TIME each origin covers rather than guessing where inside a record
+// its steps fell — the record boundaries are real data, the distribution inside
+// them is not. The origin with the highest total is the primary source; any other
+// origin is added only when its recording time barely overlaps the primary's,
+// which is the paired-device case. An origin that overlaps the primary is a
+// mirror of it and contributes nothing.
+//
+// This is bounded by [largestOrigin, originSum] by construction, and it agrees
+// with the native HealthSyncHelper.kt, which now applies the same rule.
 //
 
 /** Our own package — records we wrote are never counted as a data source. */
 export const OWN_PACKAGE = 'com.athlofit.athlofit';
 
-/** Slot width for time-aware deduplication. */
-const DEDUP_SLOT_MS = 30 * 60 * 1000;
+/**
+ * How much of an origin's recording time must fall OUTSIDE the primary source's
+ * before we believe it is an independent device rather than a mirror.
+ *
+ * Set high deliberately. Mistaking a mirror for a second device inflates the
+ * count and mints coins; mistaking a second device for a mirror loses some steps
+ * for a user who owns two. Only the first costs real money, so the threshold is
+ * placed where a partial overlap resolves to "mirror".
+ */
+const DISJOINT_COVERAGE_MIN = 0.9;
+
+/**
+ * Minimum span given to a zero-length record when measuring coverage. Some
+ * writers log instantaneous records; without this they would have no coverage at
+ * all and could never be judged disjoint.
+ */
+const MIN_RECORD_SPAN_MS = 60 * 1000;
 
 export interface StepOriginTotal {
   packageName: string;
@@ -372,12 +425,269 @@ export interface StepsReadResult {
   /** Sum of all external origins — the guaranteed upper bound of `steps`. */
   originSum: number;
   /** How the value was derived, surfaced in the debug screen. */
-  method: 'single-origin' | 'time-slot-dedup' | 'own-records-only' | 'no-records' | 'failed';
+  method: 'single-origin' | 'coverage-dedup' | 'own-records-only' | 'no-records' | 'failed';
+
+  // ── Provenance ──────────────────────────────────────────────────────────────
+  //
+  // Everything below describes WHERE the steps in `steps` came from, and is
+  // carried to the server on the next sync (see stepProvenance.ts). None of it
+  // affects `steps`; it exists so that a step total can be explained afterwards
+  // rather than argued about. Before it, the reader computed all of this and
+  // then discarded it at the call site, so the server saw only a number and a
+  // 17,000-step jump had no available explanation.
+
+  /** The dedup verdict per non-primary origin: added, or judged a mirror. */
+  contributions: OriginContribution[];
+  /** Package the dedup used as the baseline — most steps are attributable to it. */
+  primaryOrigin: string;
+
+  /**
+   * Steps per LOCAL hour of the day, index 0 = 00:00–00:59, built from the
+   * timestamps of the records that actually contributed.
+   *
+   * This is the single most useful field here, because it separates the two
+   * explanations of a large jump that otherwise look identical in the daily
+   * total: steps walked across the whole day and delivered in one late sync
+   * (spread across many hours), versus steps that appeared all at once inside
+   * one short record (a counting bug, or another app writing a bulk entry).
+   */
+  hourly: number[];
+
+  /** Earliest record start and latest record end behind `steps`, ISO. */
+  recordedFrom: string | null;
+  recordedTo: string | null;
+  /** How many underlying Health Connect records `steps` was built from. */
+  recordCount: number;
+}
+
+// ─── Coverage helpers ─────────────────────────────────────────────────────────
+// Plain interval arithmetic over [start, end) pairs in epoch milliseconds. Kept
+// module-level and pure so the dedup can be unit-tested without Health Connect.
+
+type Interval = [start: number, end: number];
+
+/** Sorts and merges overlapping/touching intervals into a disjoint set. */
+function mergeIntervals(intervals: Interval[]): Interval[] {
+  if (!intervals.length) return [];
+  const sorted = intervals
+    .map(([a, b]): Interval => [a, Math.max(b, a + MIN_RECORD_SPAN_MS)])
+    .sort((a, b) => a[0] - b[0]);
+
+  const merged: Interval[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    if (sorted[i][0] <= last[1]) last[1] = Math.max(last[1], sorted[i][1]);
+    else merged.push(sorted[i]);
+  }
+  return merged;
+}
+
+/** Total milliseconds spanned by a disjoint interval set. */
+function coveredMs(intervals: Interval[]): number {
+  return intervals.reduce((sum, [a, b]) => sum + (b - a), 0);
+}
+
+/** Milliseconds present in BOTH disjoint interval sets. */
+function intersectionMs(a: Interval[], b: Interval[]): number {
+  let i = 0;
+  let j = 0;
+  let sum = 0;
+  while (i < a.length && j < b.length) {
+    const lo = Math.max(a[i][0], b[j][0]);
+    const hi = Math.min(a[i][1], b[j][1]);
+    if (hi > lo) sum += hi - lo;
+    if (a[i][1] < b[j][1]) i++;
+    else j++;
+  }
+  return sum;
+}
+
+/** One step record, reduced to the fields the dedup actually reasons about. */
+export interface StepRecordLite {
+  origin: string;
+  count: number;
+  /** Epoch milliseconds. */
+  start: number;
+  /** Epoch milliseconds. */
+  end: number;
+}
+
+export interface OriginContribution {
+  packageName: string;
+  steps: number;
+  /** Fraction of this origin's recording time not shared with the primary source. */
+  disjointFraction: number;
+  /** Steps this origin actually added on top of the primary. */
+  contributed: number;
+}
+
+export interface CoverageDedupResult {
+  steps: number;
+  largestOrigin: number;
+  originSum: number;
+  /** Package name of the origin used as the baseline. */
+  primaryOrigin: string;
+  /** Every non-primary origin and what it was judged to be. */
+  contributions: OriginContribution[];
+}
+
+/**
+ * Deduplicates step records across data origins using time coverage.
+ *
+ * Pure and deterministic: same records in, same number out. No I/O, no clock, no
+ * module state — the properties that make the result auditable and testable.
+ *
+ * The origin with the most steps is the baseline. Every other origin is added
+ * only in proportion to the recording time it does NOT share with that baseline,
+ * and only when that share is at least {@link DISJOINT_COVERAGE_MIN} — a source
+ * that recorded alongside the baseline is a mirror of it, not extra steps.
+ *
+ * Guarantees, by construction:
+ *   * `steps >= largestOrigin` — the biggest single source genuinely recorded
+ *     that many, so the total can never fall below it.
+ *   * `steps <= originSum` — a deduplicated total is a subset of the raw sum.
+ */
+export function dedupeStepsAcrossOrigins(
+  records: StepRecordLite[],
+): CoverageDedupResult {
+  const totals: Record<string, number> = {};
+  const intervalsByOrigin: Record<string, Interval[]> = {};
+
+  for (const r of records) {
+    const count = Math.max(0, r.count || 0);
+    totals[r.origin] = (totals[r.origin] ?? 0) + count;
+    if (count === 0) continue;
+    (intervalsByOrigin[r.origin] ??= []).push([r.start, Math.max(r.end, r.start)]);
+  }
+
+  const originNames = Object.keys(totals);
+  if (!originNames.length) {
+    return {
+      steps: 0, largestOrigin: 0, originSum: 0,
+      primaryOrigin: '', contributions: [],
+    };
+  }
+
+  const originSum = originNames.reduce((sum, o) => sum + totals[o], 0);
+  const largestOrigin = Math.max(...originNames.map(o => totals[o]));
+
+  // Ties broken by package name so the result does not depend on record order.
+  const primaryOrigin = originNames
+    .filter(o => totals[o] === largestOrigin)
+    .sort()[0];
+
+  const coverage: Record<string, Interval[]> = {};
+  for (const o of originNames) coverage[o] = mergeIntervals(intervalsByOrigin[o] ?? []);
+
+  const primaryCoverage = coverage[primaryOrigin];
+  const contributions: OriginContribution[] = [];
+  let extras = 0;
+
+  for (const o of originNames) {
+    if (o === primaryOrigin) continue;
+
+    const ownMs = coveredMs(coverage[o]);
+    // No measurable coverage means no evidence of independence — treat as mirror.
+    const disjointFraction =
+      ownMs > 0 ? 1 - intersectionMs(coverage[o], primaryCoverage) / ownMs : 0;
+
+    const contributed =
+      disjointFraction >= DISJOINT_COVERAGE_MIN
+        ? Math.round(totals[o] * disjointFraction)
+        : 0;
+
+    extras += contributed;
+    contributions.push({
+      packageName: o, steps: totals[o], disjointFraction, contributed,
+    });
+  }
+
+  return {
+    steps: Math.min(originSum, largestOrigin + extras),
+    largestOrigin,
+    originSum,
+    primaryOrigin,
+    contributions,
+  };
 }
 
 const EMPTY_READ: StepsReadResult = {
   steps: 0, available: true, origins: [], largestOrigin: 0, originSum: 0, method: 'no-records',
+  contributions: [], primaryOrigin: '', hourly: [], recordedFrom: null, recordedTo: null,
+  recordCount: 0,
 };
+
+/**
+ * A read that did not happen. `available: false`, so callers treat it as "no
+ * information" rather than "zero steps" — the distinction the step engine
+ * depends on to fall back to the native sensor instead of collapsing the day.
+ *
+ * Shared by both failure sites. They were separate literals, which is how one
+ * of them could be left behind when the shape gained a field.
+ */
+const FAILED_READ: StepsReadResult = {
+  steps: 0, available: false, origins: [], largestOrigin: 0, originSum: 0, method: 'failed',
+  contributions: [], primaryOrigin: '', hourly: [], recordedFrom: null, recordedTo: null,
+  recordCount: 0,
+};
+
+// ─── Hour attribution ─────────────────────────────────────────────────────────
+//
+// A Health Connect record is a COUNT OVER A SPAN, not a stamp at an instant.
+// A record covering 08:40–09:20 with 400 steps is 200 steps in each of two
+// hours, and putting all 400 in whichever hour the record happens to start in
+// would misreport exactly the case the histogram exists to detect — a bulk
+// record spanning many hours would collapse into one, and look like the burst
+// it is meant to distinguish itself from.
+//
+// So each record is spread across the local hours it spans, in proportion to
+// the time it spends in each.
+
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+/**
+ * Distributes step records across the 24 local hours of `dayStart`.
+ *
+ * Only pass records that CONTRIBUTED to the total. Passing mirrored origins as
+ * well would produce a histogram summing to far more than the deduplicated
+ * figure it is supposed to describe.
+ */
+export function bucketStepsByHour(
+  records: StepRecordLite[],
+  dayStart: number,
+): number[] {
+  const hours = new Array<number>(24).fill(0);
+
+  for (const r of records) {
+    const count = Math.max(0, r.count || 0);
+    if (count <= 0) continue;
+
+    const start = r.start;
+    // A zero-length record has no span to divide, so it is credited whole to
+    // the hour it sits in. Treating it as spanning zero time would drop it.
+    const end = Math.max(r.end, r.start);
+    const span = end - start;
+
+    if (span <= 0) {
+      const h = Math.floor((start - dayStart) / MS_PER_HOUR);
+      if (h >= 0 && h < 24) hours[h] += count;
+      continue;
+    }
+
+    // Walk only the hours the record actually touches, clipped to the day.
+    const firstHour = Math.max(0, Math.floor((start - dayStart) / MS_PER_HOUR));
+    const lastHour = Math.min(23, Math.floor((end - dayStart) / MS_PER_HOUR));
+
+    for (let h = firstHour; h <= lastHour; h++) {
+      const hourStart = dayStart + h * MS_PER_HOUR;
+      const overlap =
+        Math.min(end, hourStart + MS_PER_HOUR) - Math.max(start, hourStart);
+      if (overlap > 0) hours[h] += Math.round((count * overlap) / span);
+    }
+  }
+
+  return hours;
+}
 
 // ─── Read cache ───────────────────────────────────────────────────────────────
 // Health Connect reads cross a Binder boundary and can return dozens of records
@@ -481,15 +791,51 @@ export async function readTodayStepsDetailed(
       );
       const externalOrigins = origins.filter(o => o.packageName !== OWN_PACKAGE);
 
+      // ── Provenance scaffolding ───────────────────────────────────────────
+      // Reduced once here rather than per-branch, so the hour histogram is
+      // built from the same records the total is, and cannot drift from it.
+      const lite: StepRecordLite[] = externalRecords.map((r: any) => ({
+        origin: r.metadata?.dataOrigin ?? 'unknown',
+        count: Math.max(0, r.count ?? 0),
+        start: new Date(r.startTime).getTime(),
+        end: new Date(r.endTime).getTime(),
+      }));
+      // Local midnight of the day being read. `startTime` is exactly that for
+      // every caller (both readers explicitly start at local midnight), which is
+      // what makes the histogram's index a local hour.
+      const dayStart = requestedStart;
+      const recordedFrom = lite.length
+        ? new Date(Math.min(...lite.map(r => r.start))).toISOString()
+        : null;
+      const recordedTo = lite.length
+        ? new Date(Math.max(...lite.map(r => r.end))).toISOString()
+        : null;
+      const recordCount = externalRecords.length;
+
       if (externalOrigins.length === 0) {
         // Only our own historical records exist. Older builds wrote steps back
         // into Health Connect, which made the app read its own output; those
         // records are no longer written but may still be on the device. Report
         // them so the day is not blank, and label it clearly.
         const own = Math.max(0, ...origins.map(o => o.steps));
+        const ownLite: StepRecordLite[] = inWindow.map((r: any) => ({
+          origin: r.metadata?.dataOrigin ?? 'unknown',
+          count: Math.max(0, r.count ?? 0),
+          start: new Date(r.startTime).getTime(),
+          end: new Date(r.endTime).getTime(),
+        }));
         result = {
           steps: own, available: true, origins,
           largestOrigin: own, originSum: own, method: 'own-records-only',
+          contributions: [], primaryOrigin: OWN_PACKAGE,
+          hourly: bucketStepsByHour(ownLite, dayStart),
+          recordedFrom: ownLite.length
+            ? new Date(Math.min(...ownLite.map(r => r.start))).toISOString()
+            : null,
+          recordedTo: ownLite.length
+            ? new Date(Math.max(...ownLite.map(r => r.end))).toISOString()
+            : null,
+          recordCount: inWindow.length,
         };
       } else {
         const largestOrigin = Math.max(...externalOrigins.map(o => o.steps));
@@ -500,78 +846,50 @@ export async function readTodayStepsDetailed(
           result = {
             steps: largestOrigin, available: true, origins,
             largestOrigin, originSum, method: 'single-origin',
+            contributions: [], primaryOrigin: externalOrigins[0].packageName,
+            hourly: bucketStepsByHour(lite, dayStart),
+            recordedFrom, recordedTo, recordCount,
           };
         } else {
-          // ── Time-slot deduplication ────────────────────────────────────────
-          // Build steps-per-origin-per-slot, then take the largest ORIGIN in each
-          // slot (not the largest record, which was the bug) and sum the slots.
-          const dayStart = new Date(startTime).getTime();
-          const dayEnd = new Date(endTime).getTime();
-          const numSlots = Math.max(1, Math.ceil((dayEnd - dayStart) / DEDUP_SLOT_MS));
+          // ── Coverage-based deduplication ───────────────────────────────────
+          // See the note above dedupeStepsAcrossOrigins for why this compares
+          // recording TIME rather than splitting records across time slots.
+          const dedup = dedupeStepsAcrossOrigins(lite);
 
-          // slotTotals[slot] = { origin -> steps in that slot }
-          const slotTotals: Array<Record<string, number>> = Array.from(
-            { length: numSlots }, () => ({}),
-          );
-
-          const addToSlot = (slot: number, origin: string, steps: number) => {
-            if (slot < 0 || slot >= numSlots || steps <= 0) return;
-            slotTotals[slot][origin] = (slotTotals[slot][origin] ?? 0) + steps;
-          };
-
-          for (const r of externalRecords) {
-            const origin = (r as any).metadata?.dataOrigin ?? 'unknown';
-            const count = Math.max(0, (r as any).count ?? 0);
-            if (count === 0) continue;
-
-            const recStart = new Date((r as any).startTime).getTime();
-            const recEnd = new Date((r as any).endTime).getTime();
-            const startSlot = Math.floor((recStart - dayStart) / DEDUP_SLOT_MS);
-            const endSlot = Math.floor((Math.max(recEnd, recStart) - dayStart) / DEDUP_SLOT_MS);
-
-            if (startSlot === endSlot || recEnd <= recStart) {
-              addToSlot(Math.min(startSlot, numSlots - 1), origin, count);
-              continue;
-            }
-
-            // Spread a multi-slot record over the slots it covers, in proportion
-            // to how much of its duration falls in each. Distributing (rather
-            // than assigning it wholesale to one slot) is what lets a long
-            // aggregate record from one app be compared fairly against another
-            // app's minute-by-minute records.
-            const duration = recEnd - recStart;
-            for (let s = Math.max(0, startSlot); s <= Math.min(endSlot, numSlots - 1); s++) {
-              const slotStart = dayStart + s * DEDUP_SLOT_MS;
-              const overlap =
-                Math.min(recEnd, slotStart + DEDUP_SLOT_MS) - Math.max(recStart, slotStart);
-              if (overlap <= 0) continue;
-              addToSlot(s, origin, Math.round(count * (overlap / duration)));
-            }
-          }
-
-          const dedupTotal = slotTotals.reduce((sum, slot) => {
-            const values = Object.values(slot);
-            return sum + (values.length ? Math.max(...values) : 0);
-          }, 0);
-
-          // Enforce the invariants described above. `originSum` in particular is
-          // the ceiling the old implementation lacked.
-          const steps = Math.min(originSum, Math.max(largestOrigin, dedupTotal));
-
-          if (dedupTotal > originSum) {
-            console.warn(
-              `[HealthConnect] Dedup total ${dedupTotal} exceeded the raw origin sum ` +
-              `${originSum} — clamped to ${steps}. Origins: ${JSON.stringify(totals)}`,
-            );
-          }
+          // The histogram is built from the records that were actually COUNTED
+          // — the primary origin plus any origin judged independent. Including
+          // a mirrored origin would make the hours sum to roughly double the
+          // deduplicated total they are supposed to describe, which would turn
+          // the one field that explains a jump into another thing to explain.
+          const countedOrigins = new Set<string>([
+            dedup.primaryOrigin,
+            ...dedup.contributions.filter(c => c.contributed > 0).map(c => c.packageName),
+          ]);
 
           result = {
-            steps, available: true, origins,
-            largestOrigin, originSum, method: 'time-slot-dedup',
+            steps: dedup.steps, available: true, origins,
+            largestOrigin, originSum, method: 'coverage-dedup',
+            contributions: dedup.contributions,
+            primaryOrigin: dedup.primaryOrigin,
+            hourly: bucketStepsByHour(
+              lite.filter(r => countedOrigins.has(r.origin)),
+              dayStart,
+            ),
+            recordedFrom, recordedTo, recordCount,
           };
+
+          const added = dedup.contributions
+            .filter(c => c.contributed > 0)
+            .map(c => `${c.packageName} +${c.contributed}`);
+          const mirrored = dedup.contributions
+            .filter(c => c.contributed === 0)
+            .map(c => `${c.packageName} (${c.steps}, ${Math.round(c.disjointFraction * 100)}% disjoint)`);
+
           console.log(
-            `[HealthConnect] Steps dedup: slots=${dedupTotal}, largest=${largestOrigin}, ` +
-            `sum=${originSum} → ${steps}`,
+            `[HealthConnect] Steps dedup: primary=${dedup.primaryOrigin} ${largestOrigin}` +
+            `${added.length ? `, added ${added.join(', ')}` : ''}` +
+            `${mirrored.length ? `, treated as mirrors: ${mirrored.join(', ')}` : ''}` +
+            ` → ${dedup.steps} (raw sum would be ${originSum})`,
           );
         }
       }
@@ -586,10 +904,7 @@ export async function readTodayStepsDetailed(
     // Reporting the read as unavailable lets the step engine fall back to the
     // other sources instead of accepting a wrong value.
     console.warn('[HealthConnect] Steps read failed — reporting source unavailable:', e);
-    return {
-      steps: 0, available: false, origins: [],
-      largestOrigin: 0, originSum: 0, method: 'failed',
-    };
+    return FAILED_READ;
   }
 }
 
@@ -775,10 +1090,7 @@ export const fetchAllHealthConnectData = async (
     // native sensor instead of treating a failed fetch as "the user walked 0".
     return {
       ...defaultHealthData,
-      stepRead: {
-        steps: 0, available: false, origins: [],
-        largestOrigin: 0, originSum: 0, method: 'failed',
-      },
+      stepRead: FAILED_READ,
     };
   }
 };

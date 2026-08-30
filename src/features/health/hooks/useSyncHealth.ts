@@ -7,6 +7,9 @@ import { healthService } from '../service/health.service';
 import { isStepTrackingEnabled } from '../../../store/stepTrackingStore';
 import { useGamificationStore } from '../store/gamificationStore';
 import type { HealthData } from '../types/healthTypes';
+import { useStepDebugStore } from '../store/stepDebugStore';
+import { useHealthDataStore } from '../store/healthDataStore';
+import { buildStepSource, type StepSourcePayload } from '../service/stepProvenance';
 
 // ─── Channel IDs ──────────────────────────────────────────────────────────────
 
@@ -108,6 +111,30 @@ export async function showChallengeNotifications(
   }
 }
 
+/**
+ * Provenance for the step figure about to be synced, or undefined when the
+ * pipeline has not resolved one yet.
+ *
+ * Reads the last resolution out of the debug store, which useHealth writes on
+ * every resolve. Deliberately never throws and never blocks: this is an
+ * explanation riding along with the sync, and a sync that carries real steps
+ * must go out whether or not it can describe itself.
+ */
+function buildSyncStepSource(): StepSourcePayload | undefined {
+  try {
+    const snapshot = useStepDebugStore.getState().snapshot;
+    if (!snapshot) return undefined;
+    const { lastSyncedAt } = useHealthDataStore.getState();
+    return buildStepSource({
+      read: snapshot.stepRead,
+      resolution: snapshot.resolution,
+      lastSyncedAt,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useSyncHealth() {
@@ -158,7 +185,6 @@ export function useSyncHealth() {
       // told to accept the decrease.
       //
       // Only ever lowers the stored count, so it is not exploitable.
-      const { useHealthDataStore } = require('../store/healthDataStore');
       const { lastPushedSteps, lastPushedStepsDate } = useHealthDataStore.getState();
       const isCorrection =
         lastPushedStepsDate === getLocalToday() &&
@@ -176,6 +202,16 @@ export function useSyncHealth() {
         ...data,
         timezone: getTimezone(),
         ...(isCorrection ? { stepsCorrection: true } : {}),
+        // ── Where this figure came from ─────────────────────────────────────
+        // Attached only to payloads that actually carry steps: a hydration post
+        // has no step source, and sending one would put rows in the attribution
+        // ledger for syncs that moved no steps.
+        //
+        // Built from the last resolution rather than re-read, so what is
+        // reported is the decision the pipeline actually made for the number
+        // being sent — re-reading could describe a different figure than the one
+        // in this payload, which is worse than sending nothing.
+        ...(typeof data.steps === 'number' ? { stepSource: buildSyncStepSource() } : {}),
       });
     },
 
@@ -188,6 +224,13 @@ export function useSyncHealth() {
       const d = response?.data;
       const today = getLocalToday();
 
+      // ── Mark the device as having synced ────────────────────────────────────
+      // Feeds `offlineMinutes` on the NEXT sync's provenance. Recorded on success
+      // only, and for every successful sync rather than only step ones, because
+      // what it measures is how long the device was unable to reach the server —
+      // a hydration post that got through proves connectivity just as well.
+      useHealthDataStore.getState().markSynced();
+
       // ── Record what this device pushed, for server echo detection ──────────
       // The app both writes and reads the server's step field, so on the next
       // login/refresh it can be handed back its own number. Remembering what we
@@ -195,7 +238,6 @@ export function useSyncHealth() {
       // from "this is our own value returning" (ignore it), which is what stops a
       // value from circulating between device and server and growing each lap.
       if (typeof variables?.steps === 'number' && variables.steps >= 0) {
-        const { useHealthDataStore } = require('../store/healthDataStore');
         useHealthDataStore.getState().setLastPushedSteps(variables.steps, today);
       }
 
@@ -223,7 +265,6 @@ export function useSyncHealth() {
       // Written unconditionally (not only when > 0) so that a bonus being revoked
       // clears the local copy instead of leaving it stuck on the old amount.
       if (typeof d?.bonusSteps === 'number') {
-        const { useHealthDataStore } = require('../store/healthDataStore');
         useHealthDataStore.getState().setBonusSteps(Math.max(0, d.bonusSteps), today);
       }
 

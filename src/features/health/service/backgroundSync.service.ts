@@ -287,6 +287,33 @@ async function syncOneDayAndroid(
     // only ever syncs in the background therefore never had the goal recorded as
     // met, never received the daily step-goal coins, and never advanced a streak.
     timezone: getTimezone(), // FIX #3: include device timezone
+    // ── Where these steps came from ─────────────────────────────────────────
+    // This path matters more than the foreground one for attribution: it is the
+    // path that flushes a backlog after the phone has been offline, which is the
+    // exact case a large jump needs explaining for. The reader is named directly
+    // rather than taken from a step resolution, because there is no resolution
+    // here — Health Connect IS the source on this path, unconditionally.
+    stepSource: {
+      reader: 'health_connect' as const,
+      method: read.method,
+      primaryOrigin: read.primaryOrigin || undefined,
+      origins: read.origins.map(o => ({
+        packageName: o.packageName,
+        steps: o.steps,
+        contributed:
+          o.packageName === read.primaryOrigin
+            ? o.steps
+            : read.contributions.find(c => c.packageName === o.packageName)?.contributed ?? 0,
+        disjointFraction:
+          o.packageName === read.primaryOrigin
+            ? 1
+            : read.contributions.find(c => c.packageName === o.packageName)?.disjointFraction ?? 0,
+      })),
+      hourly: read.hourly?.length ? read.hourly : undefined,
+      recordedFrom: read.recordedFrom ?? undefined,
+      recordedTo: read.recordedTo ?? undefined,
+      recordCount: read.recordCount,
+    },
   };
 
   await postDayAndRecord(token, dateStr, steps, body);

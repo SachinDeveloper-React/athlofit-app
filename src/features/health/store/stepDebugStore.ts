@@ -15,7 +15,7 @@
 
 import { create } from 'zustand';
 import type { StepResolution } from '../service/stepEngine';
-import type { StepOriginTotal } from '../service/healthConnect.service';
+import type { StepOriginTotal, StepsReadResult } from '../service/healthConnect.service';
 
 export interface StepDebugSnapshot {
   /** The pipeline's decision, including every rejected source and why. */
@@ -24,6 +24,17 @@ export interface StepDebugSnapshot {
   hcOrigins: StepOriginTotal[];
   /** How the Health Connect figure was derived (single origin, slot dedup, ...). */
   hcMethod: string;
+  /**
+   * The full Health Connect read behind this resolution — origin contributions,
+   * the hour-by-hour breakdown, and the timestamps of the underlying records.
+   *
+   * Kept here rather than only in the debug screen because the sync path needs
+   * it too: this is the provenance sent to the server with the step count (see
+   * stepProvenance.ts). Null on iOS and whenever Health Connect was not the
+   * source, which is itself the reason the sync must consult `resolution.winner`
+   * before attributing anything to it.
+   */
+  stepRead: StepsReadResult | null;
   /** Which platform the reading came from. */
   platform: string;
   serverBaselineDate: string | null;

@@ -39,9 +39,11 @@ const getCategoryIcon = (category?: TransactionCategory, type?: string): string 
   if (category) {
     switch (category) {
       case 'PASSIVE_STEPS':
+      case 'PASSIVE_STEPS_RETRO':
         return 'Footprints';
       case 'DAILY_STEP_GOAL':
       case 'DAILY_STEP_GOAL_AUTO':
+      case 'DAILY_STEP_GOAL_RETRO':
         return 'Target';
       case 'HYDRATION_GOAL':
         return 'Droplets';
@@ -51,6 +53,11 @@ const getCategoryIcon = (category?: TransactionCategory, type?: string): string 
         return 'Trophy';
       case 'CHALLENGE':
         return 'Swords';
+      // Clawbacks share an icon with the refund they resemble — the amount is
+      // already negative, so the row does not also need a distinct symbol.
+      case 'HYDRATION_GOAL_REVERTED':
+      case 'CHALLENGE_REVERTED':
+        return 'RefreshCw';
       case 'REFERRAL_BONUS':
         return 'Gift';
       case 'SHOP_PURCHASE':
@@ -69,12 +76,16 @@ const getCategoryIcon = (category?: TransactionCategory, type?: string): string 
 const getCategoryLabel = (category?: TransactionCategory): string => {
   switch (category) {
     case 'PASSIVE_STEPS': return 'Passive Step Earnings';
+    case 'PASSIVE_STEPS_RETRO': return 'Passive Step Earnings (Backdated)';
     case 'DAILY_STEP_GOAL': return 'Daily Step Goal Reward';
     case 'DAILY_STEP_GOAL_AUTO': return 'Daily Step Goal (Auto)';
+    case 'DAILY_STEP_GOAL_RETRO': return 'Daily Step Goal (Backdated)';
     case 'HYDRATION_GOAL': return 'Hydration Goal Reward';
+    case 'HYDRATION_GOAL_REVERTED': return 'Hydration Reward Reversed';
     case 'STREAK_BADGE': return 'Streak Badge Bonus';
     case 'ACHIEVEMENT': return 'Achievement Reward';
     case 'CHALLENGE': return 'Challenge Completed';
+    case 'CHALLENGE_REVERTED': return 'Challenge Reward Reversed';
     case 'REFERRAL_BONUS': return 'Referral Bonus';
     case 'SHOP_PURCHASE': return 'Shop Purchase';
     case 'SHOP_REFUND': return 'Order Refund';
@@ -86,12 +97,23 @@ const getCategoryLabel = (category?: TransactionCategory): string => {
 const getCategoryExplanation = (category?: TransactionCategory, type?: string): string => {
   switch (category) {
     case 'PASSIVE_STEPS':
-      return 'You earn coins passively as you walk. Every 100 steps earns coins at the configured rate. Transactions are logged every 3 hours.';
+      // The three-hour logging throttle this used to describe was removed —
+      // every award writes its own row now — so the sentence was telling users
+      // to expect gaps that no longer exist.
+      return 'You earn coins passively as you walk. Every 100 steps earns coins at the configured rate, and each award is logged here as it happens.';
+    case 'PASSIVE_STEPS_RETRO':
+      return 'Coins for steps on an earlier day that had not been counted yet — usually because your phone was offline or the app was closed. Only the steps that were not already paid for are added.';
     case 'DAILY_STEP_GOAL':
     case 'DAILY_STEP_GOAL_AUTO':
       return 'You hit your daily step goal! This bonus is awarded once per day when you reach your target steps.';
+    case 'DAILY_STEP_GOAL_RETRO':
+      return 'Your step goal bonus for an earlier day, awarded once that day\'s steps finally synced. It is still paid only once for that day.';
     case 'HYDRATION_GOAL':
       return 'You completed your daily water intake goal. Stay hydrated to earn coins every day!';
+    case 'HYDRATION_GOAL_REVERTED':
+      return 'Your water intake was reset below the daily goal, so the hydration reward for that day was taken back.';
+    case 'CHALLENGE_REVERTED':
+      return 'Progress on a completed challenge was revised downward, so its reward was taken back.';
     case 'STREAK_BADGE':
       return 'You maintained a consistent activity streak and unlocked a badge milestone. Longer streaks earn bigger rewards.';
     case 'ACHIEVEMENT':

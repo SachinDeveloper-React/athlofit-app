@@ -63,14 +63,31 @@ export interface GamificationStore extends GamificationState {
 
 export type TransactionType = 'EARNED' | 'SPENT' | 'EXPIRED';
 
+/**
+ * Mirrors the `source` enum on the server's CoinTransaction model.
+ *
+ * Four members used to be missing — the two RETRO sources and the two REVERTED
+ * ones — so every row carrying them fell through the label and icon lookups to
+ * the default branch and rendered its raw enum name. A user reading their ledger
+ * saw "PASSIVE_STEPS_RETRO" sitting among friendly labels, and a clawback showed
+ * up as an unexplained deduction with a generic icon.
+ *
+ * Keep this list in step with CoinTransaction.model.js: the union is the only
+ * thing that makes a newly added source a compile error here rather than a raw
+ * string in front of a user.
+ */
 export type TransactionCategory =
   | 'PASSIVE_STEPS'
+  | 'PASSIVE_STEPS_RETRO'
   | 'DAILY_STEP_GOAL'
   | 'DAILY_STEP_GOAL_AUTO'
+  | 'DAILY_STEP_GOAL_RETRO'
   | 'HYDRATION_GOAL'
+  | 'HYDRATION_GOAL_REVERTED'
   | 'STREAK_BADGE'
   | 'ACHIEVEMENT'
   | 'CHALLENGE'
+  | 'CHALLENGE_REVERTED'
   | 'REFERRAL_BONUS'
   | 'SHOP_PURCHASE'
   | 'SHOP_REFUND'

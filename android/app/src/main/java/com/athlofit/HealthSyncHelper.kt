@@ -73,6 +73,12 @@ object HealthSyncHelper {
 
         var anySuccess = false
 
+        // Read the gap ONCE, before the first successful post moves the marker.
+        // Reading it per-day would report ~0 for every day after the first, which
+        // is the opposite of what a backlog looks like — the whole run is one
+        // flush after one silence.
+        val offlineMins = offlineMinutes(context)
+
         // Sync each day from startDate to today
         var current = startDate
         while (!current.isAfter(today)) {
@@ -91,7 +97,9 @@ object HealthSyncHelper {
             // FIX: Always pass 0L so each day reads from midnight (full day).
             // loginTimestamp filtering is no longer needed client-side.
             val tsForDay = 0L
-            val dayData = readDaySnapshot(client, current, zone, weightKg, tsForDay, context.packageName)
+            val dayData = readDaySnapshot(
+                client, current, zone, weightKg, tsForDay, context.packageName, offlineMins,
+            )
             if (dayData != null && dayData.optInt("steps") > 0) {
                 val ok = postSync(token, dayData, context)
                 Log.d(TAG, "[$current] sync ${if (ok) "OK" else "FAIL"} — ${dayData.optInt("steps")} steps")
@@ -113,6 +121,8 @@ object HealthSyncHelper {
         loginTs:  Long,
         /** This app's package, so its own Health Connect records are excluded. */
         ownPackage: String,
+        /** Minutes of silence before this sync run, or null if never synced. */
+        offlineMins: Long?,
     ): JSONObject? {
         return try {
             val startOfDay = date.atStartOfDay(zone).toInstant()
@@ -132,14 +142,18 @@ object HealthSyncHelper {
             val monthFilter  = TimeRangeFilter.between(
                 date.minusDays(30).atStartOfDay(zone).toInstant(), endTime)
 
-            // ── Steps via readRecords() + single-source dedup ─────────────────
+            // ── Steps via readRecords() + coverage dedup ──────────────────────
             // aggregate() sums steps from ALL data origins — including third-party
             // apps like Sweatcoin, Google Fit, Samsung Health that also write
             // StepsRecord. This inflates the count vs the native step counter.
             //
-            // Fix: read individual records, group by dataOrigin, and keep only
-            // the single source with the highest total. This matches what the
-            // native step counter app shows (one authoritative source).
+            // Fix: read individual records, group by dataOrigin, and deduplicate
+            // by RECORDING TIME. See StepOriginDedup for the rule and for why the
+            // JS reader (healthConnect.service.ts) had to stop splitting records
+            // across time slots. Both readers now run the same algorithm, so this
+            // worker and the foreground sync no longer post different totals for
+            // the same day — the server keeps the higher of the two, so a
+            // disagreement was always resolved in favour of the larger number.
             val stepRecords = client.readRecords(
                 ReadRecordsRequest(StepsRecord::class, stepsFilter)
             ).records
@@ -147,20 +161,50 @@ object HealthSyncHelper {
             // Self-exclusion uses the runtime package name, not a hardcoded literal.
             // The literal only matched the production applicationId, so on any variant
             // with a suffix (.debug, .staging) our own records were treated as an
-            // external data source and could win the max() below — the app reading its
-            // own output back, which is the loop this filter exists to break.
-            val stepsByOrigin = stepRecords
-                .groupBy { it.metadata.dataOrigin.packageName }
-                .filterKeys { it != ownPackage }
-                .mapValues { (_, records) -> records.sumOf { it.count } }
+            // external data source and could win the dedup below — the app reading
+            // its own output back, which is the loop this filter exists to break.
+            val externalRecords = stepRecords
+                .filter { it.metadata.dataOrigin.packageName != ownPackage }
+                .map {
+                    StepOriginDedup.Record(
+                        origin = it.metadata.dataOrigin.packageName,
+                        count  = it.count,
+                        start  = it.startTime.toEpochMilli(),
+                        end    = it.endTime.toEpochMilli(),
+                    )
+                }
+
+            val dedup = StepOriginDedup.resolve(externalRecords)
+
+            // ── Provenance ───────────────────────────────────────────────────
+            // Built from the same records the total is, so the attribution can
+            // never describe a different figure than the one being posted.
+            //
+            // This worker is the path that matters most for attribution: it
+            // re-posts the last seven days every 15 minutes, so it is the path
+            // that flushes a backlog once a phone comes back online — which is
+            // the single most common honest explanation for a five-figure jump,
+            // and was indistinguishable from a counting bug from the server side.
+            //
+            // Only the records that were COUNTED go into the histogram. Feeding
+            // it a mirrored origin as well would make the hours sum to about
+            // double the deduplicated total they are meant to explain.
+            val countedOrigins = buildSet {
+                add(dedup.primaryOrigin)
+                dedup.contributions.filter { it.contributed > 0 }.forEach { add(it.packageName) }
+            }
+            val hourly = StepOriginDedup.bucketByHour(
+                externalRecords.filter { it.origin in countedOrigins },
+                startOfDay.toEpochMilli(),
+            )
 
             // Clamped like every other reader. This value is POSTed straight to the
             // server, so an absurd total written by some other app on the device would
             // otherwise reach the backend with only server-side validation in the way.
-            val steps = (stepsByOrigin.values.maxOrNull() ?: 0L)
+            val steps = dedup.steps
                 .coerceIn(0L, MAX_SANE_DAILY_STEPS.toLong())
                 .toInt()
-            Log.d(TAG, "[$date] Steps by origin (excluding $ownPackage): $stepsByOrigin → using $steps")
+            Log.d(TAG, "[$date] Steps dedup (excluding $ownPackage): ${dedup.describe()} → using $steps")
 
             // ── Derive calories / distance / activeMinutes from steps ──────────
             val calories      = (steps * (weightKg * 0.57) / 1000).toInt()
@@ -239,6 +283,7 @@ object HealthSyncHelper {
                 put("weight",                 weight)
                 put("bloodGlucose",           bloodGlucose)
                 put("hydration",              hydrationMl)
+                put("stepSource",             buildStepSource(dedup, externalRecords, hourly, offlineMins))
                 // `goalMet` is deliberately NOT sent. This worker does not know the
                 // user's current goal (it would have to guess a default) and it does
                 // not know about admin-credited bonus steps, both of which the server
@@ -251,6 +296,106 @@ object HealthSyncHelper {
             Log.e(TAG, "readDaySnapshot($date) failed: ${e.message}", e)
             null
         }
+    }
+
+    // ─── Provenance ───────────────────────────────────────────────────────────
+
+    /**
+     * Key under which the last successful sync time is kept, so a jump can be
+     * read against how long the device had been silent.
+     *
+     * Stored in the widget prefs, which every native sync path already opens.
+     * The server cannot derive this: it only sees the syncs that arrived, so a
+     * phone that was offline for three days and one that simply had nothing new
+     * to report look identical from that side.
+     */
+    private const val PREF_LAST_SYNC_AT = "lastSuccessfulSyncAt"
+    private const val WIDGET_PREFS = "StepsWidgetPrefs"
+
+    /**
+     * The `stepSource` block: which app on the phone counted these steps, when
+     * they were recorded, and how they were deduplicated.
+     *
+     * Diagnostic only — the server records it and never lets it influence the
+     * stored total, validation, or coins — so it is built on a best-effort basis
+     * and never allowed to fail a sync.
+     *
+     * `contributed` is sent next to `steps` for every origin because the two
+     * differ in the case that generates most step complaints: an origin reported
+     * 12,000 and contributed 0 means its steps were seen and deliberately not
+     * double-counted, which is a completely different answer from never having
+     * seen them.
+     */
+    private fun buildStepSource(
+        dedup: StepOriginDedup.Result,
+        records: List<StepOriginDedup.Record>,
+        hourly: IntArray,
+        offlineMinutes: Long?,
+    ): JSONObject {
+        val origins = org.json.JSONArray()
+
+        // The primary origin has no Contribution row of its own — it IS the
+        // dedup baseline, so everything it reported was counted. Emitting it
+        // from the contributions list alone would record the origin that
+        // supplied most of the day's steps as having contributed none of them.
+        val primaryTotal = records
+            .filter { it.origin == dedup.primaryOrigin }
+            .sumOf { it.count.coerceAtLeast(0) }
+        if (dedup.primaryOrigin.isNotEmpty()) {
+            origins.put(JSONObject().apply {
+                put("packageName", dedup.primaryOrigin)
+                put("steps", primaryTotal)
+                put("contributed", primaryTotal)
+                put("disjointFraction", 1.0)
+            })
+        }
+        for (c in dedup.contributions) {
+            origins.put(JSONObject().apply {
+                put("packageName", c.packageName)
+                put("steps", c.steps)
+                put("contributed", c.contributed)
+                put("disjointFraction", c.disjointFraction)
+            })
+        }
+
+        val hourlyJson = org.json.JSONArray()
+        for (h in hourly) hourlyJson.put(h)
+
+        return JSONObject().apply {
+            put("reader", "health_connect")
+            put("method", if (dedup.contributions.isEmpty()) "single-origin" else "coverage-dedup")
+            put("primaryOrigin", dedup.primaryOrigin)
+            put("origins", origins)
+            put("hourly", hourlyJson)
+            put("recordCount", records.size)
+            // The span the underlying records actually cover — the field that
+            // separates "walked across the whole day, synced once" from "17,000
+            // steps stamped inside a single fifteen-minute record".
+            records.minByOrNull { it.start }?.let {
+                put("recordedFrom", Instant.ofEpochMilli(it.start).toString())
+            }
+            records.maxByOrNull { it.end }?.let {
+                put("recordedTo", Instant.ofEpochMilli(it.end).toString())
+            }
+            offlineMinutes?.let { put("offlineMinutes", it) }
+        }
+    }
+
+    /**
+     * Minutes since this device last synced successfully, or null when it has no
+     * record of ever having done so.
+     *
+     * Null rather than 0: a fresh install genuinely does not know, and reporting
+     * 0 would claim the device had just synced — turning the one field that
+     * explains a first-sync backlog into a reason to distrust it.
+     */
+    private fun offlineMinutes(context: android.content.Context?): Long? {
+        if (context == null) return null
+        val last = context.getSharedPreferences(WIDGET_PREFS, android.content.Context.MODE_PRIVATE)
+            .getLong(PREF_LAST_SYNC_AT, 0L)
+        if (last <= 0L) return null
+        val minutes = (System.currentTimeMillis() - last) / 60_000L
+        return if (minutes >= 0) minutes else null
     }
 
     // ─── POST /health/sync ────────────────────────────────────────────────────
@@ -288,7 +433,18 @@ object HealthSyncHelper {
             if (context != null && errorBody != null) {
                 StepTrackingGate.handleSyncResponse(context, code, errorBody)
             }
-            code in 200..299
+
+            val ok = code in 200..299
+            // Records that the device reached the server, which is what the next
+            // run's `offlineMinutes` measures against. Written on success only:
+            // a failed POST is precisely the silence the field exists to report.
+            if (ok && context != null) {
+                context.getSharedPreferences(WIDGET_PREFS, android.content.Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong(PREF_LAST_SYNC_AT, System.currentTimeMillis())
+                    .apply()
+            }
+            ok
         } catch (e: Exception) {
             Log.e(TAG, "POST /health/sync failed: ${e.message}", e)
             false

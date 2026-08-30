@@ -1717,6 +1717,25 @@ class StepCounterService : Service(), SensorEventListener {
             put("activeMinutes", activeMinutes)
             put("goalMet", goalMet)
             put("timezone", timezone)
+            // ── Where this figure came from ──────────────────────────────────
+            // The hardware TYPE_STEP_COUNTER, which is a running total with no
+            // per-app breakdown and no timestamps behind it — so there is no
+            // origin list and no hour histogram to give, and saying that
+            // explicitly is the point. An empty origin list from this reader
+            // means "this source cannot break down", not "nothing was found",
+            // and without the reader name a total from here is indistinguishable
+            // from a deduplicated Health Connect figure that happens to match.
+            put("stepSource", JSONObject().apply {
+                put("reader", "native_sensor")
+                put("method", "sensor")
+                // Minutes since this service last reached the server. A long gap
+                // next to a large jump is the difference between a backlog and a
+                // counting bug. Omitted rather than sent as 0 when the service
+                // has never synced, because 0 would claim it just did.
+                if (lastSyncTime > 0L) {
+                    put("offlineMinutes", (System.currentTimeMillis() - lastSyncTime) / 60_000L)
+                }
+            })
         }
 
         return json.toString()
