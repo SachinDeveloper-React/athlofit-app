@@ -164,7 +164,6 @@ function ServerErrorPage({
     >
       <StatusBar
         barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'}
-        backgroundColor={colors.background}
       />
 
       {/* Icon circle */}
@@ -343,7 +342,6 @@ const SystemOverlay = () => {
         >
           <StatusBar
             barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'}
-            backgroundColor={colors.background}
           />
           <Icon name="Wrench" size={64} color={colors.primary} />
           <AppText variant="title1" style={styles.maintenanceTitle}>We'll be back soon!</AppText>

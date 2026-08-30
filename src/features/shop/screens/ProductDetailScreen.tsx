@@ -205,7 +205,7 @@ const ProductDetailScreen = () => {
             onMomentumScrollEnd={handleGalleryEnd}
           >
             {product.images.map((img: string, i: number) => (
-              <Image key={i} source={{ uri: img }} style={{ width: W, height: HERO_H - 70 }} resizeMode="cover" />
+              <Image key={i} source={{ uri: img }} style={{ width: W, height: HERO_H - 70 }} resizeMode="cover" resizeMethod="resize" />
             ))}
           </ScrollView>
 
@@ -241,7 +241,7 @@ const ProductDetailScreen = () => {
             >
               {product.images.map((img: string, i: number) => (
                 <Pressable key={i} style={[styles.thumb, { borderColor: i === activeImg ? colors.primary : 'transparent', borderRadius: 8 }]}>
-                  <Image source={{ uri: img }} style={{ width: '100%', height: '100%', borderRadius: 6 }} resizeMode="cover" />
+                  <Image source={{ uri: img }} style={{ width: '100%', height: '100%', borderRadius: 6 }} resizeMode="cover" resizeMethod="resize" />
                 </Pressable>
               ))}
             </ScrollView>

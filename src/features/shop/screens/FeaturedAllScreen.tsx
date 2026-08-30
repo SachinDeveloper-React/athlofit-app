@@ -70,6 +70,7 @@ const FeaturedProductCard = memo(({ product, index, onPress }: CardProps) => {
             source={{ uri: product.images?.[0] }}
             style={styles.image}
             resizeMode="cover"
+            resizeMethod="resize"
           />
 
           {/* Discount badge */}

@@ -251,7 +251,7 @@ const OrderTrackingScreen = () => {
           {order.items.map((item, i) => (
             <View key={i} style={[styles.itemRow, i > 0 && { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
               {item.product?.images?.[0] ? (
-                <Image source={{ uri: item.product.images[0] }} style={[styles.itemThumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.06) }]} />
+                <Image source={{ uri: item.product.images[0] }} style={[styles.itemThumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.06) }]} resizeMethod="resize" />
               ) : (
                 <View style={[styles.itemThumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.06), alignItems: 'center', justifyContent: 'center' }]}>
                   <Icon name="Package" size={18} color={colors.mutedForeground} />

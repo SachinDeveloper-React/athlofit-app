@@ -225,11 +225,19 @@ const AppShell: React.FC = () => {
   }, [checkAndResetIfNewDay]);
 
   // ── System navigation bar theming (Android only) ───────────────────────────
+  //
+  // Only the icon appearance, not the bar colour. Under edge-to-edge the window
+  // draws behind the navigation bar and React Native's enableEdgeToEdge() has
+  // already made it transparent; painting it #000/#fff here would put an opaque
+  // strip back over the content on API < 35 and be silently ignored from
+  // Android 15 on, so the app would look different depending on the OS version.
+  //
+  // setBarMode still earns its keep: enableEdgeToEdge() picks light/dark icons
+  // from the SYSTEM dark mode, which is not necessarily the theme the user
+  // selected inside the app. This keeps the icons legible against whichever
+  // background the app is actually showing.
   useEffect(() => {
     if (Platform.OS !== 'android' || !SystemNavigationBar) { return; }
-    SystemNavigationBar.setNavigationColor(
-      isDark ? '#000000' : '#ffffff',
-    ).catch(() => { });
     SystemNavigationBar.setBarMode(
       isDark ? 'light' : 'dark',
       'navigation',
@@ -245,10 +253,10 @@ const AppShell: React.FC = () => {
   return (
     <SafeAreaProvider>
       <KeyboardWrapper>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor="transparent"
-        />
+        {/* Only barStyle: under edge-to-edge the status bar is transparent by
+            definition, and StatusBarModule ignores setColor/setTranslucent
+            (logging a warning each time) once the feature flag is on. */}
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <NavigationContainer ref={navigationRef} linking={linking}>
           <ToastProvider>
             <RootNavigator onSplashComplete={handleSplashComplete} />

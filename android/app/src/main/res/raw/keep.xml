@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resource keep rules for R8's optimized resource shrinking
+  (android.r8.optimizedResourceShrinking=true in gradle.properties).
+
+  Optimized shrinking obfuscates resource NAMES, so a resource that is only ever
+  reached through Resources.getIdentifier(name, ...) looks unreferenced and its
+  name is rewritten. Every entry below is resolved by name at runtime and would
+  otherwise silently disappear in a release build.
+
+  · ic_notification — Notifee resolves this from the `smallIcon: 'ic_notification'`
+    string passed in useSyncHealth, pushNotificationService, hydrationNotification
+    and hydrationMidnightReset. A missing small icon means notifications render
+    with no icon or fail to post.
+  · bootsplash_* / app_background — read through theme attributes by
+    react-native-bootsplash, which also goes through getIdentifier.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification,@drawable/bootsplash_logo,@color/bootsplash_background,@color/app_background,@style/BootTheme,@style/AppTheme" />

@@ -80,7 +80,7 @@ const Avatar: React.FC<AvatarProps> = ({
   ];
 
   if (uri) {
-    return <Image source={{ uri }} style={containerStyle as any} />;
+    return <Image source={{ uri }} style={containerStyle as any} resizeMethod="resize" />;
   }
 
   return (

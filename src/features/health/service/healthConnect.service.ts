@@ -21,6 +21,7 @@ import {
   BackgroundAccessPermission,
   Permission,
 } from 'react-native-health-connect';
+import { AppState } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
 // ─── Derivation constants ─────────────────────────────────────────────────────
@@ -111,14 +112,50 @@ export const hasHealthConnectPermissions = async (): Promise<boolean> => {
  *  cause RemoteException: Binding died / Null binding errors. */
 const sleep = (ms: number) => new Promise((resolve: any) => setTimeout(resolve, ms));
 
+/**
+ * requestPermission() with a foreground guard.
+ *
+ * The Health Connect consent screen is started through an
+ * ActivityResultLauncher that MainActivity registers in onCreate(). That
+ * launcher belongs to one Activity instance: once the Activity is destroyed
+ * its registry drops it, and launching it throws
+ * "Attempting to launch an unregistered ActivityResultLauncher". The JS
+ * runtime outlives the Activity here — the step counter's foreground service
+ * keeps the process up, and headless FCM / background-fetch entry points run
+ * with no Activity at all — so a permission request can easily arrive when
+ * there is nothing to show a dialog from.
+ *
+ * Skip the prompt in that case instead of failing loudly; the next foreground
+ * initialise retries it. The native side rejects rather than crashing now, but
+ * not asking at all is cheaper and avoids a consent screen the user never saw
+ * being counted as a denial.
+ */
+const requestPermissionSafely = async (): Promise<number> => {
+  if (AppState.currentState !== 'active') {
+    console.warn('[HealthConnect] Permission prompt skipped — app is not foregrounded');
+    return 0;
+  }
+  try {
+    const granted = await requestPermission(PERMISSIONS);
+    return granted.length;
+  } catch (e: any) {
+    console.warn(
+      '[HealthConnect] requestPermission failed:',
+      e?.code ?? '',
+      e?.message ?? e,
+    );
+    return 0;
+  }
+};
+
 export const initializeHealthConnect = async (): Promise<boolean> => {
   const initialized = await initialize();
   if (!initialized) return false;
   // Give the Health Connect service time to fully bind before any reads
   await sleep(300);
-  const granted = await requestPermission(PERMISSIONS);
+  const grantedCount = await requestPermissionSafely();
   // Accept if at least 80% of permissions were granted
-  const success = granted.length >= PERMISSIONS.length * 0.8;
+  const success = grantedCount >= PERMISSIONS.length * 0.8;
 
   // FIX: Clean up any stale step records written by our app to Health Connect.
   // The native StepCounterService previously wrote steps under our package name,

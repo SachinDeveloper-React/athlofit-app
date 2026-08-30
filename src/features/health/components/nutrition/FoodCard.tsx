@@ -54,7 +54,7 @@ interface HeaderProps {
 const FoodImageHeader = memo(({ imageUrl, emoji, bg, color }: HeaderProps) => {
   const styles = useStyles();
   if (imageUrl) {
-    return <Image source={{ uri: imageUrl }} style={styles.foodImage} resizeMode="cover" />;
+    return <Image source={{ uri: imageUrl }} style={styles.foodImage} resizeMode="cover" resizeMethod="resize" />;
   }
   return (
     <View style={[styles.foodImagePlaceholder, { backgroundColor: bg }]}>

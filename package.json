@@ -1,6 +1,6 @@
 {
   "name": "Athlofit",
-  "version": "0.0.74",
+  "version": "0.0.76",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -41,7 +41,7 @@
     "react-native-device-info": "^15.0.2",
     "react-native-gifted-charts": "^1.4.76",
     "react-native-health": "^1.19.0",
-    "react-native-health-connect": "^3.5.3",
+    "react-native-health-connect": "3.6.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-keyboard-controller": "^1.21.6",
     "react-native-keychain": "^10.0.0",

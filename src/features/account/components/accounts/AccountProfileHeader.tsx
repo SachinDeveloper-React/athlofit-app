@@ -80,7 +80,7 @@ export const AccountProfileHeader = memo(
             ]}
           >
             {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImg} resizeMethod="resize" />
             ) : (
               <AppText
                 variant="title1"

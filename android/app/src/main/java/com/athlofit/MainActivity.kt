@@ -24,6 +24,10 @@ class MainActivity : ReactActivity() {
      RNBootSplash.init(this, R.style.BootTheme)
     supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
     super.onCreate(savedInstanceState)
+    // Must stay in onCreate: registerForActivityResult() is only legal before
+    // the Activity reaches STARTED, and the launcher it returns is owned by
+    // this Activity's result registry. Every recreation re-registers, which is
+    // what keeps the (process-scoped) delegate pointing at a live host.
     HealthConnectPermissionDelegate.setPermissionDelegate(this)
   }
 

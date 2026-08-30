@@ -80,7 +80,7 @@ const OrderCard = ({
       {/* Product row */}
       <View style={[styles.productRow, { marginTop: 14 }]}>
         {firstImg ? (
-          <Image source={{ uri: firstImg }} style={[styles.thumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.07) }]} />
+          <Image source={{ uri: firstImg }} style={[styles.thumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.07) }]} resizeMethod="resize" />
         ) : (
           <View style={[styles.thumb, { borderRadius: 10, backgroundColor: withOpacity(colors.primary, 0.07), alignItems: 'center', justifyContent: 'center' }]}>
             <Icon name="Package" size={22} color={colors.mutedForeground} />

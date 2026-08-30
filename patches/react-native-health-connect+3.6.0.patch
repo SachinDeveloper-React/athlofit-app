@@ -1,0 +1,181 @@
+diff --git a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
+index 40539fe..4196b76 100644
+--- a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
++++ b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/HealthConnectManager.kt
+@@ -69,8 +69,16 @@ class HealthConnectManager(private val applicationContext: ReactApplicationConte
+   ) {
+     throwUnlessClientIsAvailable(promise) {
+       coroutineScope.launch {
+-        val granted = HealthConnectPermissionDelegate.launchPermissionsDialog(PermissionUtils.parsePermissions(reactPermissions))
+-        promise.resolve(PermissionUtils.mapPermissionResult(granted))
++        // Uncaught, an exception here reaches the thread's default handler and
++        // takes the process down instead of rejecting the promise — which is
++        // what happened when the dialog was launched from a launcher whose
++        // Activity had already been destroyed.
++        try {
++          val granted = HealthConnectPermissionDelegate.launchPermissionsDialog(PermissionUtils.parsePermissions(reactPermissions))
++          promise.resolve(PermissionUtils.mapPermissionResult(granted))
++        } catch (e: Exception) {
++          promise.rejectWithException(e)
++        }
+       }
+     }
+   }
+@@ -80,12 +88,16 @@ class HealthConnectManager(private val applicationContext: ReactApplicationConte
+   ) {
+     throwUnlessClientIsAvailable(promise) {
+       coroutineScope.launch {
+-        val exerciseRoute = HealthConnectPermissionDelegate.launchExerciseRouteAccessRequestDialog(recordId)
+-        if (exerciseRoute != null) {
+-          promise.resolve(ReactExerciseSessionRecord.parseExerciseRoute(exerciseRoute))
+-        }
+-        else{
+-          promise.rejectWithException(ExerciseRouteAccessDenied())
++        try {
++          val exerciseRoute = HealthConnectPermissionDelegate.launchExerciseRouteAccessRequestDialog(recordId)
++          if (exerciseRoute != null) {
++            promise.resolve(ReactExerciseSessionRecord.parseExerciseRoute(exerciseRoute))
++          }
++          else{
++            promise.rejectWithException(ExerciseRouteAccessDenied())
++          }
++        } catch (e: Exception) {
++          promise.rejectWithException(e)
+         }
+       }
+     }
+diff --git a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
+index 5ec3641..a4194c8 100644
+--- a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
++++ b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/permissions/HealthConnectPermissionDelegate.kt
+@@ -1,28 +1,63 @@
+ package dev.matinzd.healthconnect.permissions
+ 
++import android.util.Log
+ import androidx.activity.ComponentActivity
+ import androidx.activity.result.ActivityResultLauncher
+ import androidx.health.connect.client.PermissionController
+ import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
+ import androidx.health.connect.client.records.ExerciseRoute
++import androidx.lifecycle.Lifecycle
++import dev.matinzd.healthconnect.utils.ActivityNotAvailable
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.channels.Channel
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import java.lang.ref.WeakReference
+ 
+ object HealthConnectPermissionDelegate {
++  private const val TAG = "HCPermissionDelegate"
++
+   private val coroutineScope = CoroutineScope(Dispatchers.IO)
+   private val permissionsChannel = Channel<Set<String>>()
+   private val exerciseRouteChannel = Channel<ExerciseRoute?>()
+ 
+-  private lateinit var requestPermission: ActivityResultLauncher<Set<String>>
+-  private lateinit var requestRoutePermission: ActivityResultLauncher<String>
++  // Nullable rather than lateinit: an unset launcher is a normal state (no
++  // Activity has been created yet — headless JS, background fetch, FCM), and
++  // it must be reportable as a rejected promise instead of an
++  // UninitializedPropertyAccessException thrown off a background coroutine.
++  private var requestPermission: ActivityResultLauncher<Set<String>>? = null
++  private var requestRoutePermission: ActivityResultLauncher<String>? = null
++
++  // Launchers are owned by one Activity's ActivityResultRegistry. The registry
++  // unregisters them on ON_DESTROY, but this singleton outlives the Activity,
++  // so a retained reference goes stale and launching it throws
++  // "Attempting to launch an unregistered ActivityResultLauncher". Keeping a
++  // weak handle on the owner lets us detect that before launching.
++  private var activityRef: WeakReference<ComponentActivity>? = null
+ 
+   fun setPermissionDelegate(
+     activity: ComponentActivity,
+     providerPackageName: String = "com.google.android.apps.healthdata"
+   ) {
++    // Already bound to this exact Activity instance — re-registering would
++    // leak a second pair of launchers for the same host.
++    if (activityRef?.get() === activity && requestPermission != null) return
++
++    // registerForActivityResult() is only legal before the host reaches
++    // STARTED. Being called too late is a caller bug, but throwing here would
++    // take down the Activity; refusing to register leaves the launcher unset,
++    // which now surfaces as a rejected promise instead.
++    if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
++      Log.w(
++        TAG,
++        "setPermissionDelegate() called after the Activity was STARTED " +
++          "(state=${activity.lifecycle.currentState}). Call it from onCreate()."
++      )
++      return
++    }
++
+     val contract = PermissionController.createRequestPermissionResultContract(providerPackageName)
+     val exerciseRouteRequestContract = ExerciseRouteRequestContract()
+ 
+@@ -39,15 +74,42 @@ object HealthConnectPermissionDelegate {
+         coroutineContext.cancel()
+       }
+     }
++
++    activityRef = WeakReference(activity)
++  }
++
++  /** The registered host, or null if it is gone, finishing, or destroyed. */
++  private fun liveHost(): ComponentActivity? {
++    val activity = activityRef?.get() ?: return null
++    if (activity.isFinishing || activity.isDestroyed) return null
++    if (activity.lifecycle.currentState == Lifecycle.State.DESTROYED) return null
++    return activity
++  }
++
++  private suspend fun <T> launchOrThrow(
++    launcher: ActivityResultLauncher<T>?,
++    input: T
++  ) {
++    if (launcher == null || liveHost() == null) throw ActivityNotAvailable()
++    // Starting an Activity for result must happen on the main thread; callers
++    // reach here from Dispatchers.IO.
++    withContext(Dispatchers.Main) {
++      try {
++        launcher.launch(input)
++      } catch (e: IllegalStateException) {
++        // The host was destroyed between the check above and this launch.
++        throw ActivityNotAvailable()
++      }
++    }
+   }
+ 
+   suspend fun launchPermissionsDialog(permissions: Set<String>): Set<String> {
+-    requestPermission.launch(permissions)
++    launchOrThrow(requestPermission, permissions)
+     return permissionsChannel.receive()
+   }
+ 
+   suspend fun launchExerciseRouteAccessRequestDialog(recordId: String): ExerciseRoute? {
+-    requestRoutePermission.launch(recordId)
++    launchOrThrow(requestRoutePermission, recordId)
+     return exerciseRouteChannel.receive()
+   }
+ }
+diff --git a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/utils/ExceptionsUtils.kt b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/utils/ExceptionsUtils.kt
+index 563183d..0ceb085 100644
+--- a/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/utils/ExceptionsUtils.kt
++++ b/node_modules/react-native-health-connect/android/src/main/java/dev/matinzd/healthconnect/utils/ExceptionsUtils.kt
+@@ -6,6 +6,7 @@ import okio.IOException
+ 
+ class ExerciseRouteAccessDenied : Exception("Request to access exercise route denied")
+ class ClientNotInitialized : Exception("Health Connect client is not initialized")
++class ActivityNotAvailable : Exception("No Activity is available to show the Health Connect permission dialog")
+ class InvalidRecordType : Exception("Record type is not valid")
+ class InvalidTemperature : Exception("Temperature is not valid")
+ class InvalidEnergy : Exception("Energy is not valid")
+@@ -27,6 +28,7 @@ fun Promise.rejectWithException(exception: Exception) {
+     is RemoteException -> "UNDERLYING_ERROR"
+     is InvalidRecordType -> "INVALID_RECORD_TYPE"
+     is ClientNotInitialized -> "CLIENT_NOT_INITIALIZED"
++    is ActivityNotAvailable -> "ACTIVITY_NOT_AVAILABLE"
+     is InvalidTemperature -> "INVALID_TEMPERATURE"
+     is InvalidEnergy -> "INVALID_ENERGY"
+     is InvalidPower -> "INVALID_POWER"

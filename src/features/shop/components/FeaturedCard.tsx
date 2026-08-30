@@ -53,7 +53,7 @@ const FeaturedCard = memo(({ product, index, onPress }: Props) => {
         style={[styles.card, { borderRadius: radius.xl, height: CARD_HEIGHT }]}
       >
         {/* Background image */}
-        <Image source={{ uri: product.images[0] }} style={styles.bgImage} resizeMode="cover" />
+        <Image source={{ uri: product.images[0] }} style={styles.bgImage} resizeMode="cover" resizeMethod="resize" />
 
         {/* Gradient overlay */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0)', top: '40%' }]}>

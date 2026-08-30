@@ -117,7 +117,6 @@ const ForceUpdateModal: React.FC<ForceUpdateModalProps> = ({
       >
         <StatusBar
           barStyle={colors.background === '#FFFFFF' ? 'dark-content' : 'light-content'}
-          backgroundColor={colors.background}
         />
 
         {/* Icon */}

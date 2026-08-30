@@ -61,7 +61,7 @@ const FoodRow = memo(({ item, accentColor, onSelect }: FoodRowProps) => {
       {/* Emoji / image thumbnail */}
       <View style={[styles.foodThumb, { backgroundColor: meta.bg }]}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.foodThumbImg} resizeMode="cover" />
+          <Image source={{ uri: item.imageUrl }} style={styles.foodThumbImg} resizeMode="cover" resizeMethod="resize" />
         ) : (
           <AppText style={styles.foodThumbEmoji}>{meta.emoji}</AppText>
         )}

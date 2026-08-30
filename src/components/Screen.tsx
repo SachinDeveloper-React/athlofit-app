@@ -124,11 +124,11 @@ const Screen = memo(
         edges={safeArea ? safeAreaEdges : undefined}
         style={[{ flex: 1, backgroundColor }, style]}
       >
-        <StatusBar
-          barStyle={barStyle}
-          backgroundColor={backgroundColor}
-          translucent
-        />
+        {/* barStyle only. The app is edge-to-edge (edgeToEdgeEnabled=true in
+            gradle.properties), so the status bar is transparent and always
+            drawn behind; StatusBarModule ignores setColor/setTranslucent in
+            that mode and logs a warning for each call. */}
+        <StatusBar barStyle={barStyle} />
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}

@@ -40,7 +40,7 @@ export const Step1Personal: React.FC<Step1Props> = ({
       <AppView center style={{ marginBottom: 24 }}>
         <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={g.avatarWrap}>
           {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={g.avatarImg} />
+            <Image source={{ uri: avatarUri }} style={g.avatarImg} resizeMethod="resize" />
           ) : (
             <AppView style={[g.avatarPlaceholder, { backgroundColor: colors.primary + '15' }]}>
               <Icon name="User" size={36} color={colors.primary} />

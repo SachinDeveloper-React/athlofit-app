@@ -2,7 +2,7 @@
 // ─── Platform-aware hook: reads weight & height from Health Connect / HealthKit ─
 
 import { useState, useCallback, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 export interface HealthMetrics {
   weight: number | null;   // kg
@@ -29,12 +29,28 @@ async function readAndroid(): Promise<HealthMetrics> {
   const initialized = await initialize();
   if (!initialized) throw new Error('Health Connect not available');
 
-  const granted = await requestPermission([
-    { accessType: 'read', recordType: 'Weight' },
-    { accessType: 'read', recordType: 'Height' },
-  ]);
+  // The consent screen is launched from the ActivityResultLauncher that
+  // MainActivity registers in onCreate(), so it only exists while that
+  // Activity does. Asking without a foreground Activity throws
+  // "Attempting to launch an unregistered ActivityResultLauncher" natively;
+  // treat it as "not granted yet" and let the caller retry on the next read.
+  let granted: unknown[] = [];
+  if (AppState.currentState === 'active') {
+    try {
+      granted = await requestPermission([
+        { accessType: 'read', recordType: 'Weight' },
+        { accessType: 'read', recordType: 'Height' },
+      ]);
+    } catch (e: any) {
+      console.warn(
+        '[useHealthMetrics] requestPermission failed:',
+        e?.code ?? '',
+        e?.message ?? e,
+      );
+    }
+  }
 
-  if (!granted || granted.length === 0) throw new Error('PERMISSION_DENIED');
+  if (granted.length === 0) throw new Error('PERMISSION_DENIED');
 
   const now = new Date();
   const past = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days back

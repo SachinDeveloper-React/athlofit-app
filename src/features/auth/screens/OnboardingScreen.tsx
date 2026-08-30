@@ -113,7 +113,7 @@ const OnboardingScreen = () => {
         },
       ]}
     >
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={bgColor} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Background orbs */}
       <AppView style={StyleSheet.absoluteFill} pointerEvents="none">

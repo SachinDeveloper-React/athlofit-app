@@ -208,7 +208,7 @@ const FoodDetailScreen = memo(() => {
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <View style={[styles.hero, { backgroundColor: dietMeta.color }]}>
         {food.imageUrl ? (
-          <Image source={{ uri: food.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image source={{ uri: food.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
         ) : (
           <Animated.Text entering={FadeIn.duration(400)} style={styles.heroEmoji}>
             {dietMeta.emoji}

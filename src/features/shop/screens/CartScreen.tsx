@@ -721,6 +721,7 @@ const CartScreen = () => {
               <Image
                 source={{ uri: item.product.images?.[0] }}
                 style={[styles.itemImg, { borderRadius: 12, backgroundColor: withOpacity(item.product.category.color, 0.07) }]}
+                resizeMethod="resize"
               />
               <View style={styles.itemBody}>
                 <View style={styles.itemTopRow}>

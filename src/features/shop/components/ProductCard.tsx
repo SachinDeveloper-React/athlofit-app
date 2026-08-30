@@ -64,11 +64,11 @@ const CardImageCarousel = memo(({ images, cardWidth, categoryColor, borderRadius
           bounces={false}
         >
           {images.map((img, i) => (
-            <Image key={i} source={{ uri: img }} style={{ width: cardWidth, height: IMAGE_HEIGHT }} resizeMode="cover" />
+            <Image key={i} source={{ uri: img }} style={{ width: cardWidth, height: IMAGE_HEIGHT }} resizeMode="cover" resizeMethod="resize" />
           ))}
         </ScrollView>
       ) : (
-        <Image source={{ uri: images[0] }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: images[0] }} style={styles.image} resizeMode="cover" resizeMethod="resize" />
       )}
 
       {/* Dot indicators */}
