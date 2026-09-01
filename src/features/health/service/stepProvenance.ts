@@ -80,7 +80,7 @@ const MAX_ORIGINS = 12;
  * reporting 0 would claim the device had just synced — turning the one field
  * that explains a first-sync backlog into a reason to distrust it.
  */
-function offlineMinutesSince(lastSyncedAt: number | null | undefined): number | undefined {
+export function offlineMinutesSince(lastSyncedAt: number | null | undefined): number | undefined {
   if (!lastSyncedAt) return undefined;
   const minutes = Math.round((Date.now() - lastSyncedAt) / 60_000);
   return minutes >= 0 ? minutes : undefined;

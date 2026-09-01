@@ -31,6 +31,7 @@ import { useHealthDataStore } from '../store/healthDataStore';
 import { buildMetricRows } from '../service/health.service';
 import type { StreaksResponseData } from '../types/gamification.type';
 import { useSyncHealth } from '../hooks/useSyncHealth';
+import { shouldSyncNow, NO_PREVIOUS_SYNC } from '../service/syncThrottle';
 import { useWidgetSync } from '../../../hooks/useWidgetSync';
 import { navigate } from '../../../navigation/navigationRef';
 import {
@@ -277,11 +278,11 @@ const TrackerScreen = memo(() => {
 
   // Track the last synced user ID to detect account switches
   const lastSyncedUserRef = useRef<string | null>(null);
-  // Throttle: track last sync time and last synced step count
+  // Throttle: track last sync time and last synced step count. The rule itself
+  // lives in service/syncThrottle.ts so that the property test asserting it can
+  // import the same definition instead of re-declaring its own copy.
   const lastSyncTimeRef = useRef<number>(0);
-  const lastSyncedStepsRef = useRef<number>(-1);
-  const MIN_SYNC_INTERVAL_MS = 20_000; // 20 seconds between backend syncs
-  const MIN_STEP_DELTA = 10; // only re-sync if steps changed by at least 10
+  const lastSyncedStepsRef = useRef<number>(NO_PREVIOUS_SYNC);
 
   // Sync widget with current steps and goal
   // Same fallback the in-app ring and the goal-met check use. These had drifted
@@ -301,7 +302,7 @@ const TrackerScreen = memo(() => {
     // Detect account switch
     if (lastSyncedUserRef.current && lastSyncedUserRef.current !== userId) {
       lastSyncedUserRef.current = userId;
-      lastSyncedStepsRef.current = -1;
+      lastSyncedStepsRef.current = NO_PREVIOUS_SYNC;
       lastSyncTimeRef.current = 0;
       refresh(true);
       return;
@@ -310,14 +311,13 @@ const TrackerScreen = memo(() => {
     if (!isReady || !data || !lastUpdated) return;
 
     const now = Date.now();
-    const timeSinceLastSync = now - lastSyncTimeRef.current;
-    const stepDelta = Math.abs(data.steps - lastSyncedStepsRef.current);
 
-    // Skip sync if: not enough time has passed AND steps haven't changed meaningfully
     if (
-      lastSyncedStepsRef.current !== -1 && // not first sync
-      timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
-      stepDelta < MIN_STEP_DELTA
+      !shouldSyncNow({
+        lastSyncedSteps: lastSyncedStepsRef.current,
+        currentSteps: data.steps,
+        timeSinceLastSync: now - lastSyncTimeRef.current,
+      })
     ) {
       return;
     }

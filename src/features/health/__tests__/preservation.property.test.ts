@@ -14,6 +14,12 @@
  */
 import * as fc from 'fast-check';
 import { defaultHealthData, HealthData } from '../types/healthTypes';
+import {
+  shouldSyncNow,
+  MIN_SYNC_INTERVAL_MS,
+  MIN_STEP_DELTA,
+  NO_PREVIOUS_SYNC,
+} from '../service/syncThrottle';
 
 // ─── Mock setup ─────────────────────────────────────────────────────────────
 
@@ -240,113 +246,159 @@ describe('Property 2: Preservation — Existing Refresh and Sync Behavior Unchan
 
   // ─── Property 2.3: syncHealth throttle ─────────────────────────────────────
 
-  describe('2.3 syncHealth throttle (5-min / 10-step delta) produces correct decisions', () => {
+  describe('2.3 syncHealth throttle produces correct decisions', () => {
     /**
      * **Validates: Requirements 3.3**
      *
-     * Observation: In the unfixed code (TrackerScreen.tsx), the syncHealth useEffect
-     * uses a throttle with two conditions:
-     * - MIN_SYNC_INTERVAL_MS = 5 * 60_000 (5 minutes)
-     * - MIN_STEP_DELTA = 10
+     * These now exercise the real `shouldSyncNow` from service/syncThrottle.ts.
      *
-     * Logic: Skip sync if (not first sync) AND (time < 5min) AND (stepDelta < 10)
-     * Otherwise: sync.
+     * They previously re-declared their own `MIN_SYNC_INTERVAL_MS` and
+     * `MIN_STEP_DELTA` and re-implemented the skip expression inline, so they were
+     * asserting against their own literals rather than against the app. That is
+     * not a hypothetical weakness: the screen's interval had been changed from
+     * five minutes to twenty seconds and these tests kept passing, still claiming
+     * a five-minute floor in their own name.
      *
-     * Property: For all syncHealth triggers, the throttle logic produces identical
-     * sync/no-sync decisions based on timing and step delta.
+     * The rule itself also changed, and one of these had to be inverted to match.
+     * The old skip condition required time AND delta to BOTH be small, so a
+     * ten-step change — about five seconds of walking — bypassed the interval
+     * entirely and the app synced on essentially every pipeline update. Six posts
+     * in seventy seconds reached production that way, each one clamped by the
+     * backend's rate ceiling against a window of seconds. Both conditions must
+     * now hold for a sync to go out.
      */
-    it('first sync always triggers regardless of timing or steps', () => {
+    it('first sync always fires, regardless of timing or steps', () => {
       fc.assert(
         fc.property(
           fc.integer({ min: 0, max: 100_000 }), // current steps
-          fc.integer({ min: 0, max: 600_000 }),  // time since last sync (ms)
+          fc.integer({ min: 0, max: 600_000 }), // time since last sync (ms)
           (currentSteps, timeSinceLastSync) => {
-            const MIN_SYNC_INTERVAL_MS = 5 * 60_000;
-            const MIN_STEP_DELTA = 10;
-            const lastSyncedSteps = -1; // -1 indicates first sync
-            
-            // From TrackerScreen: if (lastSyncedStepsRef.current !== -1 && ...)
-            // When lastSyncedSteps === -1, the entire skip condition is false → sync happens
-            const shouldSkip =
-              lastSyncedSteps !== -1 &&
-              timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
-              Math.abs(currentSteps - lastSyncedSteps) < MIN_STEP_DELTA;
-
-            expect(shouldSkip).toBe(false); // first sync always fires
+            expect(
+              shouldSyncNow({
+                lastSyncedSteps: NO_PREVIOUS_SYNC,
+                currentSteps,
+                timeSinceLastSync,
+              }),
+            ).toBe(true);
           },
         ),
         { numRuns: 200 },
       );
     });
 
-    it('skips sync when time < 5min AND step delta < 10 (not first sync)', () => {
+    it('skips when the interval has not elapsed and the count has not moved', () => {
       fc.assert(
         fc.property(
-          fc.integer({ min: 0, max: 100_000 }), // last synced steps
-          fc.integer({ min: 0, max: 9 }),         // step delta (< 10)
-          fc.integer({ min: 0, max: 299_999 }),   // time since last sync (< 5min = 300000ms)
+          fc.integer({ min: 0, max: 100_000 }),
+          fc.integer({ min: 0, max: MIN_STEP_DELTA - 1 }),
+          fc.integer({ min: 0, max: MIN_SYNC_INTERVAL_MS - 1 }),
           (lastSyncedSteps, stepDelta, timeSinceLastSync) => {
-            const MIN_SYNC_INTERVAL_MS = 5 * 60_000;
-            const MIN_STEP_DELTA = 10;
-            const currentSteps = lastSyncedSteps + stepDelta;
-            
-            // Not first sync (lastSyncedSteps >= 0)
-            const shouldSkip =
-              lastSyncedSteps !== -1 &&
-              timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
-              Math.abs(currentSteps - lastSyncedSteps) < MIN_STEP_DELTA;
-
-            expect(shouldSkip).toBe(true); // should skip — both conditions met
+            expect(
+              shouldSyncNow({
+                lastSyncedSteps,
+                currentSteps: lastSyncedSteps + stepDelta,
+                timeSinceLastSync,
+              }),
+            ).toBe(false);
           },
         ),
         { numRuns: 200 },
       );
     });
 
-    it('syncs when time >= 5min even if step delta < 10', () => {
+    it('skips when the interval has elapsed but the count has not moved', () => {
+      // Nothing to report. Syncing here would spend a request to tell the server
+      // a number it already has.
       fc.assert(
         fc.property(
-          fc.integer({ min: 0, max: 100_000 }),     // last synced steps
-          fc.integer({ min: 0, max: 9 }),             // step delta (< 10)
-          fc.integer({ min: 300_000, max: 900_000 }), // time >= 5min
+          fc.integer({ min: 0, max: 100_000 }),
+          fc.integer({ min: 0, max: MIN_STEP_DELTA - 1 }),
+          fc.integer({ min: MIN_SYNC_INTERVAL_MS, max: 900_000 }),
           (lastSyncedSteps, stepDelta, timeSinceLastSync) => {
-            const MIN_SYNC_INTERVAL_MS = 5 * 60_000;
-            const MIN_STEP_DELTA = 10;
-            const currentSteps = lastSyncedSteps + stepDelta;
-            
-            const shouldSkip =
-              lastSyncedSteps !== -1 &&
-              timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
-              Math.abs(currentSteps - lastSyncedSteps) < MIN_STEP_DELTA;
-
-            expect(shouldSkip).toBe(false); // should sync — time threshold exceeded
+            expect(
+              shouldSyncNow({
+                lastSyncedSteps,
+                currentSteps: lastSyncedSteps + stepDelta,
+                timeSinceLastSync,
+              }),
+            ).toBe(false);
           },
         ),
         { numRuns: 200 },
       );
     });
 
-    it('syncs when step delta >= 10 even if time < 5min', () => {
+    it('skips a large step change until the interval has elapsed', () => {
+      // The inverted one. This used to assert the opposite — that any change of
+      // ten or more steps fired immediately — which is what produced the sync
+      // bursts. A walking user satisfies this input on every pipeline update.
       fc.assert(
         fc.property(
-          fc.integer({ min: 0, max: 99_990 }),    // last synced steps
-          fc.integer({ min: 10, max: 10_000 }),   // step delta (>= 10)
-          fc.integer({ min: 0, max: 299_999 }),   // time < 5min
+          fc.integer({ min: 0, max: 89_990 }),
+          fc.integer({ min: MIN_STEP_DELTA, max: 10_000 }),
+          fc.integer({ min: 0, max: MIN_SYNC_INTERVAL_MS - 1 }),
           (lastSyncedSteps, stepDelta, timeSinceLastSync) => {
-            const MIN_SYNC_INTERVAL_MS = 5 * 60_000;
-            const MIN_STEP_DELTA = 10;
-            const currentSteps = lastSyncedSteps + stepDelta;
-            
-            const shouldSkip =
-              lastSyncedSteps !== -1 &&
-              timeSinceLastSync < MIN_SYNC_INTERVAL_MS &&
-              Math.abs(currentSteps - lastSyncedSteps) < MIN_STEP_DELTA;
-
-            expect(shouldSkip).toBe(false); // should sync — step delta threshold exceeded
+            expect(
+              shouldSyncNow({
+                lastSyncedSteps,
+                currentSteps: lastSyncedSteps + stepDelta,
+                timeSinceLastSync,
+              }),
+            ).toBe(false);
           },
         ),
         { numRuns: 200 },
       );
+    });
+
+    it('syncs once both the interval has elapsed and the count has moved', () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: 89_990 }),
+          fc.integer({ min: MIN_STEP_DELTA, max: 10_000 }),
+          fc.integer({ min: MIN_SYNC_INTERVAL_MS, max: 900_000 }),
+          (lastSyncedSteps, stepDelta, timeSinceLastSync) => {
+            expect(
+              shouldSyncNow({
+                lastSyncedSteps,
+                currentSteps: lastSyncedSteps + stepDelta,
+                timeSinceLastSync,
+              }),
+            ).toBe(true);
+          },
+        ),
+        { numRuns: 200 },
+      );
+    });
+
+    it('bounds how often a continuously walking user can sync', () => {
+      // The regression this rule exists for, stated directly: replay a walk where
+      // the pipeline republishes a bigger count every few seconds, and count how
+      // many syncs a seventy-second burst produces. Under the old rule it was one
+      // per update; it must now be at most one.
+      const TICK_MS = 5_000;
+      const BURST_MS = 70_000;
+
+      let lastSyncedSteps = 1_000;
+      let lastSyncAt = 0;
+      let syncs = 0;
+
+      for (let t = TICK_MS; t <= BURST_MS; t += TICK_MS) {
+        const currentSteps = 1_000 + t / 50; // ~100 steps/min
+        if (
+          shouldSyncNow({
+            lastSyncedSteps,
+            currentSteps,
+            timeSinceLastSync: t - lastSyncAt,
+          })
+        ) {
+          syncs += 1;
+          lastSyncedSteps = currentSteps;
+          lastSyncAt = t;
+        }
+      }
+
+      expect(syncs).toBeLessThanOrEqual(1);
     });
   });
 

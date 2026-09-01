@@ -9,7 +9,11 @@ import { useGamificationStore } from '../store/gamificationStore';
 import type { HealthData } from '../types/healthTypes';
 import { useStepDebugStore } from '../store/stepDebugStore';
 import { useHealthDataStore } from '../store/healthDataStore';
-import { buildStepSource, type StepSourcePayload } from '../service/stepProvenance';
+import {
+  buildStepSource,
+  offlineMinutesSince,
+  type StepSourcePayload,
+} from '../service/stepProvenance';
 
 // ─── Channel IDs ──────────────────────────────────────────────────────────────
 
@@ -112,19 +116,47 @@ export async function showChallengeNotifications(
 }
 
 /**
- * Provenance for the step figure about to be synced, or undefined when the
- * pipeline has not resolved one yet.
+ * Provenance for the step figure about to be synced.
  *
  * Reads the last resolution out of the debug store, which useHealth writes on
  * every resolve. Deliberately never throws and never blocks: this is an
  * explanation riding along with the sync, and a sync that carries real steps
  * must go out whether or not it can describe itself.
+ *
+ * ## Why the no-snapshot case is labelled rather than left empty
+ *
+ * This used to return undefined when the store held no snapshot yet, which sent
+ * the sync with no `stepSource` block at all. The server's ledger records that
+ * as `reader: 'unknown', method: null` — and `null` there is its signal for "a
+ * build too old to report its step source". So a current build produced rows
+ * indistinguishable from a stale one, pointing any investigation that found them
+ * straight at the app version instead of at the real cause.
+ *
+ * The real cause is a race, and it is routine: on a cold open, `data` is hydrated
+ * from the store and the throttle lets the session's first sync through before
+ * the first resolve has run. One account shows it exactly — a `reader: 'unknown'`
+ * row at 20:51:02, then a fully described Health Connect row 1.8 seconds later,
+ * same build, same device.
+ *
+ * `method: 'pre-resolution'` says that in the ledger. The distinction is worth a
+ * string: "the pipeline had not run yet" and "this build cannot tell you" have
+ * completely different fixes.
  */
 function buildSyncStepSource(): StepSourcePayload | undefined {
   try {
-    const snapshot = useStepDebugStore.getState().snapshot;
-    if (!snapshot) return undefined;
     const { lastSyncedAt } = useHealthDataStore.getState();
+    const snapshot = useStepDebugStore.getState().snapshot;
+
+    if (!snapshot) {
+      const offlineMinutes = offlineMinutesSince(lastSyncedAt);
+      return {
+        reader: 'unknown',
+        method: 'pre-resolution',
+        origins: [],
+        ...(offlineMinutes !== undefined ? { offlineMinutes } : {}),
+      };
+    }
+
     return buildStepSource({
       read: snapshot.stepRead,
       resolution: snapshot.resolution,

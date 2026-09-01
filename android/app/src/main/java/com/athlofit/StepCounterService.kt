@@ -541,8 +541,39 @@ class StepCounterService : Service(), SensorEventListener {
     /** Steps accumulated before the last detected reboot. */
     private var rebootOffset: Int = 0
 
+    /**
+     * Steps counted during each hour of the local day — index 0 is 00:00–00:59.
+     *
+     * Not a running total: each slot holds what was walked DURING that hour, which
+     * is the same shape Health Connect's reader produces and what the server's
+     * element-wise max merge in stepProvenance.mergeHourly expects. A completed
+     * hour's slot never changes again, so re-sending the whole histogram on every
+     * sync is idempotent.
+     *
+     * ## Why the sensor path needs its own histogram
+     *
+     * Only the Health Connect reader used to send `hourly`, so on a device where
+     * this service is the one moving the count, the day's histogram reflected
+     * whatever HC last saw and nothing since. One account finished a day with
+     * `sum(hourly) = 27,794` against a stored total of 48,168 — and the 20,374
+     * steps missing from the histogram were exactly the ones under investigation.
+     * The per-hour view is the first thing anyone looks at to see WHEN a day went
+     * wrong, and it was blank for precisely the source most likely to be at fault.
+     */
+    private val hourlyBuckets = IntArray(24)
+
     /** Date string (YYYY-MM-DD) of the current tracking day. */
     private var storedDate: String = ""
+
+    /**
+     * The day already seeded from Health Connect by seedDayFromHealthConnect().
+     *
+     * Persisted, because the seed adds steps to the day's total and must therefore
+     * happen at most once per day however many times the service is restarted or
+     * the midnight path re-runs — storedDate is known to flip-flop on some OEMs,
+     * and an in-memory flag would let each flip add the morning again.
+     */
+    private var hcSeedDate: String = ""
 
     /** Timestamp of last SharedPreferences write. */
     private var lastPersistTime: Long = 0L
@@ -552,6 +583,15 @@ class StepCounterService : Service(), SensorEventListener {
 
     /** Timestamp of last network sync. */
     private var lastSyncTime: Long = 0L
+
+    /**
+     * Whether a sync POST is currently in flight.
+     *
+     * Deliberately NOT persisted: it describes a request that cannot outlive the
+     * process, and restoring a stale `true` would block syncing until the next
+     * service restart.
+     */
+    private val syncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** Step count at the time of last successful sync (FIX #8: skip sync if unchanged). */
     private var lastSyncedSteps: Int = -1
@@ -1427,8 +1467,18 @@ class StepCounterService : Service(), SensorEventListener {
 
         // Apply result
         baseline = result.baseline
+        val previousDailySteps = dailySteps
         dailySteps = result.dailySteps
         rebootOffset = result.rebootOffset
+
+        // Attribute what this event added to the hour it arrived in.
+        //
+        // Measured as the change in the CALCULATED total rather than the raw
+        // sensor delta, so everything calculateSteps() decides — a held reading, a
+        // clamp at MAX_SANE_DAILY_STEPS, a reboot fold — is already applied. The
+        // histogram then always sums to at most dailySteps rather than telling a
+        // second, slightly different story about the same day.
+        recordHourlySteps(dailySteps - previousDailySteps)
 
         // Debug log every 100 steps or on significant changes
         if (result.dailySteps % 100 == 0 || result.dailySteps > 10000) {
@@ -1522,6 +1572,56 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     /**
+     * Adds a step gain to the current local hour's bucket.
+     *
+     * Ignores anything that is not a positive gain: a hold or a correction has no
+     * hour to belong to, and letting a decrease subtract here would take steps
+     * away from an hour that has already ended and been reported.
+     *
+     * The attribution is exact only while the service is alive, which is the
+     * condition it spends almost all of its time in. When the OS has killed it,
+     * the first event after it comes back carries everything the hardware counted
+     * meanwhile, and all of that lands in the hour the service recovered. That is
+     * the best this reader can do — TYPE_STEP_COUNTER is a bare running total with
+     * no timestamps to redistribute by — and it is the same approximation the
+     * day's total already makes, so the histogram does not disagree with it.
+     */
+    private fun recordHourlySteps(gained: Int) {
+        if (gained <= 0) return
+        val hour = LocalDateTime.now().hour
+        if (hour !in 0..23) return
+        hourlyBuckets[hour] = (hourlyBuckets[hour].toLong() + gained)
+            .coerceAtMost(MAX_SANE_DAILY_STEPS.toLong())
+            .toInt()
+    }
+
+    /** Clears the histogram. Called from every path that zeroes `dailySteps`. */
+    private fun resetHourlyBuckets() {
+        java.util.Arrays.fill(hourlyBuckets, 0)
+    }
+
+    /**
+     * Restores the histogram from its persisted form.
+     *
+     * Anything that is not exactly 24 well-formed slots is discarded rather than
+     * partially applied — a half-parsed histogram would silently under-report
+     * hours, which is worse than reporting none, because the server cannot tell
+     * the two apart once the values are merged.
+     */
+    private fun loadHourlyBuckets(serialized: String) {
+        resetHourlyBuckets()
+        if (serialized.isEmpty()) return
+        val parts = serialized.split(",")
+        if (parts.size != 24) return
+        val parsed = IntArray(24)
+        for (i in 0..23) {
+            val v = parts[i].toIntOrNull() ?: return
+            parsed[i] = v.coerceIn(0, MAX_SANE_DAILY_STEPS)
+        }
+        parsed.copyInto(hourlyBuckets)
+    }
+
+    /**
      * Writes a liveness heartbeat so StepServiceRestartWorker can tell whether the
      * service is actually alive.
      *
@@ -1557,6 +1657,8 @@ class StepCounterService : Service(), SensorEventListener {
             .putString("pendingSyncPayload", pendingSyncPayload)
             .putLong("lastCumulative", lastCumulative)
             .putLong("lastElapsedRealtime", lastElapsedRealtime)
+            .putString("hourlyBuckets", hourlyBuckets.joinToString(","))
+            .putString("hcSeedDate", hcSeedDate)
             .apply()
     }
 
@@ -1579,6 +1681,12 @@ class StepCounterService : Service(), SensorEventListener {
         // elapsedRealtime() will be lower than this, which is how the first sensor
         // event recognises the hardware counter reset.
         lastElapsedRealtime = prefs.getLong("lastElapsedRealtime", 0L)
+        // The histogram belongs to `storedDate`, so it is restored alongside the
+        // rest of that day's state. If the date has since rolled over,
+        // handleDateChangeOnStart() → performMidnightReset() clears it, the same
+        // way it clears dailySteps.
+        loadHourlyBuckets(prefs.getString("hourlyBuckets", "") ?: "")
+        hcSeedDate = prefs.getString("hcSeedDate", "") ?: ""
 
         // displayStepFloor starts at 0 on each service start. It only gets raised
         // during the current session via pushStepUpdate (when the JS layer pushes
@@ -1601,10 +1709,15 @@ class StepCounterService : Service(), SensorEventListener {
             dailySteps = 0
             rebootOffset = 0
             hasReceivedFirstEvent = false
+            // The histogram describes the total this migration is discarding, so it
+            // has to go with it — keeping it would leave hours attributed to steps
+            // that no longer exist.
+            resetHourlyBuckets()
             prefs.edit()
                 .putLong("baseline", 0L)
                 .putInt("dailySteps", 0)
                 .putInt("rebootOffset", 0)
+                .putString("hourlyBuckets", hourlyBuckets.joinToString(","))
                 .putBoolean("inflationFixV6", true)
                 .apply()
         }
@@ -1680,9 +1793,32 @@ class StepCounterService : Service(), SensorEventListener {
         // If there's a pending payload from a previous failure, try that first
         val payloadToSync = if (pendingSyncPayload.isNotEmpty()) pendingSyncPayload else payload
 
+        // ── One POST at a time ────────────────────────────────────────────────
+        //
+        // The 15-minute gate at the top of this method reads `lastSyncTime`, which
+        // performSync only writes AFTER the HTTP round-trip completes, on a
+        // background thread. maybeSync() is called from onSensorChanged, so any
+        // sensor event arriving while a POST is in flight found the old
+        // `lastSyncTime`, passed the gate, and started a second POST. On one
+        // account that produced two syncs 818 ms apart (+480 then +3 steps) — two
+        // ledger rows and two sets of coin bookkeeping for a single interval.
+        //
+        // A compare-and-set closes it properly: the flag is claimed before the
+        // thread starts and released in a finally, so it is correct regardless of
+        // how the request ends — success, HTTP error, network exception, or the
+        // stopSelf() the tracking-paused path takes.
+        if (!syncInFlight.compareAndSet(false, true)) {
+            Log.d(TAG, "maybeSync — skipping: a sync is already in flight")
+            return
+        }
+
         // Run network call on a background thread
         Thread {
-            performSync(payloadToSync)
+            try {
+                performSync(payloadToSync)
+            } finally {
+                syncInFlight.set(false)
+            }
         }.start()
     }
 
@@ -1719,15 +1855,23 @@ class StepCounterService : Service(), SensorEventListener {
             put("timezone", timezone)
             // ── Where this figure came from ──────────────────────────────────
             // The hardware TYPE_STEP_COUNTER, which is a running total with no
-            // per-app breakdown and no timestamps behind it — so there is no
-            // origin list and no hour histogram to give, and saying that
-            // explicitly is the point. An empty origin list from this reader
-            // means "this source cannot break down", not "nothing was found",
-            // and without the reader name a total from here is indistinguishable
-            // from a deduplicated Health Connect figure that happens to match.
+            // per-app breakdown behind it — so there is no origin list to give,
+            // and saying that explicitly is the point. An empty origin list from
+            // this reader means "this source cannot break down", not "nothing was
+            // found", and without the reader name a total from here is
+            // indistinguishable from a deduplicated Health Connect figure that
+            // happens to match.
+            //
+            // It CAN say when the steps arrived, though, which it did not used to.
+            // The sensor gives no timestamps, but this service is listening live,
+            // so the hour an event arrives in is the hour its steps were walked —
+            // see `hourlyBuckets`.
             put("stepSource", JSONObject().apply {
                 put("reader", "native_sensor")
                 put("method", "sensor")
+                put("hourly", JSONArray().apply {
+                    hourlyBuckets.forEach { put(it) }
+                })
                 // Minutes since this service last reached the server. A long gap
                 // next to a large jump is the difference between a backlog and a
                 // counting bug. Omitted rather than sent as 0 when the service
@@ -1908,6 +2052,33 @@ class StepCounterService : Service(), SensorEventListener {
         dailySteps = 0
         rebootOffset = 0
         displayStepFloor = 0  // FIX: Reset display floor at midnight so notification shows 0
+        resetHourlyBuckets()  // The histogram is per-day; the new day starts empty.
+
+        // Drop the Health Connect fallback reading too.
+        //
+        // currentDisplaySteps() is max(dailySteps, lastHcPollSteps, displayStepFloor)
+        // and it is what BOTH the notification and the widget render. Zeroing only
+        // the first and third left lastHcPollSteps holding YESTERDAY's Health Connect
+        // total, so the forced repaint at the bottom of this method re-posted
+        // yesterday's count as the new day's — and buildNotification's stale-date
+        // guard could not catch it, because storedDate has already been moved to
+        // today by the time that repaint happens.
+        //
+        // It then pinned itself there: updateWidget(force = true) wrote that same
+        // total into StepsWidgetPrefs stamped with today's date, and the HC poll
+        // treats a same-day widget cache as a valid fallback whenever Health Connect
+        // itself returns 0 — which is exactly what it returns just after midnight.
+        // So every subsequent poll read yesterday's total straight back out of the
+        // cache this reset had just poisoned.
+        //
+        // Only devices in HC polling mode were affected, which is why it looked
+        // device-specific: the poll starts after the hardware sensor has been silent
+        // for 90s, so phones that suspend the step sensor overnight (Samsung One UI,
+        // OnePlus OxygenOS) are in that mode by midnight while others never are.
+        //
+        // -1 is the same "no reading yet" sentinel stopHcPolling uses; the maxOf in
+        // currentDisplaySteps() floors it at 0.
+        lastHcPollSteps = -1
 
         // Seed the new day's baseline from the last accepted sensor reading, but only
         // when the heartbeat proves we were actually listening up to this point. If
@@ -1926,6 +2097,27 @@ class StepCounterService : Service(), SensorEventListener {
             // Force re-initialisation from the next sensor event.
             hasReceivedFirstEvent = false
             debugLog(this, "MIDNIGHT_RESET: baseline discarded (lastCum=$lastCumulative, heartbeat age=${if (heartbeatAt > 0) (System.currentTimeMillis() - heartbeatAt) / 1000 else -1}s) — re-seeding from next event")
+
+            // Recover whatever was walked before we got here, from Health Connect.
+            //
+            // Discarding the baseline is the right call — the stale reading predates
+            // steps the hardware counted while we were dead — but the day then starts
+            // at zero, and resolveMidnightBaseline justifies that with "those are near
+            // zero in the case this applies to (service dead overnight)".
+            //
+            // That assumption holds for someone asleep at 03:00 and fails completely
+            // for someone who walks early. One account shows the cost: Health Connect
+            // had 8,338 steps by 08:00 local (1,511 at 05:00, 3,471 at 06:00, 3,356 at
+            // 07:00) while this service, restarted around 07:50, opened the day at zero
+            // and first reported 2,644 at 08:11. It then drove the server total all day
+            // roughly 5,700 steps light, until the app finally read Health Connect at
+            // 20:51 — at which point the correction had to be rationed past the
+            // backend's rate ceiling and took 46 minutes to land.
+            //
+            // The platform already recorded those steps; nothing needs to be
+            // reconstructed, only asked for. Doing it here means the number is right
+            // from the start of the day rather than being argued about all evening.
+            seedDayFromHealthConnect()
         }
         storedDate = today
         debugLog(this, "MIDNIGHT_RESET: baseline=$baseline, lastCum=$lastCumulative, date=$today")
@@ -1978,6 +2170,127 @@ class StepCounterService : Service(), SensorEventListener {
      * Deletes step records previously written to Health Connect by this app.
      * Runs at most once per install (guarded by the "ownHcRecordsPurged" flag).
      */
+    /**
+     * Recovers today's already-walked steps from Health Connect after the midnight
+     * baseline had to be thrown away.
+     *
+     * ## How the figure is applied
+     *
+     * `dailySteps = (cumulative - baseline) + rebootOffset`, and the baseline is
+     * about to be re-seeded from the next sensor event — so the sensor's own
+     * contribution starts at zero and counts forward from now. `rebootOffset` is
+     * exactly the term for "steps that belong to today but did not come from the
+     * current baseline", which is what these are, so the recovered figure goes
+     * there and the sensor adds on top of it.
+     *
+     * ## Guards
+     *
+     * Only ever RAISES the count, only once per day, and only while the day it
+     * read is still the day the service is on. The read is asynchronous, so by the
+     * time it returns the date may have rolled again or a sensor event may already
+     * have counted past it; both are checked at the point of application rather
+     * than at the point of request.
+     *
+     * There is no feedback loop to worry about here: this service never writes
+     * step records to Health Connect (see cleanupOwnHealthConnectRecordsOnce), so
+     * a figure read from it cannot be a figure this app put there.
+     */
+    private fun seedDayFromHealthConnect() {
+        val requestedDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        if (hcSeedDate == requestedDate) return
+
+        serviceScope.launch {
+            try {
+                val zone = ZoneId.systemDefault()
+                val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+                val client = HealthConnectClient.getOrCreate(this@StepCounterService)
+
+                val records = client.readRecords(
+                    ReadRecordsRequest(
+                        StepsRecord::class,
+                        TimeRangeFilter.between(startOfDay, Instant.now()),
+                    )
+                ).records
+
+                // Same single-source dedup the HC poll uses: take the origin with the
+                // highest count rather than the sum, so two apps mirroring the same
+                // walk cannot double the day. Our own package is excluded on principle
+                // even though it should never appear.
+                val byOrigin = records
+                    .groupBy { it.metadata.dataOrigin.packageName }
+                    .filterKeys { it != packageName }
+
+                val primary = byOrigin.maxByOrNull { (_, r) -> r.sumOf { it.count } }
+                val hcToday = (primary?.value?.sumOf { it.count } ?: 0L)
+                    .coerceIn(0L, MAX_SANE_DAILY_STEPS.toLong())
+                    .toInt()
+
+                if (hcToday <= 0) return@launch
+
+                // Which hour each recovered step belongs to, so the histogram does not
+                // dump a whole morning into the minute the service happened to recover.
+                // Attributed by each record's start, which is the best the record shape
+                // supports and is what makes the recovered hours line up with the ones
+                // the sensor fills in later.
+                val recoveredHours = IntArray(24)
+                primary?.value?.forEach { record ->
+                    val hour = record.startTime.atZone(zone).hour
+                    if (hour in 0..23) {
+                        recoveredHours[hour] =
+                            (recoveredHours[hour].toLong() + record.count)
+                                .coerceAtMost(MAX_SANE_DAILY_STEPS.toLong())
+                                .toInt()
+                    }
+                }
+
+                // Apply on the main looper, where onSensorChanged also runs, so this
+                // cannot interleave with a sensor event mid-update.
+                flushHandler.post {
+                    val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    if (today != requestedDate || storedDate != today) {
+                        debugLog(this@StepCounterService, "HC_SEED: discarded, day moved ($requestedDate → $today)")
+                        return@post
+                    }
+                    if (hcSeedDate == today) return@post
+                    if (hcToday <= dailySteps) {
+                        // The sensor already accounts for at least this much. Mark the
+                        // day seeded anyway: the question has been asked and answered,
+                        // and re-asking on a later reset would risk adding it twice.
+                        hcSeedDate = today
+                        persistState()
+                        return@post
+                    }
+
+                    val recovered = hcToday - dailySteps
+                    rebootOffset = (rebootOffset.toLong() + recovered)
+                        .coerceAtMost(MAX_SANE_DAILY_STEPS.toLong())
+                        .toInt()
+                    dailySteps = hcToday
+                    hcSeedDate = today
+
+                    for (h in 0..23) {
+                        hourlyBuckets[h] = maxOf(hourlyBuckets[h], recoveredHours[h])
+                    }
+
+                    liveStepCount = dailySteps
+                    debugLog(this@StepCounterService, "HC_SEED: recovered $recovered steps (hc=$hcToday), daily=$dailySteps, offset=$rebootOffset")
+                    Log.d(TAG, "Seeded day from Health Connect — recovered $recovered steps (hc=$hcToday)")
+
+                    persistState()
+                    maybeUpdateNotification(force = true)
+                    updateWidget(force = true)
+                    NativeStepModule.emitStepUpdate(dailySteps, forceEmit = true)
+                }
+            } catch (e: Exception) {
+                // Permission denied, Health Connect absent, read failed — all mean the
+                // same thing here: the day opens at zero, exactly as it did before this
+                // existed. Never fatal.
+                Log.w(TAG, "seedDayFromHealthConnect — read failed: ${e.message}")
+                debugLog(this@StepCounterService, "HC_SEED: failed (${e.javaClass.simpleName})")
+            }
+        }
+    }
+
     private fun cleanupOwnHealthConnectRecordsOnce() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.getBoolean("ownHcRecordsPurged", false)) return
@@ -2181,6 +2494,7 @@ class StepCounterService : Service(), SensorEventListener {
                 liveStepCount = 0
                 dailySteps = 0
                 displayStepFloor = 0
+                resetHourlyBuckets()
                 lastNotifiedSteps = -1
                 lastWidgetSteps = -1
                 maybeUpdateNotification(force = true)
