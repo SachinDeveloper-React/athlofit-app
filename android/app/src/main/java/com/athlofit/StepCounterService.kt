@@ -74,6 +74,24 @@ class StepCounterService : Service(), SensorEventListener {
         private const val WIDGET_PREFS_NAME = "StepsWidgetPrefs"
         private const val STEP_HISTORY_KEY = "stepHistory"
 
+        /** Dates from STEP_HISTORY_KEY the server has already accepted. */
+        private const val SYNCED_HISTORY_KEY = "syncedHistoryDates"
+
+        /**
+         * How far back a recorded day is still worth sending.
+         *
+         * Matches the seven days the widget worker re-reads from Health Connect, so
+         * the two recovery paths cover the same window and a user is not treated
+         * differently for owning a phone without Health Connect.
+         */
+        private const val BACKFILL_MAX_AGE_DAYS = 7
+
+        /**
+         * Days sent per sync run. A backlog arrives over a few cycles rather than as
+         * one burst of requests the moment a phone reconnects.
+         */
+        private const val BACKFILL_MAX_PER_RUN = 3
+
         /** Days of local step history retained in SharedPreferences. */
         private const val MAX_HISTORY_DAYS = 90
         private const val DEBUG_LOG_KEY = "stepDebugLog"
@@ -574,6 +592,22 @@ class StepCounterService : Service(), SensorEventListener {
      * and an in-memory flag would let each flip add the morning again.
      */
     private var hcSeedDate: String = ""
+
+    /**
+     * The Health Connect origin today's figure was seeded from, and how much of it
+     * came from there.
+     *
+     * The service reports `reader: native_sensor` for everything it sends, which
+     * was true until seedDayFromHealthConnect started folding a Health Connect
+     * total into `dailySteps` once a day. After that the label was a lie for the
+     * rest of the day: a figure that originated in Health Connect arrived wearing
+     * the sensor's name, and every rule that inspects Health Connect origins
+     * skipped it. Two accounts reached the server that way.
+     *
+     * Cleared at the midnight reset, like everything else scoped to a day.
+     */
+    private var hcSeededOrigin: String? = null
+    private var hcSeededSteps: Int = 0
 
     /** Timestamp of last SharedPreferences write. */
     private var lastPersistTime: Long = 0L
@@ -1659,6 +1693,8 @@ class StepCounterService : Service(), SensorEventListener {
             .putLong("lastElapsedRealtime", lastElapsedRealtime)
             .putString("hourlyBuckets", hourlyBuckets.joinToString(","))
             .putString("hcSeedDate", hcSeedDate)
+            .putString("hcSeededOrigin", hcSeededOrigin ?: "")
+            .putInt("hcSeededSteps", hcSeededSteps)
             .apply()
     }
 
@@ -1687,6 +1723,8 @@ class StepCounterService : Service(), SensorEventListener {
         // way it clears dailySteps.
         loadHourlyBuckets(prefs.getString("hourlyBuckets", "") ?: "")
         hcSeedDate = prefs.getString("hcSeedDate", "") ?: ""
+        hcSeededOrigin = prefs.getString("hcSeededOrigin", "")?.takeIf { it.isNotBlank() }
+        hcSeededSteps = prefs.getInt("hcSeededSteps", 0)
 
         // displayStepFloor starts at 0 on each service start. It only gets raised
         // during the current session via pushStepUpdate (when the JS layer pushes
@@ -1708,6 +1746,8 @@ class StepCounterService : Service(), SensorEventListener {
             baseline = 0L
             dailySteps = 0
             rebootOffset = 0
+            hcSeededOrigin = null
+            hcSeededSteps = 0
             hasReceivedFirstEvent = false
             // The histogram describes the total this migration is discarding, so it
             // has to go with it — keeping it would leave hours attributed to steps
@@ -1815,11 +1855,105 @@ class StepCounterService : Service(), SensorEventListener {
         // Run network call on a background thread
         Thread {
             try {
-                performSync(payloadToSync)
+                val ok = performSync(payloadToSync)
+                // Only once today's post has proved the network is up. A backlog
+                // flush against a dead connection is just a slower failure.
+                if (ok) flushHistoryBacklog()
             } finally {
                 syncInFlight.set(false)
             }
         }.start()
+    }
+
+    /**
+     * Posts the days this service recorded while it could not reach the server.
+     *
+     * ── The gap this closes ─────────────────────────────────────────────────
+     *
+     * handleMultiDayGap already writes each finished day's final total into local
+     * history before resetting, so a phone that spent five days offline HAS those
+     * five days on disk. Nothing ever read them back. `stepHistory` was written
+     * and never sent, so for a sensor-only account — a phone with no Health
+     * Connect, which the widget worker's seven-day re-read cannot help — those
+     * days were simply lost.
+     *
+     * They were never MISATTRIBUTED: the midnight reset kept them out of the
+     * current day, and every payload carries the date it belongs to. They just
+     * never arrived. This sends them, each under its own date, which is what the
+     * server has always been able to accept — a past date is judged against its
+     * whole day and paid through the retroactive coin path.
+     *
+     * ── Why a synced-set and not a high-water mark ──────────────────────────
+     *
+     * Days do not arrive in order. A phone can be offline across a month boundary,
+     * or have one day rejected by the account-creation guard while later ones
+     * succeed. Remembering exactly which dates the server accepted is the only
+     * bookkeeping that survives that; a "synced up to" marker would strand
+     * anything behind the first failure.
+     */
+    private fun flushHistoryBacklog() {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        val history = try {
+            JSONArray(prefs.getString(STEP_HISTORY_KEY, "[]") ?: "[]")
+        } catch (e: Exception) {
+            Log.w(TAG, "flushHistoryBacklog — unreadable history, skipping", e)
+            return
+        }
+
+        val alreadySent = readSyncedHistoryDates(prefs)
+        val cutoff = LocalDate.now().minusDays(BACKFILL_MAX_AGE_DAYS.toLong()).toString()
+        var sentThisRun = 0
+
+        for (i in 0 until history.length()) {
+            if (sentThisRun >= BACKFILL_MAX_PER_RUN) break
+            val entry = history.optJSONObject(i) ?: continue
+            val date = entry.optString("date", "")
+            val steps = entry.optInt("steps", 0)
+
+            // Today is the live path's job; a zero day says nothing; anything past
+            // the retention window the server would judge against a day so old that
+            // sending it is not worth a request.
+            if (date.isEmpty() || date >= today || date < cutoff) continue
+            if (steps <= 0 || alreadySent.contains(date)) continue
+
+            val ok = performSync(
+                buildSyncPayload(forDate = date, forSteps = steps),
+                isBackfill = true,
+            )
+            if (!ok) {
+                // Network went away mid-flush. Stop rather than burning the rest of
+                // the backlog against a connection that is no longer there; the
+                // next sync picks up where this left off.
+                Log.d(TAG, "flushHistoryBacklog — post failed for $date, stopping")
+                break
+            }
+
+            alreadySent.add(date)
+            sentThisRun++
+            Log.d(TAG, "flushHistoryBacklog — sent $steps steps for $date")
+        }
+
+        if (sentThisRun > 0) writeSyncedHistoryDates(prefs, alreadySent, cutoff)
+    }
+
+    /** Dates the server has already accepted from the local history. */
+    private fun readSyncedHistoryDates(prefs: android.content.SharedPreferences): MutableSet<String> =
+        (prefs.getString(SYNCED_HISTORY_KEY, "") ?: "")
+            .split(',')
+            .filter { it.isNotBlank() }
+            .toMutableSet()
+
+    /** Persists the accepted set, dropping anything past the retention window. */
+    private fun writeSyncedHistoryDates(
+        prefs: android.content.SharedPreferences,
+        dates: Set<String>,
+        cutoff: String,
+    ) {
+        prefs.edit()
+            .putString(SYNCED_HISTORY_KEY, dates.filter { it >= cutoff }.sorted().joinToString(","))
+            .apply()
     }
 
     /**
@@ -1829,18 +1963,24 @@ class StepCounterService : Service(), SensorEventListener {
      *
      * @return JSON string with date, steps, calories, distance, activeMinutes, goalMet, timezone
      */
-    private fun buildSyncPayload(): String {
+    private fun buildSyncPayload(
+        /** Date this payload is for. Defaults to today; a backfill passes a past one. */
+        forDate: String? = null,
+        /** Steps for that date. Defaults to the live count. */
+        forSteps: Int? = null,
+    ): String {
         val widgetPrefs = getSharedPreferences(WIDGET_PREFS_NAME, Context.MODE_PRIVATE)
         val weightKg = widgetPrefs.getFloat("weightKg", 70.0f).toDouble()
         val dailyStepGoal = widgetPrefs.getInt("goal", StepsWidgetProvider.DEFAULT_DAILY_STEP_GOAL)
 
-        val steps = dailySteps
+        val steps = forSteps ?: dailySteps
         val calories = Math.floor(steps * weightKg * 0.57 / 1000.0).toInt()
         val distanceKm = Math.round(steps * 0.76 / 1000.0 * 100.0) / 100.0
         val activeMinutes = Math.floor(steps / 100.0).toInt()
         val goalMet = steps >= dailyStepGoal
 
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val isBackfill = forDate != null
+        val today = forDate ?: LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         // FIX #3: Include device timezone (IANA name) so the server uses correct day boundary
         val timezone = java.util.TimeZone.getDefault().id
@@ -1866,12 +2006,46 @@ class StepCounterService : Service(), SensorEventListener {
             // The sensor gives no timestamps, but this service is listening live,
             // so the hour an event arrives in is the hour its steps were walked —
             // see `hourlyBuckets`.
+            // ── Say what this figure actually is ─────────────────────────────
+            // Once seedDayFromHealthConnect has folded a Health Connect total into
+            // `dailySteps`, the day's number is no longer purely the sensor's, and
+            // reporting it as such put Health Connect data beyond the reach of
+            // every rule that inspects Health Connect origins. Naming the seed is
+            // what lets the server judge it for what it is.
+            // A backfill is the sensor's own recorded total for a day that has
+            // already ended, so neither today's Health Connect seed nor today's
+            // hour histogram describe it. Saying `sensor-backfill` keeps the ledger
+            // honest about which of the two this row is.
+            val seededOrigin = if (isBackfill) null else hcSeededOrigin
             put("stepSource", JSONObject().apply {
-                put("reader", "native_sensor")
-                put("method", "sensor")
-                put("hourly", JSONArray().apply {
-                    hourlyBuckets.forEach { put(it) }
-                })
+                put("reader", if (seededOrigin != null) "health_connect" else "native_sensor")
+                put(
+                    "method",
+                    when {
+                        seededOrigin != null -> "sensor-hc-seeded"
+                        isBackfill -> "sensor-backfill"
+                        else -> "sensor"
+                    },
+                )
+                if (seededOrigin != null) {
+                    put("primaryOrigin", seededOrigin)
+                    put("origins", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("packageName", seededOrigin)
+                            put("steps", hcSeededSteps)
+                            put("contributed", hcSeededSteps)
+                            put("disjointFraction", 1.0)
+                        })
+                    })
+                }
+                // Only today's histogram describes today. A past day's buckets were
+                // cleared at its midnight reset, so sending them would attribute a
+                // backfilled day to whatever hours today happens to have.
+                if (!isBackfill) {
+                    put("hourly", JSONArray().apply {
+                        hourlyBuckets.forEach { put(it) }
+                    })
+                }
                 // Minutes since this service last reached the server. A long gap
                 // next to a large jump is the difference between a backlog and a
                 // counting bug. Omitted rather than sent as 0 when the service
@@ -1895,16 +2069,21 @@ class StepCounterService : Service(), SensorEventListener {
      * Uses a 15-second connect and read timeout.
      * Must be called from a background thread.
      */
-    private fun performSync(payload: String) {
+    private fun performSync(payload: String, isBackfill: Boolean = false): Boolean {
         // FIX #10: Read token from SecureTokenStore (encrypted) instead of plaintext prefs
         val accessToken = SecureTokenStore.getToken(this)
         val baseUrl = SecureTokenStore.getBaseUrl(this)
 
         if (accessToken.isEmpty()) {
             Log.w(TAG, "performSync — no accessToken available, retaining payload for retry")
-            pendingSyncPayload = payload
-            persistState()
-            return
+            // A backfill has its own bookkeeping and must not become the pending
+            // payload — that slot belongs to today, and overwriting it would drop a
+            // live sync in favour of a day that has already ended.
+            if (!isBackfill) {
+                pendingSyncPayload = payload
+                persistState()
+            }
+            return false
         }
 
         try {
@@ -1938,24 +2117,38 @@ class StepCounterService : Service(), SensorEventListener {
                 pendingSyncPayload = ""
                 persistState()
                 stopSelf()
-                return
+                return false
             }
 
             if (responseCode in 200..299) {
                 Log.d(TAG, "performSync — success (HTTP $responseCode)")
-                pendingSyncPayload = ""
                 lastSyncTime = System.currentTimeMillis()
-                lastSyncedSteps = dailySteps // FIX #8: track synced value
+                // Today-scoped bookkeeping, and only for a today-scoped post.
+                // `lastSyncedSteps` is what the 15-minute gate compares the live
+                // count against, so setting it from a backfill would mark today as
+                // already sent when it has not been; and the pending slot holds
+                // today's failed payload, which a past day's success must not clear.
+                if (!isBackfill) {
+                    pendingSyncPayload = ""
+                    lastSyncedSteps = dailySteps // FIX #8: track synced value
+                }
                 persistState()
-            } else {
-                Log.w(TAG, "performSync — failed (HTTP $responseCode), retaining payload for retry")
+                return true
+            }
+
+            Log.w(TAG, "performSync — failed (HTTP $responseCode), retaining payload for retry")
+            if (!isBackfill) {
                 pendingSyncPayload = payload
                 persistState()
             }
+            return false
         } catch (e: Exception) {
             Log.e(TAG, "performSync — network error: ${e.message}", e)
-            pendingSyncPayload = payload
-            persistState()
+            if (!isBackfill) {
+                pendingSyncPayload = payload
+                persistState()
+            }
+            return false
         }
     }
 
@@ -2051,6 +2244,10 @@ class StepCounterService : Service(), SensorEventListener {
 
         dailySteps = 0
         rebootOffset = 0
+        // Yesterday's seed must not keep labelling today's syncs as Health
+        // Connect — the day's figure starts as the sensor's again.
+        hcSeededOrigin = null
+        hcSeededSteps = 0
         displayStepFloor = 0  // FIX: Reset display floor at midnight so notification shows 0
         resetHourlyBuckets()  // The histogram is per-day; the new day starts empty.
 
@@ -2220,10 +2417,31 @@ class StepCounterService : Service(), SensorEventListener {
                     .groupBy { it.metadata.dataOrigin.packageName }
                     .filterKeys { it != packageName }
 
-                val primary = byOrigin.maxByOrNull { (_, r) -> r.sumOf { it.count } }
+                // ── Prefer an origin this phone has actually been reading from ──
+                //
+                // This was a THIRD copy of "the origin with the highest count
+                // wins", and it was missed when StepOriginDedup and its JS twin
+                // were given origin stickiness. That mattered: a step-spoofing app
+                // that installs under a generated package name takes the baseline
+                // here by definition, and this path folds the result into
+                // `dailySteps` — so the injected figure went on to be reported as
+                // the hardware sensor's own count. One account gained 8,328 steps
+                // in half an hour that way.
+                //
+                // Falls back to every origin when none is established, which is a
+                // first run or a genuine app switch, and is the old behaviour.
+                val established = StepOriginHistory.established(this@StepCounterService)
+                val candidates = byOrigin.filterKeys { it in established }
+                    .ifEmpty { byOrigin }
+
+                val primary = candidates.maxByOrNull { (_, r) -> r.sumOf { it.count } }
                 val hcToday = (primary?.value?.sumOf { it.count } ?: 0L)
                     .coerceIn(0L, MAX_SANE_DAILY_STEPS.toLong())
                     .toInt()
+
+                // Origins have to accumulate days before they can ever be
+                // preferred, and they can only do that while being demoted.
+                StepOriginHistory.recordSeen(this@StepCounterService, byOrigin.keys)
 
                 if (hcToday <= 0) return@launch
 
@@ -2273,6 +2491,13 @@ class StepCounterService : Service(), SensorEventListener {
                     }
 
                     liveStepCount = dailySteps
+                    // ── Say where the day's figure came from ────────────────
+                    // Without this the sync payload keeps claiming `native_sensor`
+                    // for a total that is mostly Health Connect's, which is how
+                    // injected steps reached the server wearing a label that no
+                    // origin rule inspects. See buildSyncPayload.
+                    hcSeededOrigin = primary?.key
+                    hcSeededSteps = recovered
                     debugLog(this@StepCounterService, "HC_SEED: recovered $recovered steps (hc=$hcToday), daily=$dailySteps, offset=$rebootOffset")
                     Log.d(TAG, "Seeded day from Health Connect — recovered $recovered steps (hc=$hcToday)")
 
@@ -2494,6 +2719,8 @@ class StepCounterService : Service(), SensorEventListener {
                 liveStepCount = 0
                 dailySteps = 0
                 displayStepFloor = 0
+                hcSeededOrigin = null
+                hcSeededSteps = 0
                 resetHourlyBuckets()
                 lastNotifiedSteps = -1
                 lastWidgetSteps = -1

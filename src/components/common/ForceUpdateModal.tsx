@@ -9,6 +9,7 @@ import { View, Modal, StatusBar, Linking, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 import { makeStyles } from '../../hooks/makeStyles';
+import { useAppConfigStore } from '../../store/appConfigStore';
 import AppText from '../AppText';
 import Button from '../Button';
 import { Icon } from '../Icon';
@@ -83,20 +84,36 @@ const ForceUpdateModal: React.FC<ForceUpdateModalProps> = ({
   const { colors, spacing } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const config = useAppConfigStore(s => s.config);
 
   const isForce = updateType === 'force';
 
   const handleUpdate = () => {
     if (updateUrl) {
       Linking.openURL(updateUrl).catch(() => {});
-    } else {
-      // Fallback: open the app's store page based on platform
-      const storeUrl =
-        Platform.OS === 'ios'
-          ? 'https://apps.apple.com/app/athlofit'
-          : 'https://play.google.com/store/apps/details?id=com.athlofit';
-      Linking.openURL(storeUrl).catch(() => {});
+      return;
     }
+
+    // No updateUrl on the verdict — the ios block ships with it empty. Try the
+    // store link from app config before the hardcoded fallback, so this button
+    // follows whatever the admin configured rather than a second copy of it.
+    const configured =
+      config?.appLinks?.[Platform.OS === 'ios' ? 'appStore' : 'playStore'] || '';
+    if (configured) {
+      Linking.openURL(configured).catch(() => {});
+      return;
+    }
+
+    // Last resort. The package id here was 'com.athlofit' — the Android
+    // `namespace`, not the `applicationId` — which resolves to no Play Store
+    // listing at all. On a force verdict this is the only button on screen and
+    // the modal cannot be dismissed, so a dead link leaves the user stuck in an
+    // app they cannot use or leave.
+    Linking.openURL(
+      Platform.OS === 'ios'
+        ? 'https://apps.apple.com/app/athlofit'
+        : 'https://play.google.com/store/apps/details?id=com.athlofit.athlofit',
+    ).catch(() => {});
   };
 
   return (

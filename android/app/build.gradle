@@ -86,8 +86,8 @@ android {
         applicationId "com.athlofit.athlofit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 77
-        versionName "1.77"
+        versionCode 79
+        versionName "1.79"
     }
     signingConfigs {
         debug {

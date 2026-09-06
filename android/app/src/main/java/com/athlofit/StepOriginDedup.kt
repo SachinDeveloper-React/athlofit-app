@@ -88,9 +88,16 @@ object StepOriginDedup {
 
     data class Result(
         val steps: Long,
+        /** Biggest single origin's total. Diagnostic — see `primaryTotal`. */
         val largestOrigin: Long,
         val originSum: Long,
         val primaryOrigin: String,
+        /**
+         * The PRIMARY origin's own total, which is the baseline `steps` is built
+         * on. Equal to `largestOrigin` unless origin stickiness demoted a larger
+         * but unestablished source — see the note at `resolve`.
+         */
+        val primaryTotal: Long,
         val contributions: List<Contribution>,
     ) {
         /** One-line summary for the sync log. */
@@ -101,7 +108,10 @@ object StepOriginDedup {
             val mirrored = contributions.filter { it.contributed == 0L }
                 .joinToString { "${it.packageName} (${it.steps}, ${(it.disjointFraction * 100).toInt()}% disjoint)" }
             return buildString {
-                append("primary=$primaryOrigin $largestOrigin")
+                append("primary=$primaryOrigin $primaryTotal")
+                if (primaryTotal != largestOrigin) {
+                    append(" (demoted a larger unestablished origin: $largestOrigin)")
+                }
                 if (added.isNotEmpty()) append(", added $added")
                 if (mirrored.isNotEmpty()) append(", mirrors: $mirrored")
                 append(", raw sum would be $originSum")
@@ -113,12 +123,42 @@ object StepOriginDedup {
      * Resolves a deduplicated step total.
      *
      * Guarantees, by construction:
-     *   * `steps >= largestOrigin` — the biggest single source genuinely
+     *   * `steps >= primaryTotal` — the origin the total is built on genuinely
      *     recorded that many, so the total can never fall below it.
      *   * `steps <= originSum` — a deduplicated total is a subset of the raw sum.
+     *
+     * ── Why `establishedOrigins` exists ─────────────────────────────────────
+     *
+     * "Primary" used to mean nothing but "the origin with the highest count", and
+     * that is a rule about size in a store anything on the phone can write to.
+     * A step-spoofing app installs under a generated package name, writes a large
+     * number of records, and is handed the baseline by definition — at which
+     * point everything the user actually walked, recorded by a real app, is
+     * measured against the injected timeline, judged a mirror of it, and
+     * contributes zero. One account's genuine 2,101 steps from Google Fit were
+     * discarded in favour of an injected 5,522 in exactly that way.
+     *
+     * So an origin the phone has actually been using outranks a larger one it has
+     * not. `establishedOrigins` is that set, kept by StepOriginHistory across
+     * days; passing an empty set is the old behaviour exactly.
+     *
+     * The demotion is deliberately narrow, because being wrong here costs a real
+     * user their steps:
+     *
+     *   * It only applies when at least one established origin is actually
+     *     present today. Someone who switches fitness apps outright has no
+     *     established origin left in the data, falls through to the old rule, and
+     *     is unaffected.
+     *   * A demoted origin is not discarded. It goes through the same coverage
+     *     test as any other non-primary source, so a genuinely new device — a
+     *     watch recording periods the phone did not — still contributes every
+     *     step it can show independent recording time for. What it loses is only
+     *     the right to define the baseline.
+     *
+     * Still pure: the set is passed in, not read from disk here.
      */
-    fun resolve(records: List<Record>): Result {
-        if (records.isEmpty()) return Result(0, 0, 0, "", emptyList())
+    fun resolve(records: List<Record>, establishedOrigins: Set<String> = emptySet()): Result {
+        if (records.isEmpty()) return Result(0, 0, 0, "", 0, emptyList())
 
         val totals = HashMap<String, Long>()
         val intervals = HashMap<String, MutableList<Span>>()
@@ -133,16 +173,22 @@ object StepOriginDedup {
                 .add(Span(r.start, maxOf(r.end, r.start)))
         }
 
-        if (totals.isEmpty()) return Result(0, 0, 0, "", emptyList())
+        if (totals.isEmpty()) return Result(0, 0, 0, "", 0, emptyList())
 
         val originSum = totals.values.sum()
         val largestOrigin = totals.values.max()
 
+        // Prefer an origin this phone has been using. Falls back to every origin
+        // when none of today's are established, which is both the old behaviour
+        // and the right answer for a genuine first run or an app switch.
+        val candidates = totals.keys.filter { it in establishedOrigins }
+            .ifEmpty { totals.keys.toList() }
+        val baselineTotal = candidates.maxOf { totals.getValue(it) }
+
         // Ties broken by package name so the result does not depend on the order
         // Health Connect happened to return records in.
-        val primaryOrigin = totals.entries
-            .filter { it.value == largestOrigin }
-            .map { it.key }
+        val primaryOrigin = candidates
+            .filter { totals.getValue(it) == baselineTotal }
             .min()
 
         val coverage = totals.keys.associateWith { merge(intervals[it] ?: emptyList()) }
@@ -173,10 +219,15 @@ object StepOriginDedup {
         }
 
         return Result(
-            steps = minOf(originSum, largestOrigin + extras),
+            // Built on the PRIMARY's total, not the largest. When stickiness has
+            // demoted a bigger unestablished origin, using the larger figure here
+            // would hand the injected count straight back as a floor and undo the
+            // demotion entirely.
+            steps = minOf(originSum, baselineTotal + extras),
             largestOrigin = largestOrigin,
             originSum = originSum,
             primaryOrigin = primaryOrigin,
+            primaryTotal = baselineTotal,
             contributions = contributions,
         )
     }

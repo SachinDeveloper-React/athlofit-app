@@ -21,7 +21,7 @@ import {
   BackgroundAccessPermission,
   Permission,
 } from 'react-native-health-connect';
-import { AppState } from 'react-native';
+import { AppState, NativeModules } from 'react-native';
 import { HealthData, defaultHealthData } from '../types/healthTypes';
 
 // ─── Derivation constants ─────────────────────────────────────────────────────
@@ -560,10 +560,17 @@ export interface OriginContribution {
 
 export interface CoverageDedupResult {
   steps: number;
+  /** Biggest single origin's total. Diagnostic — see `primaryTotal`. */
   largestOrigin: number;
   originSum: number;
   /** Package name of the origin used as the baseline. */
   primaryOrigin: string;
+  /**
+   * The primary origin's own total, which is the baseline `steps` is built on.
+   * Equal to `largestOrigin` unless origin stickiness demoted a larger but
+   * unestablished source — see the note on dedupeStepsAcrossOrigins.
+   */
+  primaryTotal: number;
   /** Every non-primary origin and what it was judged to be. */
   contributions: OriginContribution[];
 }
@@ -580,12 +587,74 @@ export interface CoverageDedupResult {
  * that recorded alongside the baseline is a mirror of it, not extra steps.
  *
  * Guarantees, by construction:
- *   * `steps >= largestOrigin` — the biggest single source genuinely recorded
- *     that many, so the total can never fall below it.
+ *   * `steps >= primaryTotal` — the origin the total is built on genuinely
+ *     recorded that many, so the total can never fall below it.
  *   * `steps <= originSum` — a deduplicated total is a subset of the raw sum.
+ *
+ * ── Why `establishedOrigins` exists ─────────────────────────────────────────
+ *
+ * "Primary" used to mean nothing but "the origin with the highest count", and
+ * that is a rule about size in a store anything on the phone can write to. A
+ * step-spoofing app installs under a package name generated at install time,
+ * writes a large number of records, becomes the baseline by definition, and
+ * every genuinely walked step recorded by a real app is then measured against
+ * the injected timeline and judged a duplicate of it. One account's real 2,101
+ * steps from Google Fit were discarded in favour of an injected 5,522 exactly
+ * this way.
+ *
+ * So an origin the phone has been using outranks a larger one it has not. The
+ * set comes from StepOriginHistory on the native side — the SAME history the
+ * widget worker uses, because two readers with separate histories would drift
+ * and the server keeps the higher of their two figures.
+ *
+ * Narrow on purpose, since being wrong here costs a real user their steps: it
+ * applies only when an established origin is actually present today (so an app
+ * switch falls through to the old rule), and a demoted origin still contributes
+ * every step it can show independent recording time for. It loses only the right
+ * to define the baseline.
+ *
+ * Passing no set is the old behaviour exactly. This stays pure — the caller
+ * loads the set.
+ *
+ * Kotlin twin: StepOriginDedup.resolve.
  */
+/**
+ * Health Connect origins this phone has been reading from long enough to be
+ * believed as the dedup baseline, from the native StepOriginHistory.
+ *
+ * Deliberately shares the worker's history rather than keeping its own. Two
+ * readers with separate histories would disagree about which origin is
+ * established, and the server keeps the higher of their two figures — so every
+ * disagreement would resolve in favour of whichever reader had not yet learned
+ * to distrust an injected origin.
+ *
+ * An empty set is a safe answer at every call site: dedupeStepsAcrossOrigins
+ * falls back to its old size-based rule. So iOS, a missing native module and a
+ * bridge failure all degrade to the previous behaviour rather than failing the
+ * read.
+ */
+async function loadEstablishedOrigins(
+  seen: readonly string[],
+): Promise<ReadonlySet<string>> {
+  try {
+    const mod = NativeModules.NativeStepModule;
+    if (!mod?.getEstablishedStepOrigins) return new Set();
+    // Record before reading: an origin has to accumulate days before it can ever
+    // be preferred, and it can only do that while it is being demoted. Not
+    // awaited into the result — today's sighting must not establish today.
+    if (seen.length && mod.recordStepOriginsSeen) {
+      mod.recordStepOriginsSeen(seen).catch(() => {});
+    }
+    const established: string[] = await mod.getEstablishedStepOrigins();
+    return new Set(Array.isArray(established) ? established : []);
+  } catch {
+    return new Set();
+  }
+}
+
 export function dedupeStepsAcrossOrigins(
   records: StepRecordLite[],
+  establishedOrigins: ReadonlySet<string> = new Set(),
 ): CoverageDedupResult {
   const totals: Record<string, number> = {};
   const intervalsByOrigin: Record<string, Interval[]> = {};
@@ -601,16 +670,23 @@ export function dedupeStepsAcrossOrigins(
   if (!originNames.length) {
     return {
       steps: 0, largestOrigin: 0, originSum: 0,
-      primaryOrigin: '', contributions: [],
+      primaryOrigin: '', primaryTotal: 0, contributions: [],
     };
   }
 
   const originSum = originNames.reduce((sum, o) => sum + totals[o], 0);
   const largestOrigin = Math.max(...originNames.map(o => totals[o]));
 
+  // Prefer an origin this phone has been reading from. Falls back to every
+  // origin when none of today's are established, which is both the old behaviour
+  // and the right answer for a first run or a genuine app switch.
+  const established = originNames.filter(o => establishedOrigins.has(o));
+  const candidates = established.length ? established : originNames;
+  const primaryTotal = Math.max(...candidates.map(o => totals[o]));
+
   // Ties broken by package name so the result does not depend on record order.
-  const primaryOrigin = originNames
-    .filter(o => totals[o] === largestOrigin)
+  const primaryOrigin = candidates
+    .filter(o => totals[o] === primaryTotal)
     .sort()[0];
 
   const coverage: Record<string, Interval[]> = {};
@@ -640,10 +716,14 @@ export function dedupeStepsAcrossOrigins(
   }
 
   return {
-    steps: Math.min(originSum, largestOrigin + extras),
+    // Built on the PRIMARY's total, not the largest. When stickiness has demoted
+    // a bigger unestablished origin, using the larger figure here would hand the
+    // injected count back as a floor and undo the demotion entirely.
+    steps: Math.min(originSum, primaryTotal + extras),
     largestOrigin,
     originSum,
     primaryOrigin,
+    primaryTotal,
     contributions,
   };
 }
@@ -891,7 +971,10 @@ export async function readTodayStepsDetailed(
           // ── Coverage-based deduplication ───────────────────────────────────
           // See the note above dedupeStepsAcrossOrigins for why this compares
           // recording TIME rather than splitting records across time slots.
-          const dedup = dedupeStepsAcrossOrigins(lite);
+          const dedup = dedupeStepsAcrossOrigins(
+            lite,
+            await loadEstablishedOrigins(externalOrigins.map(o => o.packageName)),
+          );
 
           // The histogram is built from the records that were actually COUNTED
           // — the primary origin plus any origin judged independent. Including

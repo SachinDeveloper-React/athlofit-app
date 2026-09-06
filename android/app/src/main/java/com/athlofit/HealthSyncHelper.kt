@@ -99,6 +99,7 @@ object HealthSyncHelper {
             val tsForDay = 0L
             val dayData = readDaySnapshot(
                 client, current, zone, weightKg, tsForDay, context.packageName, offlineMins,
+                context,
             )
             if (dayData != null && dayData.optInt("steps") > 0) {
                 val ok = postSync(token, dayData, context)
@@ -123,6 +124,8 @@ object HealthSyncHelper {
         ownPackage: String,
         /** Minutes of silence before this sync run, or null if never synced. */
         offlineMins: Long?,
+        /** For the cross-day origin history the dedup baseline is chosen from. */
+        context: android.content.Context,
     ): JSONObject? {
         return try {
             val startOfDay = date.atStartOfDay(zone).toInstant()
@@ -174,7 +177,20 @@ object HealthSyncHelper {
                     )
                 }
 
-            val dedup = StepOriginDedup.resolve(externalRecords)
+            // Origins this phone has actually been reading from, so an origin that
+            // appeared today cannot take the baseline away from one that has been
+            // here for days. See StepOriginHistory and the note at resolve().
+            //
+            // Recorded BEFORE resolving, and for every origin that was read rather
+            // than only the winner — an origin has to accumulate days before it can
+            // be preferred, and it can only do that while it is being demoted.
+            val seenOrigins = externalRecords.map { it.origin }.toSet()
+            StepOriginHistory.recordSeen(context, seenOrigins)
+
+            val dedup = StepOriginDedup.resolve(
+                externalRecords,
+                StepOriginHistory.established(context),
+            )
 
             // ── Provenance ───────────────────────────────────────────────────
             // Built from the same records the total is, so the attribution can

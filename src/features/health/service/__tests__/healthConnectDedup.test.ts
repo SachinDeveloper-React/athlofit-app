@@ -219,3 +219,122 @@ describe('dedupeStepsAcrossOrigins', () => {
     }
   });
 });
+
+/**
+ * Origin stickiness.
+ *
+ * "Primary" used to mean nothing but "the origin with the highest count", which
+ * is a rule about size in a store any app on the phone can write to. A spoofer
+ * installs under a generated package name, writes a large number of records, and
+ * is handed the baseline by definition — at which point the user's real steps are
+ * measured against the injected timeline, judged a mirror, and contribute zero.
+ *
+ * These pin the demotion AND its limits, because being wrong in the other
+ * direction costs a real user their steps.
+ */
+describe('dedupeStepsAcrossOrigins — origin stickiness', () => {
+  /** A generated package name of the shape the incident used. */
+  const INJECTED = 'com.android.healthconnect.phone.j28f624b03f823dd28eb3107c2fe94f53';
+
+  /** The injected day: one big record covering everything the user really walked. */
+  const injectedDay = (count: number): StepRecordLite[] => [
+    rec(INJECTED, count, 6, 22),
+  ];
+
+  it('lets a larger unestablished origin take the baseline when nothing is established', () => {
+    // The old behaviour, and still correct when there is no history to reason
+    // from — a first run, or a phone whose only source is genuinely new.
+    const result = dedupeStepsAcrossOrigins([
+      ...granularWalks(FIT),
+      ...injectedDay(45_000),
+    ]);
+
+    expect(result.primaryOrigin).toBe(INJECTED);
+    expect(result.primaryTotal).toBe(45_000);
+  });
+
+  it('keeps the established origin as the baseline against a larger newcomer', () => {
+    // The fix. Google Fit recorded 22,000 across four walks; the injected origin
+    // claims 45,000 across one record covering the same hours.
+    const result = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), ...injectedDay(45_000)],
+      new Set([FIT]),
+    );
+
+    expect(result.primaryOrigin).toBe(FIT);
+    expect(result.primaryTotal).toBe(22_000);
+  });
+
+  it('does not let the demoted origin back in as a floor', () => {
+    // `steps` is built on the primary's total. Using `largestOrigin` here would
+    // hand the injected count straight back and undo the demotion entirely.
+    const result = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), ...injectedDay(45_000)],
+      new Set([FIT]),
+    );
+
+    expect(result.largestOrigin).toBe(45_000); // still reported, for diagnosis
+    expect(result.steps).toBe(22_000);
+    expect(result.steps).toBeLessThan(result.largestOrigin);
+  });
+
+  it('discards the injected origin entirely when it mirrors the real one', () => {
+    const result = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), ...injectedDay(45_000)],
+      new Set([FIT]),
+    );
+
+    const injected = result.contributions.find(c => c.packageName === INJECTED);
+    expect(injected?.contributed).toBe(0);
+  });
+
+  it('still counts a genuine second device that recorded different hours', () => {
+    // The limit of the demotion. A watch that recorded a period the phone did not
+    // is not a mirror, and losing its steps would be the expensive mistake.
+    const result = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), rec(WATCH, 3_000, 2, 4)],
+      new Set([FIT]),
+    );
+
+    const watch = result.contributions.find(c => c.packageName === WATCH);
+    expect(watch?.contributed).toBe(3_000);
+    expect(result.steps).toBe(25_000);
+  });
+
+  it('falls back to size when the established origin is not present today', () => {
+    // Someone who switched fitness apps outright. The old source is gone from the
+    // data, so there is nothing to be sticky about and the new one is the answer.
+    const result = dedupeStepsAcrossOrigins(
+      granularWalks(SAMSUNG),
+      new Set([FIT]),
+    );
+
+    expect(result.primaryOrigin).toBe(SAMSUNG);
+    expect(result.steps).toBe(22_000);
+  });
+
+  it('prefers the largest among established origins, not merely any of them', () => {
+    // Stickiness picks a baseline from the trusted set; it does not abandon the
+    // size rule inside it.
+    const result = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), rec(SAMSUNG, 500, 7, 8), ...injectedDay(45_000)],
+      new Set([FIT, SAMSUNG]),
+    );
+
+    expect(result.primaryOrigin).toBe(FIT);
+    expect(result.primaryTotal).toBe(22_000);
+  });
+
+  it('is unchanged from the old behaviour when no set is passed', () => {
+    const withoutSet = dedupeStepsAcrossOrigins([
+      ...granularWalks(FIT),
+      ...injectedDay(45_000),
+    ]);
+    const withEmptySet = dedupeStepsAcrossOrigins(
+      [...granularWalks(FIT), ...injectedDay(45_000)],
+      new Set(),
+    );
+
+    expect(withoutSet).toEqual(withEmptySet);
+  });
+});

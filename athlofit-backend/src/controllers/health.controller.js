@@ -14,6 +14,7 @@ const {
   resolveClientDate,
   isValidISODate,
   toClientDate,
+  minutesElapsedOnDate,
 } = require('../utils/date');
 const { syncChallengeProgress } = require('./challenge.controller');
 const { sendPushToUser } = require('../utils/pushNotification');
@@ -23,6 +24,58 @@ const {
   validateSteps,
   trackClientCadence,
 } = require('../utils/stepValidation');
+const { loadStepBaseline } = require('../utils/stepBaselineStore');
+const { resolveOriginTrust } = require('../utils/stepOriginTrust');
+const { loadOriginHistory } = require('../utils/stepOriginTrustStore');
+
+/**
+ * How many minutes of walking a figure written to `syncDate` may cover.
+ *
+ * ── A past date gets its whole day ──────────────────────────────────────────
+ *
+ * This is the distinction the first version missed, and a backfill would have hit
+ * it immediately. "Time since we last heard a total" is the right window for a
+ * sync writing TODAY. It is the wrong window for one writing a PAST date: those
+ * steps were walked across that day, not since the last sync, so a device
+ * flushing a day it recorded while offline would have had a whole day's walking
+ * measured against a fifteen-minute gap and clamped for it.
+ *
+ * minutesElapsedOnDate already draws exactly this line — the full 1,440 for a
+ * past date, elapsed-so-far for today — so a past date simply takes it.
+ *
+ * ── For today, the larger of two windows ────────────────────────────────────
+ *
+ * Either can be the real one:
+ *
+ *   * time since this account last posted a raw total, which is what the server
+ *     itself observed; and
+ *   * the client's own `offlineMinutes`, which is the only thing that knows the
+ *     foreground service was killed. Android keeps TYPE_STEP_COUNTER running in
+ *     hardware when the service dies, so the sync after an OEM kills it genuinely
+ *     covers the whole silent period — and the phones that kill background
+ *     services hardest are exactly the ones this must not clamp.
+ *
+ * Bounded by the elapsed day either way: no window can be longer than the part of
+ * the day that has actually happened.
+ *
+ * Null when today has no previous total to measure from, which leaves the bound
+ * off entirely rather than guessing at a window.
+ */
+function sensorWindowMinutes(existing, stepSource, syncDate, timezone) {
+  const elapsedOnDate = minutesElapsedOnDate(syncDate, timezone);
+
+  // A past date is judged by its own whole day. minutesElapsedOnDate returns the
+  // full 1,440 for one, so nothing further is needed.
+  const todayForClient = resolveClientDate(timezone);
+  if (syncDate && todayForClient && syncDate < todayForClient) return elapsedOnDate;
+
+  const last = existing?.lastIncomingAt ? new Date(existing.lastIncomingAt).getTime() : null;
+  const observed = last == null ? null : Math.max(0, (Date.now() - last) / 60_000);
+  const claimed = Number(stepSource?.offlineMinutes);
+  const offline = Number.isFinite(claimed) && claimed >= 0 ? claimed : null;
+  if (observed == null && offline == null) return null;
+  return Math.min(elapsedOnDate, Math.max(observed ?? 0, offline ?? 0));
+}
 const { getCachedAppConfig } = require('../utils/appConfigCache');
 const { checkTimezoneManipulation } = require('../utils/timezoneGuard');
 const { recordCheatFlag, isCoinBlocked } = require('../utils/cheatPenalty');
@@ -321,26 +374,116 @@ const syncHealthData = async (req, res, next) => {
           lastIncomingSteps: existing?.lastIncomingSteps ?? null,
           lastIncomingDelta: existing?.lastIncomingDelta || 0,
           repeatedDeltaCount: existing?.repeatedDeltaCount || 0,
+          // The second detector needs a clock. Everything below follows the RAW
+          // client figures across syncs, exactly as lastIncomingSteps does.
+          lastIncomingAt: existing?.lastIncomingAt ?? null,
+          cadenceStreak: existing?.cadenceStreak || 0,
+          cadenceRateMin: existing?.cadenceRateMin ?? null,
+          cadenceRateMax: existing?.cadenceRateMax ?? null,
+          cadenceStreakAt: existing?.cadenceStreakAt ?? null,
         })
       : null;
 
     if (cadence?.stuck) {
       console.warn(
         `[HealthSync] Stuck step source for user ${req.user._id} on ${today}: ` +
-          `+${cadence.delta} repeated ${cadence.repeatedDeltaCount + 1}× — ` +
-          `holding stored total, no coins awarded`,
+          `${cadence.stuckReason} — holding stored total, no coins awarded`,
       );
+    }
+
+    // ── This account's own ceiling ───────────────────────────────────────────
+    //
+    // Computed once per user per date, from the 28 days BEFORE this one, and then
+    // frozen onto the row — so the day's first step sync pays one indexed range
+    // query and every sync after it reads the stored number.
+    //
+    // Only for syncs that carry steps. A hydration-only post has nothing to
+    // validate and must not stamp a baseline onto a row that may later be the
+    // first step sync of the day, since the stamp is what stops the recompute.
+    //
+    // A null result (no history, or a failed read) means "not characterised", and
+    // validateSteps falls back to the population bounds. It never means zero.
+    let stepBaseline = existing?.stepBaseline ?? null;
+    if (stepsProvided && stepBaseline == null) {
+      stepBaseline = await loadStepBaseline({ userId: req.user._id, date: today });
+    }
+
+    // ── Is the source these steps are attributed to one this account uses? ───
+    //
+    // Only affects whether THIS day is allowed to count as history when a future
+    // baseline is computed. It clamps nothing now — see stepOriginTrust.js for
+    // why that is the whole point of it, and what it is and is not worth.
+    //
+    // The provenance block is normalized further down for the ledger; this reads
+    // the raw one because the answer is needed before validation, and it only
+    // looks at two fields it re-checks itself.
+    let originTrust = null;
+    let originHistory =
+      existing?.establishedOrigins == null
+        ? null
+        : {
+            establishedOrigins: existing.establishedOrigins,
+            distinctPrimaries: existing.originChurn || 0,
+          };
+    if (stepsProvided) {
+      const claimedReader =
+        typeof stepSource?.reader === 'string' ? stepSource.reader.trim() : null;
+      const claimedOrigin =
+        typeof stepSource?.primaryOrigin === 'string'
+          ? stepSource.primaryOrigin.trim().slice(0, 120)
+          : null;
+
+      // Two reasons the read is skipped almost always. Readers that carry no
+      // origin claim — the hardware sensor, and every build too old to send the
+      // block — cannot come back untrusted, so the query would tell us nothing.
+      // And once the day's row has the history stamped on it, the answer is
+      // already known: it is a 28-day aggregation over data that cannot change
+      // during the day, so it is computed once and reused, exactly like the
+      // baseline. Without this the widget worker alone would run hundreds of them
+      // per device per day.
+      if (claimedReader === 'health_connect' && existing?.establishedOrigins == null) {
+        originHistory = await loadOriginHistory({
+          userId: req.user._id,
+          date: today,
+        });
+      }
+
+      originTrust = resolveOriginTrust({
+        reader: claimedReader,
+        primaryOrigin: claimedOrigin,
+        // How much this sync is asking to move the day, and how much time that
+        // could plausibly cover. Only consulted for a reader that named no
+        // source. The window is capped at the elapsed part of the date being
+        // written, so a past-date backfill gets its whole day and today's syncs
+        // get only what has actually happened.
+        delta: Math.round(Number(steps) || 0) - (existing?.steps || 0),
+        windowMinutes:
+          sensorWindowMinutes(existing, stepSource, today, timezone) ??
+          minutesElapsedOnDate(today, timezone),
+        history: originHistory || {},
+      });
+
+      if (!originTrust.trusted) {
+        console.warn(
+          `[HealthSync] Untrusted step source for user ${req.user._id} on ${today}: ` +
+            `${originTrust.reason} — day excluded from future baselines`,
+        );
+      }
     }
 
     const stepValidation = validateSteps({
       incomingSteps: steps,
       existingSteps: existing?.steps || 0,
       bonusSteps: existing?.bonusSteps || 0,
-      // The rate window is measured from the last ACCEPTED step increase, not from
-      // updatedAt. updatedAt is bumped by any write to this row — a hydration-only
-      // sync included — which both punished honest users and let a client reset the
-      // window on demand by syncing more often. See stepValidation.js.
-      lastStepIncreaseAt: existing?.lastStepIncreaseAt || null,
+      stepBaseline,
+      // The hardware sensor listens live, so its figure is bounded by human
+      // cadence in a way a Health Connect backlog is not. The window has to cover
+      // any period the foreground service was killed — TYPE_STEP_COUNTER keeps
+      // running in hardware — so the client's own `offlineMinutes` widens it.
+      reader: stepsProvided
+        ? (typeof stepSource?.reader === 'string' ? stepSource.reader.trim() : null)
+        : null,
+      sensorWindowMinutes: sensorWindowMinutes(existing, stepSource, today, timezone),
       timezone,
       // The date this sync is writing to, which is not necessarily today — the
       // Android widget worker re-posts the last seven days every 15 minutes. The
@@ -515,6 +658,23 @@ const syncHealthData = async (req, res, next) => {
         existing?.goalSnapshot > 0 ? existing.goalSnapshot : dailyGoal,
       // Only advanced on a real increase — see `stepsIncreased` above.
       ...(stepsIncreased ? { lastStepIncreaseAt: new Date() } : {}),
+      // Frozen on the first step sync of the day and never rewritten, so the
+      // ceiling cannot drift as the day's own total climbs. See the field's note
+      // on HealthActivity.
+      ...(stepBaseline != null && existing?.stepBaseline == null
+        ? { stepBaseline }
+        : {}),
+      // Sticky false: written only to turn the day off, never back on. A day that
+      // carried one untrusted sync is not rehabilitated by a trusted one after it.
+      ...(originTrust && !originTrust.trusted ? { originTrusted: false } : {}),
+      // Frozen on the day's first Health Connect sync and never rewritten, so the
+      // 28-day aggregation behind it runs once per user per day.
+      ...(originHistory && existing?.establishedOrigins == null
+        ? {
+            establishedOrigins: originHistory.establishedOrigins,
+            originChurn: originHistory.distinctPrimaries,
+          }
+        : {}),
       // Cadence bookkeeping, written on every sync that carried steps —
       // INCLUDING one the stuck-source rule just refused. That is deliberate: the
       // rule needs to keep seeing the raw figures to know when the device starts
@@ -525,6 +685,14 @@ const syncHealthData = async (req, res, next) => {
             lastIncomingSteps: cadence.lastIncomingSteps,
             lastIncomingDelta: cadence.lastIncomingDelta,
             repeatedDeltaCount: cadence.repeatedDeltaCount,
+            lastIncomingAt: new Date(cadence.lastIncomingAt),
+            cadenceStreak: cadence.cadenceStreak,
+            cadenceRateMin: cadence.cadenceRateMin,
+            cadenceRateMax: cadence.cadenceRateMax,
+            cadenceStreakAt:
+              cadence.cadenceStreakAt == null
+                ? null
+                : new Date(cadence.cadenceStreakAt),
           }
         : {}),
       // Which build wrote this row. Only stamped when the caller actually

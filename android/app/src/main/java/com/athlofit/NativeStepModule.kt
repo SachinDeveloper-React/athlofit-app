@@ -10,6 +10,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
 /**
@@ -397,6 +398,51 @@ class NativeStepModule(reactContext: ReactApplicationContext) :
             }
         } catch (e: Exception) {
             promise.reject("PERMISSION_REQUEST_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Health Connect origins this phone has been reading from for long enough to
+     * be believed as the dedup baseline. See StepOriginHistory.
+     *
+     * Exposed so the JS reader picks its baseline from the SAME history the
+     * worker does. Two readers keeping separate histories would drift, and the
+     * server keeps the higher of the two figures — so every disagreement would
+     * resolve in favour of whichever reader had not yet learned to distrust an
+     * injected origin. That asymmetry is the reason both readers run one
+     * algorithm in the first place.
+     */
+    @ReactMethod
+    fun getEstablishedStepOrigins(promise: Promise) {
+        try {
+            val array = Arguments.createArray()
+            StepOriginHistory.established(reactApplicationContext).forEach { array.pushString(it) }
+            promise.resolve(array)
+        } catch (e: Exception) {
+            // An empty list is a safe answer — the dedup falls back to its old
+            // size-based rule — so this never fails the read that called it.
+            promise.resolve(Arguments.createArray())
+        }
+    }
+
+    /**
+     * Records that these Health Connect origins were seen today.
+     *
+     * Idempotent within a day. Pass every origin that was READ, not only the one
+     * that won the dedup: an origin has to accumulate days before it can ever be
+     * preferred, and it can only do that while it is being demoted.
+     */
+    @ReactMethod
+    fun recordStepOriginsSeen(origins: ReadableArray, promise: Promise) {
+        try {
+            val list = mutableListOf<String>()
+            for (i in 0 until origins.size()) {
+                origins.getString(i)?.let { list.add(it) }
+            }
+            StepOriginHistory.recordSeen(reactApplicationContext, list)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.resolve(false)
         }
     }
 
