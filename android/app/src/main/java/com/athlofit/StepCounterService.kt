@@ -648,6 +648,40 @@ class StepCounterService : Service(), SensorEventListener {
     /** Whether we have received the first sensor event (used for baseline initialization). */
     private var hasReceivedFirstEvent: Boolean = false
 
+    /**
+     * How long the service was NOT listening before this session started, measured
+     * from the persisted heartbeat. -1 when there is no heartbeat to compare
+     * against, which is a first-ever run.
+     *
+     * Read once in loadPersistedState() rather than at the point of use, because
+     * maybeWriteHeartbeat() refreshes the stored value as soon as the service ticker
+     * runs — by the time the first sensor event arrives the evidence of the gap is
+     * already gone.
+     */
+    private var sessionBlindGapMs: Long = -1L
+
+    /**
+     * Set when the next accepted sensor event will carry steps the hardware counted
+     * while this service was dead, so recordHourlySteps must not claim them for the
+     * hour the service happened to come back in.
+     *
+     * TYPE_STEP_COUNTER is a bare running total with no timestamps, so a backlog
+     * cannot be redistributed across the hours it actually spans — the only honest
+     * options are to attribute it wrongly or not at all. It has to be "not at all",
+     * because the server merges histograms with an element-wise max (see
+     * stepProvenance.mergeHourly): an hour that is too LOW is corrected the moment
+     * Health Connect reports the real figure for it, while an hour that is too HIGH
+     * can never be corrected by anything.
+     *
+     * One account shows the cost. The service was dead for 400 minutes and came back
+     * at 20:25 local; its first event carried 15,082 steps and all of them landed in
+     * the 20:00 slot. Health Connect's own figure for that hour was 8,054. The max
+     * merge kept 15,082 permanently, the day's histogram summed to 34,936 against a
+     * stored total of 27,908, and the hourly chart showed an hour of 251 steps per
+     * minute.
+     */
+    private var pendingRestartBacklog: Boolean = false
+
     /** Last known cumulative sensor value (used for midnight reset baseline). */
     private var lastCumulative: Long = 0L
 
@@ -1446,6 +1480,17 @@ class StepCounterService : Service(), SensorEventListener {
                 return
             }
             debugLog(this, "FIRST_EVENT: baseline already set=$baseline, cumulative=$cumulative")
+
+            // A persisted baseline means this event is measured from wherever the
+            // count stood when the service last ran, so it carries everything the
+            // hardware counted in between. Treat that as a backlog unless the
+            // heartbeat proves the gap was short enough that we never really stopped
+            // listening — the same staleness test resolveMidnightBaseline applies to
+            // the same question.
+            if (sessionBlindGapMs < 0L || sessionBlindGapMs > HEARTBEAT_STALE_MS) {
+                pendingRestartBacklog = true
+                debugLog(this, "FIRST_EVENT: blind gap ${sessionBlindGapMs}ms — hourly attribution suppressed")
+            }
         }
 
         // ── Confirm whether the hardware counter actually restarted ──────────
@@ -1512,7 +1557,18 @@ class StepCounterService : Service(), SensorEventListener {
         // clamp at MAX_SANE_DAILY_STEPS, a reboot fold — is already applied. The
         // histogram then always sums to at most dailySteps rather than telling a
         // second, slightly different story about the same day.
-        recordHourlySteps(dailySteps - previousDailySteps)
+        //
+        // Skipped entirely for the one event that closes a blind window: those steps
+        // belong to hours nobody can name, and guessing leaves the histogram wrong in
+        // the one direction the server's max merge can never undo. See
+        // pendingRestartBacklog. dailySteps is untouched either way — this decides
+        // only which hour gets the credit, never how many steps the day has.
+        if (pendingRestartBacklog) {
+            pendingRestartBacklog = false
+            debugLog(this, "HOURLY: skipped ${dailySteps - previousDailySteps} backlog steps (service restart)")
+        } else {
+            recordHourlySteps(dailySteps - previousDailySteps)
+        }
 
         // Debug log every 100 steps or on significant changes
         if (result.dailySteps % 100 == 0 || result.dailySteps > 10000) {
@@ -1717,6 +1773,12 @@ class StepCounterService : Service(), SensorEventListener {
         // elapsedRealtime() will be lower than this, which is how the first sensor
         // event recognises the hardware counter reset.
         lastElapsedRealtime = prefs.getLong("lastElapsedRealtime", 0L)
+        // How long we were off the air before this session, captured here because the
+        // heartbeat ticker overwrites the evidence within seconds. See sessionBlindGapMs.
+        val heartbeatAt = prefs.getLong(HEARTBEAT_KEY, 0L)
+        sessionBlindGapMs =
+            if (heartbeatAt > 0L) (System.currentTimeMillis() - heartbeatAt).coerceAtLeast(0L)
+            else -1L
         // The histogram belongs to `storedDate`, so it is restored alongside the
         // rest of that day's state. If the date has since rolled over,
         // handleDateChangeOnStart() → performMidnightReset() clears it, the same
@@ -2167,13 +2229,40 @@ class StepCounterService : Service(), SensorEventListener {
             storedDate = today
             persistState()
             Log.d(TAG, "handleDateChangeOnStart — initialized storedDate to $today")
-            return
-        }
-
-        if (storedDate != today) {
+        } else if (storedDate != today) {
             Log.d(TAG, "handleDateChangeOnStart — date changed from $storedDate to $today")
             handleMultiDayGap(storedDate, today)
         }
+
+        // ── Ask Health Connect what the day already holds ────────────────────
+        //
+        // A first-ever start is not necessarily the start of the day, and this
+        // method used to return straight out of the empty-storedDate branch without
+        // going through performMidnightReset() — which was the only path that ever
+        // reached seedDayFromHealthConnect(). So on a fresh install, a reinstall, or
+        // after the user clears app data, the day opened at zero and everything
+        // walked before that moment was lost for good. The count then sat exactly
+        // that far behind Health Connect for the rest of the day, and the backend's
+        // monotonic clamp rejected every sync from here as a decrease, so nothing
+        // downstream could repair it either.
+        //
+        // One account reinstalled mid-morning and first opened the app at 13:42
+        // local, by which time Health Connect already held 7,845 steps. This service
+        // reported 15,082 at 20:25 against Health Connect's 22,927 — the same 7,845
+        // short — and stayed exactly that far behind until midnight.
+        //
+        // Called on EVERY start rather than only the branches above, because the
+        // read needs a Health Connect permission that a reinstall has just revoked:
+        // at the moment the service first starts, the JS layer has usually not
+        // finished asking for it yet, and a seed that only ran once would fail
+        // silently in exactly the case it exists for. Retrying costs nothing — the
+        // function's own hcSeedDate guard makes it a no-op once the day has been
+        // answered, and it ASSIGNS dailySteps = hcToday rather than adding, so no
+        // number of calls can double a day.
+        //
+        // storedDate is assigned and persisted above precisely so that the seed's
+        // own same-day guard passes when its asynchronous read comes back.
+        seedDayFromHealthConnect()
     }
 
     /**
