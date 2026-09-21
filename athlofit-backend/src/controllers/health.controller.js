@@ -103,6 +103,14 @@ const { getCachedAppConfig } = require('../utils/appConfigCache');
 const { checkTimezoneManipulation } = require('../utils/timezoneGuard');
 const { recordCheatFlag, isCoinBlocked } = require('../utils/cheatPenalty');
 const {
+  resolveSharedSource,
+  describeSharedSource,
+  loadSharedSourceCandidates,
+  SHARED_MIN_STEPS,
+  SHARED_RECENT_SAMPLES,
+  MAX_SAMPLE_TOTALS,
+} = require('../utils/sharedStepSource');
+const {
   computePassiveCoinDelta,
   passiveCoinsForSteps,
 } = require('../utils/passiveCoins');
@@ -450,6 +458,54 @@ const syncHealthData = async (req, res, next) => {
       ? Math.max(0, rawSteps - (hold?.stuckForfeit || 0))
       : steps;
 
+    // ── Is this counter also feeding another account? ────────────────────────
+    //
+    // Two accounts on one phone — Xiaomi's "Dual apps" and the like run a
+    // second copy of the app under its own Android user, with its own
+    // installId and the same hardware step counter — post the same daily
+    // total at the same instant, and every per-account rule passes them both.
+    // See utils/sharedStepSource.js for the incident and the rule.
+    //
+    // Read only on a sync that produced a sample, and only until the day is
+    // held: one indexed query per sample is a dozen reads a day per device,
+    // and once the newer account is held nothing further needs asking. The
+    // older account keeps re-checking so its match count stays current.
+    let shared = null;
+    if (stepsProvided && existing?.sharedHeld) {
+      shared = {
+        shared: true,
+        held: true,
+        otherUser: existing.sharedWith,
+        matches: existing.sharedMatches || 0,
+        reason: describeSharedSource({
+          otherUser: existing.sharedWith,
+          matches: existing.sharedMatches || 0,
+          held: true,
+        }),
+      };
+    } else if (
+      stepsProvided &&
+      cadence?.sample &&
+      cadence.sample.total >= SHARED_MIN_STEPS
+    ) {
+      const mine = [...(existing?.sampleTotals || []), cadence.sample]
+        .filter(s => s.total >= SHARED_MIN_STEPS)
+        .slice(-SHARED_RECENT_SAMPLES);
+      const candidates = await loadSharedSourceCandidates({
+        userId: req.user._id,
+        date: today,
+        totals: mine.map(s => s.total),
+      });
+      shared = resolveSharedSource({ userId: req.user._id, mine, candidates });
+    }
+
+    if (shared?.shared && !existing?.sharedWith) {
+      console.warn(
+        `[HealthSync] Shared step counter for user ${req.user._id} on ${today}: ` +
+          `${shared.reason}`,
+      );
+    }
+
     // ── This account's own ceiling ───────────────────────────────────────────
     //
     // Computed once per user per date, from the 28 days BEFORE this one, and then
@@ -556,6 +612,9 @@ const syncHealthData = async (req, res, next) => {
       cadence: hold
         ? { ...cadence, stuck: hold.stuck, stuckReason: hold.stuckReason }
         : null,
+      // The cross-account verdict. Held on the newer of two accounts sharing a
+      // counter; the older is paid for the steps.
+      sharedSource: shared,
     });
 
     // Use the clamped (safe) step value instead of raw client input
@@ -771,11 +830,31 @@ const syncHealthData = async (req, res, next) => {
                 cadence.cadenceStreakAt == null
                   ? null
                   : new Date(cadence.cadenceStreakAt),
+              // Today's samples on this stream, refused ones included — the
+              // day-wide detectors judge each new sample against all of them.
+              samples: (cadence.samples || []).map(s => ({
+                delta: s.delta,
+                rate: s.rate,
+                from: s.from == null ? null : new Date(s.from),
+                at: new Date(s.at),
+                stuck: Boolean(s.stuck),
+                total: s.total ?? null,
+              })),
             },
             stuckSource: hold.stuckSource,
             stuckSince:
               hold.stuckSince == null ? null : new Date(hold.stuckSince),
             stuckForfeit: hold.stuckForfeit,
+          }
+        : {}),
+      // Who else this day's counter turned out to belong to. Written on both
+      // rows; `sharedHeld` only ever goes true, and stays true for the day.
+      ...(shared?.shared
+        ? {
+            sharedWith: shared.otherUser,
+            sharedMatches: shared.matches,
+            sharedSince: existing?.sharedSince || new Date(),
+            sharedHeld: Boolean(existing?.sharedHeld || shared.held),
           }
         : {}),
       // Which build wrote this row. Only stamped when the caller actually
@@ -814,6 +893,24 @@ const syncHealthData = async (req, res, next) => {
             ...(req.deviceCtx?.appVersion
               ? { $addToSet: { syncVersions: req.deviceCtx.appVersion } }
               : {}),
+            // The sample this sync produced, if it was one, onto the day's flat
+            // list of totals — what another account's sync is matched against.
+            ...(cadence?.sample
+              ? {
+                  $push: {
+                    sampleTotals: {
+                      $each: [
+                        {
+                          total: cadence.sample.total,
+                          at: new Date(cadence.sample.at),
+                          source: cadenceSource,
+                        },
+                      ],
+                      $slice: -MAX_SAMPLE_TOTALS,
+                    },
+                  },
+                }
+              : {}),
           },
           { upsert: true, new: true },
         ),
@@ -846,8 +943,16 @@ const syncHealthData = async (req, res, next) => {
     //
     // Moved below the config read because it needs `cfg`; it is bookkeeping and
     // does not have to precede the activity upsert.
+    //
+    // 'shared_source' reaches here as well: a second account being paid for one
+    // phone's counter is a choice, not a fault, and the flag is how the pattern
+    // becomes visible per account. 'stuck_source' never does — see the severity
+    // note in stepValidation.js.
     let cheatPenaltyResult = null;
-    if (stepValidation.severity === 'implausible') {
+    if (
+      stepValidation.severity === 'implausible' ||
+      stepValidation.severity === 'shared_source'
+    ) {
       cheatPenaltyResult = await recordCheatFlag({
         userId: req.user._id,
         reason: stepValidation.reason,

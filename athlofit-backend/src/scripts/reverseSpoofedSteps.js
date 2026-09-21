@@ -529,7 +529,23 @@ async function planChallengeReversal({ userId, dates, correctedByDate }) {
 
 // ─── Phase 3: apply ─────────────────────────────────────────────────────────
 
-async function applyPlan({ userId, days, untrustedOnly, coinDeduct, challengePlans }) {
+/**
+ * Writes one account's corrections. Shared with reverseHeldSteps.js, which
+ * selects days by a different rule and hands them here in the same shape, so
+ * the two tools cannot disagree about how a correction is written.
+ *
+ * `description` and `script` label the ledger row; a day may carry `rowUpdate`
+ * with extra fields to set on its HealthActivity row alongside the correction.
+ */
+async function applyPlan({
+  userId,
+  days,
+  untrustedOnly,
+  coinDeduct,
+  challengePlans,
+  description = null,
+  script = 'reverseSpoofedSteps',
+}) {
   // ── Every suspect day is marked, even the ones that cannot be corrected ────
   //
   // This was missed in the first pass: only the correctable days were written,
@@ -546,7 +562,7 @@ async function applyPlan({ userId, days, untrustedOnly, coinDeduct, challengePla
   }
 
   for (const day of days) {
-    const update = { originTrusted: false };
+    const update = { originTrusted: false, ...(day.rowUpdate || {}) };
     if (day.restoredSteps != null) {
       // `steps` is walked + bonus; the correction only touches the walked part.
       const bonus = day.bonusSteps || 0;
@@ -583,14 +599,15 @@ async function applyPlan({ userId, days, untrustedOnly, coinDeduct, challengePla
       balanceAfter: gam.coinsBalance,
       source: 'STEPS_REVERTED',
       description:
+        description ||
         `Step coins reversed — ${days.length} day(s) corrected after an ` +
-        'unrecognised step source was found',
+          'unrecognised step source was found',
       metadata: {
         dates: days.map(d => d.date),
         requested: parseFloat(totalClawback.toFixed(4)),
         applied: parseFloat(applied.toFixed(4)),
         shortfall: parseFloat((totalClawback - applied).toFixed(4)),
-        script: 'reverseSpoofedSteps',
+        script,
       },
     });
   }
@@ -878,4 +895,9 @@ module.exports = {
   unattributedEntries,
   weeklyPeriodKeyFor,
   weekBoundsFor,
+  // The write half, shared with reverseHeldSteps.js.
+  planCoinReversal,
+  planChallengeReversal,
+  applyPlan,
+  STEP_COIN_SOURCES,
 };
