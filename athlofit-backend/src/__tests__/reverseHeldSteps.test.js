@@ -201,3 +201,106 @@ describe('replayDay', () => {
     expect(r.refused).toBeGreaterThanOrEqual(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Which ledger rows a correction removes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { rowsToVoidFor, dayWindowMs } = require('../scripts/reverseSpoofedSteps');
+
+describe('rowsToVoidFor', () => {
+  // The older account's 21 Sep ledger, abridged: one passive row per paid
+  // window, and the goal bonus claimed in the evening.
+  const passive = (at, steps, previousSteps, amount) => ({
+    _id: `${at}`,
+    type: 'EARNED',
+    source: 'PASSIVE_STEPS',
+    amount,
+    createdAt: new Date(`2026-09-21T${at}`),
+    metadata: { date: '2026-09-21', steps, previousSteps },
+  });
+  const goal = {
+    _id: 'goal',
+    type: 'EARNED',
+    source: 'DAILY_STEP_GOAL',
+    amount: 13,
+    createdAt: new Date('2026-09-21T17:59:23.445Z'),
+    metadata: { date: '2026-09-21' },
+  };
+  const paid = [
+    passive('04:00:16.330Z', 13_830, 11_570, 2.185),
+    passive('04:15:19.580Z', 14_848, 13_830, 0.95),
+    passive('05:01:37.360Z', 17_738, 16_396, 1.33),
+    passive('05:16:38.580Z', 19_998, 17_738, 2.09),
+    passive('05:31:41.490Z', 20_823, 19_998, 0.855),
+    passive('13:02:35.760Z', 27_019, 24_759, 2.09),
+    passive('13:17:38.600Z', 29_279, 27_019, 2.185),
+    passive('13:32:41.786Z', 30_000, 29_279, 0.76),
+    goal,
+  ];
+
+  it('removes everything for a day restored to zero', () => {
+    const rows = rowsToVoidFor({ restoredSteps: 0, goalSnapshot: 10_000 }, paid);
+    expect(rows).toHaveLength(paid.length);
+  });
+
+  it('removes only the rows paid for the refused syncs on a partial day', () => {
+    // What replayDay found on 21 Sep: refused at 05:16 (19,998), 13:02
+    // (27,019) and 13:17 (29,279). Restored 23,220, still over the goal.
+    const day = {
+      restoredSteps: 23_220,
+      bonusSteps: 0,
+      goalSnapshot: 10_000,
+      refusedSyncs: [
+        { at: '2026-09-21T05:16:38.556Z', raw: 19_998 },
+        { at: '2026-09-21T13:02:35.740Z', raw: 27_019 },
+        { at: '2026-09-21T13:17:38.584Z', raw: 29_279 },
+      ],
+    };
+    const rows = rowsToVoidFor(day, paid);
+    expect(rows.map(r => r.metadata.steps)).toEqual([19_998, 27_019, 29_279]);
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBeCloseTo(2.09 + 2.09 + 2.185, 3);
+    // The goal is still met at 23,220, so its bonus stays.
+    expect(rows.find(r => r.source === 'DAILY_STEP_GOAL')).toBeUndefined();
+  });
+
+  it('takes the goal bonus too once the corrected day no longer meets the goal', () => {
+    const day = {
+      restoredSteps: 8_000,
+      bonusSteps: 0,
+      goalSnapshot: 10_000,
+      refusedSyncs: [{ at: '2026-09-21T13:17:38.584Z', raw: 29_279 }],
+    };
+    const rows = rowsToVoidFor(day, paid);
+    expect(rows.map(r => r._id)).toEqual(['13:17:38.600Z', 'goal']);
+  });
+
+  it('matches by the minute when the paid-up-to figure differs', () => {
+    // A row whose `steps` is the stored total rather than the stream's raw
+    // — still the same sync, written seconds after it arrived.
+    const day = {
+      restoredSteps: 23_220,
+      bonusSteps: 0,
+      goalSnapshot: 10_000,
+      refusedSyncs: [{ at: '2026-09-21T13:02:35.740Z', raw: 27_100 }],
+    };
+    const rows = rowsToVoidFor(day, paid);
+    expect(rows.map(r => r.metadata.steps)).toEqual([27_019]);
+  });
+
+  it('cannot match a partial day with no refused syncs, and says so', () => {
+    expect(rowsToVoidFor({ restoredSteps: 23_220, goalSnapshot: 10_000 }, paid)).toBeNull();
+  });
+
+  it('has nothing to remove when nothing was paid', () => {
+    expect(rowsToVoidFor({ restoredSteps: 0 }, [])).toEqual([]);
+  });
+});
+
+describe('dayWindowMs', () => {
+  it('spans the local day in the user zone', () => {
+    const w = dayWindowMs('2026-09-21', 'Asia/Kolkata');
+    expect(new Date(w.start).toISOString()).toBe('2026-09-20T18:30:00.000Z');
+    expect(new Date(w.end).toISOString()).toBe('2026-09-21T18:30:00.000Z');
+  });
+});

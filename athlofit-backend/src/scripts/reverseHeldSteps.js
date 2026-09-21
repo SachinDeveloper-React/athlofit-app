@@ -48,6 +48,18 @@
 // Every corrected day is also marked originTrusted:false, so it drops out of
 // the baseline window and the ceiling it ratcheted up comes back down.
 //
+// ── What "reversed" means here ──────────────────────────────────────────────
+//
+// The entries are REMOVED, not offset. The passive rows paid for the refused
+// syncs, the goal bonus for a goal no longer met, the challenge reward for a
+// challenge no longer completed, and the notifications that announced them
+// are taken out — filed in CoinTransactionArchive first — and the balance
+// drops by exactly their sum. The user's history, the admin ledger and its
+// totals, the analytics and the leaderboard (ranked on balance) all stop
+// showing them at once. See the note at ledgerRowsToVoid in
+// reverseSpoofedSteps.js. --keep-ledger writes the older shape instead: the
+// rows stay and one DEDUCTED row carries the total.
+//
 // Dry-run by default. --apply is a separate step, after reading the report.
 //
 // Usage:
@@ -58,6 +70,7 @@
 //     node src/scripts/reverseHeldSteps.js --shared-only | --cadence-only
 //     node src/scripts/reverseHeldSteps.js --min-refused 1000
 //     node src/scripts/reverseHeldSteps.js --apply
+//     node src/scripts/reverseHeldSteps.js --apply --keep-ledger   # offset, do not remove
 
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -87,6 +100,7 @@ const {
   planCoinReversal,
   planChallengeReversal,
   applyPlan,
+  ledgerRowsToVoid,
 } = require('./reverseSpoofedSteps');
 const {
   DEFAULT_RATE_PER_100_STEPS,
@@ -280,7 +294,7 @@ function replayDay(row) {
 
 // ─── Report ─────────────────────────────────────────────────────────────────
 
-function printAccount({ email, userId, days, coin, challengePlans }) {
+function printAccount({ email, userId, days, coin, challengePlans, removal }) {
   console.log('');
   console.log('═'.repeat(78));
   console.log(`${email || '(no email)'}  ${userId}`);
@@ -299,6 +313,14 @@ function printAccount({ email, userId, days, coin, challengePlans }) {
     `  Coins: paid ${money(coin.paid)}, owed ${money(coin.owed)}, ` +
       `deduct ${money(coin.deduct)} across ${coin.txnCount} transaction(s)`,
   );
+  if (removal) {
+    // What void mode does, which is what the balance actually drops by.
+    console.log(
+      `  Ledger: remove ${removal.rows} entr${removal.rows === 1 ? 'y' : 'ies'} ` +
+        `(${money(removal.coins)} coins) from the coin history; ` +
+        `${removal.unmatchedDays ? `${removal.unmatchedDays} day(s) could not be matched and would use a DEDUCTED row` : 'every day matched'}`,
+    );
+  }
   if (challengePlans.length) {
     console.log('  Challenges to revert:');
     for (const p of challengePlans) {
@@ -324,6 +346,7 @@ async function main() {
   const sharedOnly = args.includes('--shared-only');
   const cadenceOnly = args.includes('--cadence-only');
   const minRefused = Number(argValue(args, '--min-refused')) || DEFAULT_MIN_REFUSED;
+  const keepLedger = args.includes('--keep-ledger');
   const userArg = argValue(args, '--user');
 
   // Yesterday is the default end: today's row is still being written, and the
@@ -402,11 +425,13 @@ async function main() {
         addDay(user, {
           date,
           kind: 'shared',
+          timezone: row.timezone || null,
           recordedTotal: recorded,
           restoredSteps: 0,
           keeper: shared.keeper,
           matches: shared.matches,
           holds: [],
+          refusedSyncs: [],
           rowUpdate: {
             sharedWith: shared.keeper,
             sharedHeld: true,
@@ -423,9 +448,12 @@ async function main() {
       addDay(user, {
         date,
         kind: 'cadence',
+        timezone: row.timezone || null,
         recordedTotal: recorded,
         restoredSteps: replay.replayed,
         holds: replay.holds,
+        // What ledgerRowsToVoid matches the day's passive rows against.
+        refusedSyncs: replay.holds.map(h => ({ at: h.at, raw: h.raw })),
         rowUpdate: {
           stuckForfeit: replay.refused,
           stuckSource: replay.holds[0]?.source || null,
@@ -485,19 +513,38 @@ async function main() {
       correctedByDate: new Map(days.map(d => [d.date, d.restoredSteps + d.bonusSteps])),
     });
 
-    printAccount({ email: user?.email, userId, days, coin, challengePlans });
+    // The entries void mode would take out, so the report says what the
+    // balance will actually drop by rather than what the formula estimates.
+    let removal = null;
+    if (!keepLedger) {
+      removal = { rows: 0, coins: 0, unmatchedDays: 0 };
+      for (const d of days) {
+        const rows = await ledgerRowsToVoid({ userId, day: d });
+        if (rows == null) {
+          removal.unmatchedDays += 1;
+          continue;
+        }
+        removal.rows += rows.length;
+        removal.coins += rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      }
+      removal.coins += challengePlans.reduce((s, p) => s + (p.clawback || 0), 0);
+    }
+
+    printAccount({ email: user?.email, userId, days, coin, challengePlans, removal });
     accounts += 1;
     totalDays += days.length;
-    totalDeduct += coin.deduct;
+    totalDeduct += removal && removal.unmatchedDays === 0 ? removal.coins : coin.deduct;
 
     if (apply) {
       const sharedDays = days.filter(d => d.kind === 'shared').length;
-      await applyPlan({
+      const balance = await applyPlan({
         userId,
         days,
         untrustedOnly: [],
         coinDeduct: coin.deduct,
         challengePlans,
+        voidLedger: !keepLedger,
+        timezone: days.find(d => d.timezone)?.timezone || 'Asia/Kolkata',
         description:
           `Step coins reversed — ${days.length} day(s) corrected: ` +
           [
@@ -510,7 +557,17 @@ async function main() {
             .join(', '),
         script: 'reverseHeldSteps',
       });
-      console.log(`\n  ✔ applied — ${days.length} day(s) corrected`);
+      console.log(
+        `\n  ✔ applied — ${days.length} day(s) corrected; ` +
+          `coins ${money(balance.before)} → ${money(balance.after)}` +
+          (balance.applied < balance.requested
+            ? ` (${money(balance.requested - balance.applied)} short — balance cannot go below zero)`
+            : '') +
+          (keepLedger
+            ? ''
+            : `; ${balance.removedRows} ledger row(s) and ${balance.removedNotifications} ` +
+              'notification(s) removed (archived)'),
+      );
     }
   }
 
@@ -536,7 +593,17 @@ async function main() {
         ? `; ${keepersByUser.size} older account(s) keep their shared days`
         : ''),
   );
-  if (!apply) console.log('Nothing was written. Re-run with --apply.');
+  if (!apply) {
+    console.log(
+      'Nothing was written. Re-run with --apply — with npm the flag goes after ' +
+        'the separator:  npm run reverse:held -- --apply',
+    );
+  } else if (accounts) {
+    console.log(
+      'Streaks are not recomputed here. Run  npm run repair:streaks -- --apply  ' +
+        'so days whose goal is no longer met stop counting.',
+    );
+  }
 
   await mongoose.disconnect();
 }

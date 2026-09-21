@@ -40,6 +40,15 @@ beforeAll(() => {
   jest.useFakeTimers({ now: FROZEN_NOW });
 });
 
+// Several tests below set their own clock and then call jest.useRealTimers()
+// in a `finally`, which discards the frozen clock for every test after them.
+// That made the rest of the file depend on the wall-clock time of day again —
+// it failed in the minutes after midnight IST, when "today so far" is almost
+// nothing. Re-freeze before every test so no test inherits another's clock.
+beforeEach(() => {
+  jest.useFakeTimers({ now: FROZEN_NOW });
+});
+
 afterAll(() => {
   jest.useRealTimers();
 });
@@ -955,12 +964,18 @@ describe('stuck source detection', () => {
       expect(r.clampedSteps).toBe(48_168);
     });
 
+    // A past date, so the whole day is available to the figure: under the
+    // frozen noon clock, 39,088 "today" is over the half-day ceiling, and
+    // these two used to pass only because an earlier test had un-frozen it.
+    const PAST = '2026-08-22';
+
     it('changes nothing when the cadence is healthy', () => {
       const healthy = { delta: 2_270, repeatedDeltaCount: 1, stuck: false };
       const r = validateSteps({
         ...base,
         incomingSteps: 39_088,
         existingSteps: 36_818,
+        syncDate: PAST,
         cadence: healthy,
       });
       expect(r.clampedSteps).toBe(39_088);
@@ -972,6 +987,7 @@ describe('stuck source detection', () => {
         ...base,
         incomingSteps: 39_088,
         existingSteps: 36_818,
+        syncDate: PAST,
       });
       expect(r.clampedSteps).toBe(39_088);
       expect(r.severity).toBe('none');
