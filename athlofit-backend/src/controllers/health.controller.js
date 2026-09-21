@@ -119,7 +119,7 @@ const {
   DEFAULT_MAX_DAILY_REWARDS,
 } = require('../constants/coinDefaults');
 const { resolveGoalMet } = require('../utils/goalMet');
-const { resolveStepGoalAward } = require('../utils/stepGoalAward');
+const { resolveStepGoalAward, configuredStepGoalBonus } = require('../utils/stepGoalAward');
 const {
   STEPS_DISABLED_CODE,
   isStepsTrackingEnabled,
@@ -494,7 +494,7 @@ const syncHealthData = async (req, res, next) => {
       const candidates = await loadSharedSourceCandidates({
         userId: req.user._id,
         date: today,
-        totals: mine.map(s => s.total),
+        samples: mine,
       });
       shared = resolveSharedSource({ userId: req.user._id, mine, candidates });
     }
@@ -1169,7 +1169,7 @@ const syncHealthData = async (req, res, next) => {
       // FIX #1: Use atomic findOneAndUpdate to prevent race condition.
       // Two concurrent syncs can't both pass this check — only one wins the
       // atomic condition { stepGoalCoinDate: { $ne: today } }.
-      const stepGoalCoins = cfg.rewards.stepGoalCoins ?? 50;
+      const stepGoalCoins = configuredStepGoalBonus(cfg).coins;
       const effectiveCap = getEffectiveDailyCap(
         req.user,
         cfg.coin.maxDailyRewards ?? DEFAULT_MAX_DAILY_REWARDS,
@@ -1438,7 +1438,7 @@ const syncHealthData = async (req, res, next) => {
           cfg.coin.dailyEarnLimit,
           cfg.coin.unverifiedDailyCap,
         );
-        const stepGoalCoins = cfg.rewards?.stepGoalCoins ?? 50;
+        const stepGoalCoins = configuredStepGoalBonus(cfg).coins;
 
         // Walked steps only. Bonus steps are admin-credited and do not earn
         // passive coins — same rule the same-day path applies.

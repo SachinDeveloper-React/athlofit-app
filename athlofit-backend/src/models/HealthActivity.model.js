@@ -222,9 +222,10 @@ const healthActivitySchema = new mongoose.Schema(
     // arrived — pushed on each sync that was one, oldest dropped past
     // MAX_SAMPLE_TOTALS. The same figures already sit inside `cadenceBySource`,
     // but under a per-stream key that cannot be indexed generically; this flat
-    // copy exists so {date, sampleTotals.total} can be. It is what lets one
-    // sync ask "who else posted this total today?" with an index hit rather
-    // than a scan of every row for the date. See utils/sharedStepSource.js.
+    // copy exists so {date, sampleTotals.at, sampleTotals.total} can be. It is
+    // what lets one sync ask "who else posted near this total at this moment
+    // today?" with an index hit rather than a scan of every row for the date.
+    // See utils/sharedStepSource.js.
     sampleTotals: {
       type: [
         new mongoose.Schema(
@@ -293,9 +294,11 @@ const healthActivitySchema = new mongoose.Schema(
 // One record per user per day
 healthActivitySchema.index({ user: 1, date: 1 }, { unique: true });
 
-// "Which other rows on this date hold this total?" — the shared-counter read
-// in sharedStepSource.js, once per sample. Multikey over the array; the date
-// prefix keeps it to one day's rows.
-healthActivitySchema.index({ date: 1, 'sampleTotals.total': 1 });
+// "Which other rows on this date have a sample at this moment, near this
+// total?" — the shared-counter read in sharedStepSource.js, once per sample.
+// Multikey over the array, both fields of the same element so an $elemMatch
+// can bound both; the date prefix keeps it to one day's rows. (An earlier
+// build indexed {date, sampleTotals.total} alone; that index can be dropped.)
+healthActivitySchema.index({ date: 1, 'sampleTotals.at': 1, 'sampleTotals.total': 1 });
 
 module.exports = mongoose.model('HealthActivity', healthActivitySchema);

@@ -79,6 +79,7 @@ const { getCachedAppConfig } = require('../utils/appConfigCache');
 const { passiveCoinsForSteps } = require('../utils/passiveCoins');
 const { getEffectiveDailyCap } = require('../utils/dailyCoinCap');
 const { shiftDate } = require('../utils/stepBaselineStore');
+const { rechainBalances } = require('../utils/coinLedger');
 const {
   ORIGIN_TRUST_MIN_DAYS,
   ORIGIN_CHURN_MAX,
@@ -595,16 +596,37 @@ function rowsToVoidFor(day, paid) {
   const goalGone =
     day.goalSnapshot > 0 && day.restoredSteps + (day.bonusSteps || 0) < day.goalSnapshot;
 
-  return paid.filter(t => {
-    if (String(t.source).startsWith('DAILY_STEP_GOAL')) return goalGone;
-    const paidUpTo = Math.round(Number(t.metadata?.steps));
-    const writtenAt = new Date(t.createdAt).getTime();
-    return refused.some(
-      r =>
-        (Number.isFinite(paidUpTo) && paidUpTo === r.raw) ||
-        (r.at != null && Number.isFinite(writtenAt) && Math.abs(writtenAt - r.at) <= window),
+  const goalRows = paid.filter(t => String(t.source).startsWith('DAILY_STEP_GOAL'));
+  const passiveRows = paid.filter(t => !String(t.source).startsWith('DAILY_STEP_GOAL'));
+
+  // One passive row per refused sync, and no more. A row is the one paid for
+  // a sync when it was paid up to exactly that sync's total; only when no row
+  // says so is the nearest row written within two minutes taken instead. It
+  // used to be "either", and that removed rows the replay had ACCEPTED: the
+  // two streams on one phone post a minute or two apart, so the worker's row
+  // sat inside the window of the service's refused sync and went with it —
+  // two to three coins a day more than the corrected figure warranted.
+  const taken = new Set();
+  const chosen = [];
+  for (const r of refused) {
+    let match = passiveRows.find(
+      t => !taken.has(String(t._id)) && Math.round(Number(t.metadata?.steps)) === r.raw,
     );
-  });
+    if (!match && r.at != null) {
+      let best = null;
+      for (const t of passiveRows) {
+        if (taken.has(String(t._id))) continue;
+        const gap = Math.abs(new Date(t.createdAt).getTime() - r.at);
+        if (gap <= window && (best == null || gap < best.gap)) best = { t, gap };
+      }
+      match = best?.t;
+    }
+    if (!match) continue;
+    taken.add(String(match._id));
+    chosen.push(match);
+  }
+
+  return [...chosen, ...(goalGone ? goalRows : [])];
 }
 
 /**
@@ -805,6 +827,8 @@ async function applyPlan({
     balance.after = gam.coinsBalance;
     balance.applied = parseFloat(applied.toFixed(4));
   }
+  // The rows that remain must still read as a chain ending at the balance.
+  if (voided) await rechainBalances(userId);
 
   // Filed in the admin action log, attributed to the first admin account, so
   // the account's audit trail says why its balance moved even though no
@@ -1164,5 +1188,6 @@ module.exports = {
   applyPlan,
   ledgerRowsToVoid,
   rowsToVoidFor,
+  voidLedgerRows,
   STEP_COIN_SOURCES,
 };

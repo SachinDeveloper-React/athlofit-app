@@ -34,12 +34,35 @@
 //
 // Every sample a stream produces — a gain of at least STUCK_DELTA_MIN_STEPS,
 // the same unit the cadence rules use — is written to the day's row as
-// (total, at) and indexed by date and total. On each new sample, the other
-// rows on that date holding any of this account's recent totals are read, and
-// the two histories compared. A MATCH is the same total, of at least
-// SHARED_MIN_STEPS, arriving within SHARED_MATCH_WINDOW_MIN of when this
-// account posted it. SHARED_MIN_MATCHES of them, and the two accounts share
-// a counter.
+// (total, at) and indexed by date, time and total. On each new sample, the
+// other rows on that date with a sample at the same moment and a nearby total
+// are read, and the two histories compared. A MATCH is a sample of at least
+// SHARED_MIN_STEPS arriving within SHARED_MATCH_WINDOW_MIN of one of this
+// account's, whose total differs from it by the SAME amount as every other
+// match — the two counters may sit an offset apart, but the offset does not
+// move. SHARED_MIN_MATCHES of them at offset zero, or SHARED_OFFSET_MIN_MATCHES
+// at any other offset, and the two accounts share a counter.
+//
+// ── Why an offset is allowed ────────────────────────────────────────────────
+//
+// The first version required the totals to be EQUAL, and the same pair of
+// accounts walked straight past it on 12 Sep: their syncs landed in the same
+// second all day and their totals were 6 steps apart all day — 1,547 against
+// 1,541, 26,187 against 26,181, 28,407 against 28,401. Each copy re-baselines
+// at local midnight from the counter as it stands at that moment; the two
+// midnights are seconds apart, and six steps happened in between. From then
+// on both read the same hardware and both grow by the same amount, so their
+// difference is a constant. That constant is the fingerprint, and zero is
+// only its most common value.
+//
+// It is a weaker fingerprint than equality, and the thresholds say so. Two
+// honest accounts whose totals are within SHARED_OFFSET_MAX of each other at
+// the same minute are not rare; for their difference to be identical at a
+// second such minute, both must have gained exactly the same steps in
+// between, which is rare; at a third, rarer still. So an offset needs three
+// matches where equality needs two, and the offset is bounded — a baseline
+// difference is a few steps, or at most the walk between one copy's midnight
+// and the other's — so that the search stays a handful of index hits.
 //
 // The time window is what keeps this from ever firing by chance. Two accounts
 // posting the same total on the same day is not rare — a few thousand active
@@ -92,6 +115,10 @@ const SHARED_MIN_STEPS = 1_000;
 const SHARED_MATCH_WINDOW_MIN = 3;
 /** Shared totals needed, each inside the window, before the day is judged shared. */
 const SHARED_MIN_MATCHES = 2;
+/** The same, when the two counters sit a constant offset apart rather than equal. */
+const SHARED_OFFSET_MIN_MATCHES = 3;
+/** Largest constant difference two copies of one counter may sit apart. */
+const SHARED_OFFSET_MAX = 500;
 /** Of this account's own samples, how many recent ones are compared. */
 const SHARED_RECENT_SAMPLES = 8;
 /** Sample totals kept per row per day, oldest dropped first. */
@@ -123,31 +150,66 @@ function isNewerAccount(a, b) {
 }
 
 /**
- * How many of `mine` appear in `theirs` at the same total and the same time.
- * Each of theirs is spent on at most one of mine, so a re-sent figure cannot
- * count twice.
+ * The samples of `mine` that `theirs` reproduces: at the same time, and at a
+ * total that differs by one constant. Returns the largest such set and the
+ * constant.
+ *
+ * Pairs every sample of mine with every sample of theirs inside the time
+ * window and inside SHARED_OFFSET_MAX, groups the pairs by their difference,
+ * and counts the biggest group — spending each sample on at most one pair, so
+ * a re-sent figure cannot count twice. A tie goes to offset zero, which is
+ * the strongest reading of the same evidence.
  *
  * @param {Array<{total: number, at: number|Date}>} mine
  * @param {Array<{total: number, at: number|Date}>} theirs
- * @returns {number}
+ * @returns {{ matches: number, offset: number }}
  */
-function countSharedSamples(mine, theirs) {
+function sharedSampleMatches(mine, theirs) {
   const window = SHARED_MATCH_WINDOW_MIN * 60_000;
-  const pool = (theirs || [])
-    .map((s) => ({ total: Math.round(Number(s?.total)), at: ms(s?.at) }))
-    .filter((s) => Number.isFinite(s.total) && s.total >= SHARED_MIN_STEPS && s.at != null);
+  const clean = (list) =>
+    (list || [])
+      .map((s, i) => ({ i, total: Math.round(Number(s?.total)), at: ms(s?.at) }))
+      .filter((s) => Number.isFinite(s.total) && s.total >= SHARED_MIN_STEPS && s.at != null);
+  const a = clean(mine);
+  const b = clean(theirs);
 
-  let matches = 0;
-  for (const raw of mine || []) {
-    const total = Math.round(Number(raw?.total));
-    const at = ms(raw?.at);
-    if (!Number.isFinite(total) || total < SHARED_MIN_STEPS || at == null) continue;
-    const i = pool.findIndex((s) => s.total === total && Math.abs(s.at - at) <= window);
-    if (i === -1) continue;
-    pool.splice(i, 1);
-    matches += 1;
+  const byOffset = new Map();
+  for (const m of a) {
+    for (const t of b) {
+      if (Math.abs(m.at - t.at) > window) continue;
+      const diff = m.total - t.total;
+      if (Math.abs(diff) > SHARED_OFFSET_MAX) continue;
+      if (!byOffset.has(diff)) byOffset.set(diff, []);
+      byOffset.get(diff).push({ m: m.i, t: t.i });
+    }
   }
-  return matches;
+
+  let best = { matches: 0, offset: 0 };
+  for (const [offset, pairs] of byOffset) {
+    const usedM = new Set();
+    const usedT = new Set();
+    let count = 0;
+    for (const p of pairs) {
+      if (usedM.has(p.m) || usedT.has(p.t)) continue;
+      usedM.add(p.m);
+      usedT.add(p.t);
+      count += 1;
+    }
+    if (count > best.matches || (count === best.matches && offset === 0 && best.offset !== 0)) {
+      best = { matches: count, offset };
+    }
+  }
+  return best;
+}
+
+/** How many of `mine` `theirs` reproduces — sharedSampleMatches, count only. */
+function countSharedSamples(mine, theirs) {
+  return sharedSampleMatches(mine, theirs).matches;
+}
+
+/** Matches needed at this offset before two accounts are one counter. */
+function matchesNeeded(offset) {
+  return offset === 0 ? SHARED_MIN_MATCHES : SHARED_OFFSET_MIN_MATCHES;
 }
 
 /**
@@ -169,12 +231,14 @@ function resolveSharedSource({ userId, mine, candidates }) {
   let best = null;
   for (const row of candidates || []) {
     if (!row?.user || String(row.user) === String(userId)) continue;
-    const matches = countSharedSamples(mine, row.sampleTotals);
-    if (matches >= SHARED_MIN_MATCHES && (best == null || matches > best.matches)) {
-      best = { otherUser: row.user, matches };
+    const { matches, offset } = sharedSampleMatches(mine, row.sampleTotals);
+    if (matches >= matchesNeeded(offset) && (best == null || matches > best.matches)) {
+      best = { otherUser: row.user, matches, offset };
     }
   }
-  if (!best) return { shared: false, held: false, otherUser: null, matches: 0, reason: null };
+  if (!best) {
+    return { shared: false, held: false, otherUser: null, matches: 0, offset: 0, reason: null };
+  }
 
   const held = isNewerAccount(userId, best.otherUser);
   return {
@@ -182,15 +246,22 @@ function resolveSharedSource({ userId, mine, candidates }) {
     held,
     otherUser: best.otherUser,
     matches: best.matches,
-    reason: describeSharedSource({ otherUser: best.otherUser, matches: best.matches, held }),
+    offset: best.offset,
+    reason: describeSharedSource({
+      otherUser: best.otherUser,
+      matches: best.matches,
+      offset: best.offset,
+      held,
+    }),
   };
 }
 
 /** The sentence the validator, the sync log and the cheat flag all carry. */
-function describeSharedSource({ otherUser, matches, held }) {
+function describeSharedSource({ otherUser, matches, offset = 0, held }) {
   return (
-    `Step counter shared with account ${otherUser}: the same totals arrived ` +
-    `from both within ${SHARED_MATCH_WINDOW_MIN} minutes of each other ` +
+    `Step counter shared with account ${otherUser}: the same totals` +
+    (offset ? ` (${Math.abs(offset)} steps apart)` : '') +
+    ` arrived from both within ${SHARED_MATCH_WINDOW_MIN} minutes of each other ` +
     `${matches} times today` +
     (held
       ? ' — steps credited to the older account, this one held for the day'
@@ -199,23 +270,36 @@ function describeSharedSource({ otherUser, matches, held }) {
 }
 
 /**
- * Other accounts' rows on this date that hold any of these totals. Indexed on
- * {date, sampleTotals.total}, so the read is a handful of index hits however
- * many users synced that day.
+ * Other accounts' rows on this date with a sample at the same moment as one of
+ * these, at a total within SHARED_OFFSET_MAX of it. Indexed on
+ * {date, sampleTotals.at, sampleTotals.total}: the time window is a few
+ * minutes of one day and the total a narrow band, so the read is a handful of
+ * index hits however many users synced that day.
  *
  * Never throws: a failed read means "no evidence", and the sync goes on.
+ *
+ * @param {object} params
+ * @param {any} params.userId
+ * @param {string} params.date
+ * @param {Array<{total: number, at: number|Date}>} params.samples - This
+ *   account's recent samples, including the one arriving now.
  */
-async function loadSharedSourceCandidates({ userId, date, totals }) {
-  const wanted = [...new Set((totals || []).map((t) => Math.round(Number(t))))].filter(
-    (t) => Number.isFinite(t) && t >= SHARED_MIN_STEPS,
-  );
-  if (!wanted.length) return [];
+async function loadSharedSourceCandidates({ userId, date, samples }) {
+  const window = SHARED_MATCH_WINDOW_MIN * 60_000;
+  const or = (samples || [])
+    .map((s) => ({ total: Math.round(Number(s?.total)), at: ms(s?.at) }))
+    .filter((s) => Number.isFinite(s.total) && s.total >= SHARED_MIN_STEPS && s.at != null)
+    .map((s) => ({
+      sampleTotals: {
+        $elemMatch: {
+          at: { $gte: new Date(s.at - window), $lte: new Date(s.at + window) },
+          total: { $gte: s.total - SHARED_OFFSET_MAX, $lte: s.total + SHARED_OFFSET_MAX },
+        },
+      },
+    }));
+  if (!or.length) return [];
   try {
-    return await HealthActivity.find({
-      date,
-      user: { $ne: userId },
-      'sampleTotals.total': { $in: wanted },
-    })
+    return await HealthActivity.find({ date, user: { $ne: userId }, $or: or })
       .select('user sampleTotals')
       .limit(MAX_CANDIDATE_ROWS)
       .lean();
@@ -227,7 +311,9 @@ async function loadSharedSourceCandidates({ userId, date, totals }) {
 
 module.exports = {
   resolveSharedSource,
+  sharedSampleMatches,
   countSharedSamples,
+  matchesNeeded,
   describeSharedSource,
   isNewerAccount,
   accountCreatedMs,
@@ -235,6 +321,8 @@ module.exports = {
   SHARED_MIN_STEPS,
   SHARED_MATCH_WINDOW_MIN,
   SHARED_MIN_MATCHES,
+  SHARED_OFFSET_MIN_MATCHES,
+  SHARED_OFFSET_MAX,
   SHARED_RECENT_SAMPLES,
   MAX_SAMPLE_TOTALS,
 };

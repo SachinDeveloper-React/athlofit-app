@@ -90,11 +90,12 @@ const {
   STUCK_DELTA_MIN_STEPS,
 } = require('../utils/stepValidation');
 const {
-  countSharedSamples,
+  sharedSampleMatches,
+  matchesNeeded,
   accountCreatedMs,
   SHARED_MIN_STEPS,
   SHARED_MATCH_WINDOW_MIN,
-  SHARED_MIN_MATCHES,
+  SHARED_OFFSET_MAX,
 } = require('../utils/sharedStepSource');
 const {
   planCoinReversal,
@@ -107,8 +108,14 @@ const {
   DEFAULT_DAILY_EARN_LIMIT,
 } = require('../constants/coinDefaults');
 
-/** Shared samples a pair needs here — one more than the live rule. */
-const REVERSAL_SHARED_MIN_MATCHES = SHARED_MIN_MATCHES + 1;
+/**
+ * Shared samples a pair needs here — one more than the live rule asks at the
+ * same offset (matchesNeeded), for the reason in the header: this takes coins
+ * out of a balance, so the bar is one sample higher.
+ */
+const reversalMatchesNeeded = offset => matchesNeeded(offset) + 1;
+/** The exact-offset figure, for callers and tests that want the number. */
+const REVERSAL_SHARED_MIN_MATCHES = reversalMatchesNeeded(0);
 /** Steps the replay must refuse on a day before that day is corrected. */
 const DEFAULT_MIN_REFUSED = 1_500;
 const DEFAULT_DAYS = 28;
@@ -133,15 +140,16 @@ function sampleTotalsOf(row) {
  *
  * Pure. Takes the date's ledger rows and returns one group per counter: the
  * oldest account as `keeper`, every other as `held` with how many of its
- * samples matched. Indexed by total first so the pairing is linear in samples
- * rather than quadratic in users; a pair is confirmed with countSharedSamples,
- * the same test the live rule uses, so the two agree about what a match is.
+ * samples matched. Bucketed by time first so the pairing is linear in samples
+ * rather than quadratic in users; a pair is confirmed with
+ * sharedSampleMatches, the same test the live rule uses, so the two agree
+ * about what a match is — including a constant offset between the totals.
  *
  * @param {Array<{user: any, entries: Array<{at: any, to: number, delta: number}>}>} rows
- * @param {{ minMatches?: number }} [opts]
- * @returns {Array<{ keeper: string, held: Array<{ user: string, matches: number, firstMatchAt: number }> }>}
+ * @param {{ minMatches?: (offset: number) => number }} [opts]
+ * @returns {Array<{ keeper: string, held: Array<{ user: string, matches: number, offset: number, firstMatchAt: number }> }>}
  */
-function findSharedGroups(rows, { minMatches = REVERSAL_SHARED_MIN_MATCHES } = {}) {
+function findSharedGroups(rows, { minMatches = reversalMatchesNeeded } = {}) {
   const samplesByUser = new Map();
   for (const row of rows || []) {
     const user = String(row.user);
@@ -149,24 +157,29 @@ function findSharedGroups(rows, { minMatches = REVERSAL_SHARED_MIN_MATCHES } = {
     if (samples.length) samplesByUser.set(user, samples);
   }
 
-  // Candidate pairs: any two accounts that posted the same total within the
-  // window. Confirmed below against their whole sample lists.
+  // Candidate pairs: any two accounts with samples inside the window of each
+  // other and inside the offset bound. Confirmed below against their whole
+  // sample lists.
   const window = SHARED_MATCH_WINDOW_MIN * 60_000;
-  const byTotal = new Map();
+  const byBucket = new Map();
   for (const [user, samples] of samplesByUser) {
     for (const s of samples) {
-      if (!byTotal.has(s.total)) byTotal.set(s.total, []);
-      byTotal.get(s.total).push({ user, at: s.at });
+      const bucket = Math.floor(s.at / window);
+      if (!byBucket.has(bucket)) byBucket.set(bucket, []);
+      byBucket.get(bucket).push({ user, at: s.at, total: s.total });
     }
   }
   const candidatePairs = new Set();
-  for (const posts of byTotal.values()) {
-    if (posts.length < 2) continue;
-    for (let i = 0; i < posts.length; i++) {
-      for (let j = i + 1; j < posts.length; j++) {
-        if (posts[i].user === posts[j].user) continue;
-        if (Math.abs(posts[i].at - posts[j].at) > window) continue;
-        candidatePairs.add([posts[i].user, posts[j].user].sort().join('|'));
+  for (const [bucket, posts] of byBucket) {
+    // A window straddles a bucket edge, so each post is compared with its own
+    // bucket and the next one.
+    const nearby = [...posts, ...(byBucket.get(bucket + 1) || [])];
+    for (const a of posts) {
+      for (const b of nearby) {
+        if (a.user === b.user) continue;
+        if (Math.abs(a.at - b.at) > window) continue;
+        if (Math.abs(a.total - b.total) > SHARED_OFFSET_MAX) continue;
+        candidatePairs.add([a.user, b.user].sort().join('|'));
       }
     }
   }
@@ -187,9 +200,9 @@ function findSharedGroups(rows, { minMatches = REVERSAL_SHARED_MIN_MATCHES } = {
 
   for (const key of candidatePairs) {
     const [a, b] = key.split('|');
-    const matches = countSharedSamples(samplesByUser.get(a), samplesByUser.get(b));
-    if (matches < minMatches) continue;
-    pairMatches.set(key, matches);
+    const { matches, offset } = sharedSampleMatches(samplesByUser.get(a), samplesByUser.get(b));
+    if (matches < minMatches(offset)) continue;
+    pairMatches.set(key, { matches, offset });
     union(a, b);
   }
 
@@ -215,13 +228,14 @@ function findSharedGroups(rows, { minMatches = REVERSAL_SHARED_MIN_MATCHES } = {
       // Matched against the keeper where possible, else the most it matched
       // anyone in the group — a third copy may have been offline while the
       // first two were posting.
-      let matches = 0;
+      let best = { matches: 0, offset: 0 };
       for (const other of users) {
         if (other === user) continue;
-        matches = Math.max(matches, pairMatches.get([user, other].sort().join('|')) || 0);
+        const pair = pairMatches.get([user, other].sort().join('|'));
+        if (pair && pair.matches > best.matches) best = pair;
       }
       const firstMatchAt = Math.min(...samplesByUser.get(user).map(s => s.at));
-      return { user, matches, firstMatchAt };
+      return { user, matches: best.matches, offset: best.offset, firstMatchAt };
     });
     groups.push({ keeper, held });
   }
@@ -242,7 +256,10 @@ function findSharedGroups(rows, { minMatches = REVERSAL_SHARED_MIN_MATCHES } = {
  *
  * @param {{ date: string, timezone?: string, walkedSteps: number, entries: Array }} row
  * @returns {{ recorded: number, replayed: number, refused: number,
- *   holds: Array<{ at: string, source: string, raw: number, reason: string }> }}
+ *   holds: Array<{ at: string, source: string, raw: number, reason: string }>,
+ *   timeline: Array<{ at: string, source: string, raw: number, before: number, after: number, refused: boolean }> }}
+ *   `timeline` is every sync in order with the stored total before and after
+ *   it under the replay — what a ledger row for that sync should describe.
  */
 function replayDay(row) {
   const entries = [...(row.entries || [])]
@@ -253,6 +270,7 @@ function replayDay(row) {
   let streams = {};
   let held = { by: null, since: null, forfeit: 0 };
   const holds = [];
+  const timeline = [];
 
   for (const e of entries) {
     const at = ms(e.at);
@@ -278,10 +296,19 @@ function replayDay(row) {
       dailyGoal: 10_000,
       cadence: { ...cadence, stuck: hold.stuck, stuckReason: hold.stuckReason },
     });
+    const before = stored;
     if (r.clampedSteps > stored) stored = r.clampedSteps;
     if (hold.stuck) {
       holds.push({ at: new Date(at).toISOString(), source, raw, reason: hold.stuckReason });
     }
+    timeline.push({
+      at: new Date(at).toISOString(),
+      source,
+      raw,
+      before,
+      after: stored,
+      refused: Boolean(hold.stuck),
+    });
     const { delta, rate, stuck, stuckReason, sample, ...persisted } = cadence;
     streams = { ...streams, [source]: persisted };
     held = { by: hold.stuckSource, since: hold.stuckSince, forfeit: hold.stuckForfeit };
@@ -289,7 +316,7 @@ function replayDay(row) {
 
   const recorded = Math.max(0, Math.round(Number(row.walkedSteps) || 0));
   const replayed = Math.min(recorded, stored);
-  return { recorded, replayed, refused: recorded - replayed, holds };
+  return { recorded, replayed, refused: recorded - replayed, holds, timeline };
 }
 
 // ─── Report ─────────────────────────────────────────────────────────────────
@@ -303,7 +330,8 @@ function printAccount({ email, userId, days, coin, challengePlans, removal }) {
   for (const d of days) {
     const why =
       d.kind === 'shared'
-        ? `counter shared with ${d.keeper} (${d.matches} matching samples) — newer account`
+        ? `counter shared with ${d.keeper} (${d.matches} matching samples` +
+          `${d.offset ? `, ${Math.abs(d.offset)} steps apart` : ''}) — newer account`
         : `${d.holds.length} refused sync(s), first ${d.holds[0]?.at.slice(11, 19)} on ${d.holds[0]?.source}: ${d.holds[0]?.reason}`;
     console.log(`    ${pad(d.date, 12)}${pad(n(d.recordedTotal), 11)}${pad(n(d.restoredSteps), 11)}${why}`);
   }
@@ -430,6 +458,7 @@ async function main() {
           restoredSteps: 0,
           keeper: shared.keeper,
           matches: shared.matches,
+          offset: shared.offset || 0,
           holds: [],
           refusedSyncs: [],
           rowUpdate: {
@@ -620,6 +649,7 @@ module.exports = {
   findSharedGroups,
   replayDay,
   sampleTotalsOf,
+  reversalMatchesNeeded,
   REVERSAL_SHARED_MIN_MATCHES,
   DEFAULT_MIN_REFUSED,
 };

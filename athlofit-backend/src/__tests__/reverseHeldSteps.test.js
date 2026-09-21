@@ -304,3 +304,97 @@ describe('dayWindowMs', () => {
     expect(new Date(w.end).toISOString()).toBe('2026-09-21T18:30:00.000Z');
   });
 });
+
+describe('findSharedGroups — 12 Sep, six steps apart', () => {
+  const e12 = (at, from, to, src = 'native_service') => ({
+    at: new Date(`2026-09-12T${at}`), from, to, delta: to - from, clientSource: src,
+  });
+  const olderSep12 = {
+    user: OLDER, date: '2026-09-12', walkedSteps: 30_000,
+    entries: [
+      e12('03:06:39.000Z', 891, 1_547), e12('03:21:41.000Z', 3_419, 3_807),
+      e12('03:36:42.000Z', 5_219, 6_057), e12('03:51:44.000Z', 7_469, 8_307),
+      e12('04:06:46.000Z', 9_709, 10_557), e12('05:52:07.000Z', 25_429, 26_187),
+      e12('10:08:19.000Z', 27_669, 28_407),
+    ],
+  };
+  const newerSep12 = {
+    user: NEWER, date: '2026-09-12', walkedSteps: 30_000,
+    entries: [
+      e12('03:06:39.020Z', 113, 1_541), e12('03:21:41.020Z', 1_541, 3_801),
+      e12('03:36:42.020Z', 3_801, 6_051), e12('03:51:44.020Z', 6_051, 8_301),
+      e12('04:06:46.020Z', 8_301, 10_551), e12('05:52:07.020Z', 10_551, 26_181),
+      e12('10:08:19.020Z', 26_381, 28_401),
+    ],
+  };
+
+  it('groups the pair on the constant offset, newer account held', () => {
+    const groups = findSharedGroups([olderSep12, newerSep12]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].keeper).toBe(OLDER);
+    expect(groups[0].held[0].user).toBe(NEWER);
+    // Six steps apart; which way round depends on pair order, and the report
+    // prints the magnitude.
+    expect(Math.abs(groups[0].held[0].offset)).toBe(6);
+    expect(groups[0].held[0].matches).toBeGreaterThanOrEqual(4);
+  });
+
+  it('asks one more match at an offset than the live rule', () => {
+    const { reversalMatchesNeeded } = require('../scripts/reverseHeldSteps');
+    expect(reversalMatchesNeeded(0)).toBe(3);
+    expect(reversalMatchesNeeded(-6)).toBe(4);
+    const short = {
+      ...newerSep12,
+      entries: newerSep12.entries.slice(0, 3),
+    };
+    expect(findSharedGroups([olderSep12, short])).toHaveLength(0);
+  });
+});
+
+describe('rowsToVoidFor — one row per refused sync', () => {
+  const row = (at, steps, amount, src = 'PASSIVE_STEPS') => ({
+    _id: at, type: 'EARNED', source: src, amount,
+    createdAt: new Date(`2026-09-12T${at}`), metadata: { date: '2026-09-12', steps },
+  });
+  it('does not take an accepted row that merely sits inside the window of a refused one', () => {
+    // 12 Sep: the worker posted at 04:20:06 (accepted) and the service at
+    // 04:21:47 (refused). The worker's row lies 101 s from the refusal.
+    const paid = [
+      row('04:20:06.500Z', 12_409, 1.71), // worker, accepted
+      row('04:21:47.500Z', 12_807, 0.38), // service, refused
+      row('04:36:50.500Z', 15_057, 2.09), // service, refused
+    ];
+    const day = {
+      restoredSteps: 18_352, bonusSteps: 0, goalSnapshot: 10_000,
+      refusedSyncs: [
+        { at: '2026-09-12T04:21:47.000Z', raw: 12_807 },
+        { at: '2026-09-12T04:36:50.000Z', raw: 15_057 },
+      ],
+    };
+    expect(rowsToVoidFor(day, paid).map(r => r.metadata.steps)).toEqual([12_807, 15_057]);
+  });
+
+  it('falls back to the nearest row in time only when no row was paid up to that total', () => {
+    const paid = [
+      row('04:20:06.500Z', 12_409, 1.71),
+      row('04:21:50.000Z', 12_900, 0.38), // stored total differed from the raw
+    ];
+    const day = {
+      restoredSteps: 18_352, bonusSteps: 0, goalSnapshot: 10_000,
+      refusedSyncs: [{ at: '2026-09-12T04:21:47.000Z', raw: 12_807 }],
+    };
+    expect(rowsToVoidFor(day, paid).map(r => r._id)).toEqual(['04:21:50.000Z']);
+  });
+
+  it('spends each row once across several refused syncs', () => {
+    const paid = [row('04:21:50.000Z', 12_900, 0.38)];
+    const day = {
+      restoredSteps: 18_352, bonusSteps: 0, goalSnapshot: 10_000,
+      refusedSyncs: [
+        { at: '2026-09-12T04:21:47.000Z', raw: 12_807 },
+        { at: '2026-09-12T04:22:30.000Z', raw: 12_850 },
+      ],
+    };
+    expect(rowsToVoidFor(day, paid)).toHaveLength(1);
+  });
+});

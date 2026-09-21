@@ -332,3 +332,59 @@ describe('the sync log keeps every shared-source sync', () => {
     ).toBe('shared_source');
   });
 });
+
+describe('the 12 Sep pair — one counter, six steps apart', () => {
+  // The same two accounts, nine days earlier. Syncs in the same second all
+  // day; totals a constant 6 apart, because the two copies re-baselined at
+  // midnight seconds apart. Exact matching found nothing.
+  const { sharedSampleMatches, SHARED_OFFSET_MIN_MATCHES, SHARED_OFFSET_MAX } =
+    require('../utils/sharedStepSource');
+  const T = (hms) => new Date(`2026-09-12T${hms}`).getTime();
+  const older = [
+    { total: 1_547, at: T('03:06:39Z') },
+    { total: 3_807, at: T('03:21:41Z') },
+    { total: 6_057, at: T('03:36:42Z') },
+    { total: 8_307, at: T('03:51:44Z') },
+    { total: 10_557, at: T('04:06:46Z') },
+  ];
+  const newer = older.map((s) => ({ total: s.total - 6, at: s.at + 20 }));
+
+  it('sees the constant offset as one counter', () => {
+    expect(sharedSampleMatches(newer, older)).toEqual({ matches: 5, offset: -6 });
+  });
+
+  it('needs one match more at an offset than at equality', () => {
+    expect(SHARED_OFFSET_MIN_MATCHES).toBe(3);
+    const two = resolveSharedSource({
+      userId: NEWER,
+      mine: newer.slice(0, 2),
+      candidates: [{ user: OLDER, sampleTotals: older }],
+    });
+    expect(two.shared).toBe(false);
+    const three = resolveSharedSource({
+      userId: NEWER,
+      mine: newer.slice(0, 3),
+      candidates: [{ user: OLDER, sampleTotals: older }],
+    });
+    expect(three).toMatchObject({ shared: true, held: true, offset: -6, matches: 3 });
+    expect(three.reason).toMatch(/6 steps apart/);
+  });
+
+  it('does not chain a drifting difference into a match', () => {
+    // Two honest walkers near each other in total: the gap changes every window.
+    const drifting = older.map((s, i) => ({ total: s.total - 6 - i * 37, at: s.at + 20 }));
+    expect(sharedSampleMatches(drifting, older).matches).toBe(1);
+  });
+
+  it('ignores a difference larger than a baseline could produce', () => {
+    const far = older.map((s) => ({ total: s.total - SHARED_OFFSET_MAX - 1, at: s.at + 20 }));
+    expect(sharedSampleMatches(far, older).matches).toBe(0);
+  });
+
+  it('prefers offset zero on a tie', () => {
+    const mixed = [...older.slice(0, 2), ...newer.slice(2, 4)];
+    const r = sharedSampleMatches(mixed, older);
+    expect(r.matches).toBe(2);
+    expect(r.offset).toBe(0);
+  });
+});
