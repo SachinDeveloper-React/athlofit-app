@@ -61,6 +61,25 @@
 //     node src/scripts/reverseSpoofedSteps.js --apply --zero-unverifiable
 //     node src/scripts/reverseSpoofedSteps.js --user <id> --force   # reviewed account
 //                                                                  # under the churn threshold
+//     node src/scripts/reverseSpoofedSteps.js --user <id> --zero-days --from 2026-08-28 --to 2026-09-21 --apply
+//                                                                  # reviewed account: every day
+//                                                                  # in the range to zero
+//     node src/scripts/reverseSpoofedSteps.js ... --void-ledger    # remove the paid entries
+//                                                                  # (archived) instead of
+//                                                                  # writing one DEDUCTED row
+//
+// ── --zero-days ─────────────────────────────────────────────────────────────
+//
+// The selection rule above is deliberately narrow: it acts on days it can
+// prove, and skips days it cannot. An account that has been REVIEWED can be
+// past that. One account posted 19 distinct Health Connect origins in two
+// weeks, the whole of each day injected at midnight, its device sending
+// 30–41,000 a day against a 15,000 clamp — and its first two days, 44,000
+// and 43,000, predate the provenance ledger entirely, so no rule can see
+// them. --zero-days takes every day of ONE named account in a date range to
+// zero, through the same applyPlan as everything else: steps, watermark,
+// goal, originTrusted, the paid entries (void mode), the notifications, the
+// challenges. It requires --user, --from and --to, so it cannot be run wide.
 
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -948,11 +967,13 @@ function printAccount(report) {
             .join(', ')
         : null,
     ].filter(Boolean).join('; ');
-    const src = d.candidates.length
-      ? d.candidates.map(c => c.packageName).join(', ')
-      : d.cappedAt != null
-        ? `capped at ${n(d.cappedAt)} — ${why}`
-        : `no source with history — ${why}`;
+    const src = d.zeroed
+      ? 'reviewed account — every day in range to zero (--zero-days)'
+      : d.candidates.length
+        ? d.candidates.map(c => c.packageName).join(', ')
+        : d.cappedAt != null
+          ? `capped at ${n(d.cappedAt)} — ${why}`
+          : `no source with history — ${why}`;
     console.log(
       `    ${pad(d.date, 12)}${pad(n(d.recordedTotal), 11)}${pad(restored, 14)}${src}`,
     );
@@ -996,6 +1017,19 @@ async function main() {
   const force = args.includes('--force');
   const userArgIdx = args.indexOf('--user');
   const userArg = userArgIdx >= 0 ? args[userArgIdx + 1] : null;
+  // Removes the paid entries rather than offsetting them — see the note at
+  // ledgerRowsToVoid. Off by default here, on by default in reverseHeldSteps.
+  const voidLedger = args.includes('--void-ledger');
+  // Every day of one reviewed account in a range, to zero. See the header.
+  const zeroDays = args.includes('--zero-days');
+  const fromIdx = args.indexOf('--from');
+  const toIdx = args.indexOf('--to');
+  const fromArg = fromIdx >= 0 ? args[fromIdx + 1] : null;
+  const toArg = toIdx >= 0 ? args[toIdx + 1] : null;
+  if (zeroDays && (!userArg || !fromArg || !toArg)) {
+    console.error('--zero-days needs --user <email|id> --from YYYY-MM-DD --to YYYY-MM-DD');
+    process.exit(1);
+  }
 
   await mongoose.connect(process.env.MONGO_URI);
 
@@ -1046,7 +1080,36 @@ async function main() {
       )
       .lean();
     const analysis = analyseAccount(rows);
-    const found = suspectDays(rows, analysis, { force: force && Boolean(userArg) });
+    let found;
+    if (zeroDays) {
+      // Every day with steps in the range, from the stored rows rather than
+      // the ledger: the days that predate provenance are exactly the ones this
+      // exists for.
+      const stored = await HealthActivity.find({
+        user: userId,
+        date: { $gte: fromArg, $lte: toArg },
+        steps: { $gt: 0 },
+      })
+        .select('date steps')
+        .lean();
+      found = stored.map(a => ({
+        date: a.date,
+        recordedTotal: a.steps,
+        restoredSteps: 0,
+        candidates: [],
+        untrusted: [],
+        unattributed: [],
+        cappedAt: null,
+        zeroed: true,
+      }));
+    } else {
+      found = suspectDays(rows, analysis, { force: force && Boolean(userArg) });
+      if (fromArg || toArg) {
+        found = found.filter(
+          d => (!fromArg || d.date >= fromArg) && (!toArg || d.date <= toArg),
+        );
+      }
+    }
     if (!found.length) continue;
 
     // Pull the goal that was active on each day and the bonus steps, so the
@@ -1126,6 +1189,11 @@ async function main() {
         untrustedOnly,
         coinDeduct: coin.deduct,
         challengePlans,
+        voidLedger,
+        timezone: rows.find(r => r.timezone)?.timezone || 'Asia/Kolkata',
+        description: zeroDays
+          ? `Step coins reversed — ${actionable.length} day(s) zeroed on a reviewed account`
+          : null,
       });
       console.log(
         `\n  ✔ applied — ${actionable.length} day(s) corrected, ` +
@@ -1133,6 +1201,9 @@ async function main() {
           `coins ${money(balance.before)} → ${money(balance.after)}` +
           (balance.applied < balance.requested
             ? ` (${money(balance.requested - balance.applied)} short — balance cannot go below zero)`
+            : '') +
+          (voidLedger
+            ? `; ${balance.removedRows} ledger row(s) and ${balance.removedNotifications} notification(s) removed (archived)`
             : ''),
       );
     }
