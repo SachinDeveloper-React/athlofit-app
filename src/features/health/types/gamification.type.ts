@@ -4,6 +4,9 @@ import { ApiResponse } from "../../../types/auth.types";
 
 export interface GamificationState {
   coinsBalance: number;
+  // Step coins earned and waiting for their day to be verified. Not spendable
+  // and not part of the balance; zero while the server pays step coins live.
+  coinsPending: number;
   streakDays: number;
   bestStreakDays: number;
   lastActiveDate: string | null;
@@ -114,6 +117,10 @@ export interface ClaimableReward {
 
 export interface CoinData {
   balance: number;
+  // Step coins waiting for their day to be verified, and whether new step
+  // coins wait at all. Absent from servers that predate step-coin settlement.
+  coinsPending?: number;
+  stepCoinSettlement?: boolean;
   transactions: CoinTransaction[];
   claimable: ClaimableReward[];
   pagination: {

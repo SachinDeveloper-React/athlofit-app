@@ -48,6 +48,8 @@ export function useCoinTransactions() {
       transactions: data.pages.flatMap(p => p.data?.transactions ?? []),
       // Balance and claimable come from the first page (always fresh)
       balance: data.pages[0]?.data?.balance ?? 0,
+      coinsPending: data.pages[0]?.data?.coinsPending ?? 0,
+      stepCoinSettlement: data.pages[0]?.data?.stepCoinSettlement ?? false,
       claimable: data.pages[0]?.data?.claimable ?? [],
       totalTransactions: data.pages[0]?.data?.pagination?.total ?? 0,
     }),

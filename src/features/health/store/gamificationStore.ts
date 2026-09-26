@@ -18,6 +18,7 @@ export const useGamificationStore = create<GamificationStore>()(
   persist(
     subscribeWithSelector((set, get) => ({
       coinsBalance: 0,
+      coinsPending: 0,
       streakDays: 0,
       bestStreakDays: 0,
       lastActiveDate: null,
@@ -102,6 +103,7 @@ export const useGamificationStore = create<GamificationStore>()(
       // ── Reset all gamification data (called on logout) ──────────────────────
       reset: () => set({
         coinsBalance: 0,
+        coinsPending: 0,
         streakDays: 0,
         bestStreakDays: 0,
         lastActiveDate: null,

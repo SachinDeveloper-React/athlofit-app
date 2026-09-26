@@ -206,6 +206,8 @@ async function postDayAndRecord(
 
   if (result.goalCoinsAwarded) {
     await showStepGoalNotification(result.stepGoalCoins ?? 50);
+  } else if (result.goalCoinsPending > 0) {
+    await showStepGoalNotification(result.goalCoinsPending, { pending: true });
   }
   if (result.newlyCompleted?.length) {
     await showChallengeNotifications(result.newlyCompleted);

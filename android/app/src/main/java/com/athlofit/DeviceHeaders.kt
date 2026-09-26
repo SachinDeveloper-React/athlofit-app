@@ -1,7 +1,9 @@
 package com.athlofit
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import java.net.HttpURLConnection
 import java.util.UUID
 
@@ -23,13 +25,46 @@ object DeviceHeaders {
     private const val KEY_INSTALL_ID = "installId"
 
     /**
-     * Stable per-install identifier, generated on first use and kept in prefs.
-     *
-     * A random UUID rather than an ANDROID_ID or any hardware identifier: the
-     * only thing it needs to do is tell two installs apart in a debugging
-     * session, and it disappears with the app's data on uninstall.
+     * The one ANDROID_ID an old Android release handed to every device alike.
+     * Useless as an identifier, so it is treated as absent.
      */
+    private const val SHARED_LEGACY_ANDROID_ID = "9774d56d682e549c"
+
+    /**
+     * The install's identifier — the SAME value the JS layer sends.
+     *
+     * The JS side (utils/deviceInfo.ts) sends react-native-device-info's
+     * getUniqueIdSync(), which on Android is Settings.Secure.ANDROID_ID. This
+     * used to send a random UUID of its own instead, so one phone reported two
+     * install ids, alternating with every sync between the foreground service
+     * and the app. The server appends to the user's device history whenever the
+     * id changes, so every service sync pushed an entry and the 20-entry cap
+     * evicted the real update trail within hours — one account's history was
+     * nothing but the two ids taking turns.
+     *
+     * ANDROID_ID adds nothing the JS layer does not already send on every
+     * request. Since Android 8 it is scoped to the app's signing key and to the
+     * Android user, so it is not a hardware id — and a second copy of the app
+     * under another user profile ("Dual apps") gets its own, which is exactly
+     * the distinction the server needs to see.
+     *
+     * The old UUID is kept only as a fallback for a device that has no usable
+     * ANDROID_ID.
+     */
+    @SuppressLint("HardwareIds")
     private fun installId(context: Context): String {
+        try {
+            val androidId = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID,
+            )
+            if (!androidId.isNullOrEmpty() && androidId != SHARED_LEGACY_ANDROID_ID) {
+                return androidId
+            }
+        } catch (e: Exception) {
+            // Fall through to the stored id.
+        }
+
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val existing = prefs.getString(KEY_INSTALL_ID, null)
         if (!existing.isNullOrEmpty()) return existing

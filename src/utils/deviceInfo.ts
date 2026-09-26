@@ -61,6 +61,9 @@ export function getDeviceSnapshot(): DeviceSnapshot {
     // getBrand is the marketing name ("google"); manufacturer is the OEM.
     // Prefer manufacturer, fall back to brand — on iOS manufacturer is "unknown".
     brand: safe(getManufacturerSync) || safe(getBrand),
+    // ANDROID_ID on Android. DeviceHeaders.kt sends the same value for the
+    // native callers, so one phone reports one install id whichever path
+    // posted — change one and the other has to follow.
     installId: safe(getUniqueIdSync),
   };
 

@@ -71,12 +71,22 @@ const iosConfig = {
   },
 };
 
-export async function showStepGoalNotification(coins: number): Promise<void> {
+/**
+ * `pending` is set when the server holds step coins until the day has been
+ * verified (step-coin settlement): the goal is met now, the coins arrive
+ * tomorrow, and the copy must not claim otherwise.
+ */
+export async function showStepGoalNotification(
+  coins: number,
+  { pending = false }: { pending?: boolean } = {},
+): Promise<void> {
   try {
     await notifee.displayNotification({
       id:    'step_goal_reward',
       title: '🎉 Step Goal Reached!',
-      body:  `You hit your daily step goal and earned ${coins} coins!`,
+      body:  pending
+        ? `You hit your daily step goal! ${coins} coins will be added tomorrow once today's steps are verified.`
+        : `You hit your daily step goal and earned ${coins} coins!`,
       android: androidConfig(CHANNEL_STEP_GOAL),
       ios:     iosConfig,
     });
@@ -86,7 +96,8 @@ export async function showStepGoalNotification(coins: number): Promise<void> {
 }
 
 export async function showChallengeNotifications(
-  completed: { title: string; emoji: string; coinReward: number }[],
+  // `pending`: a step challenge whose coins wait for the day to be verified.
+  completed: { title: string; emoji: string; coinReward: number; pending?: boolean }[],
 ): Promise<void> {
   if (!completed.length) return;
   try {
@@ -95,17 +106,24 @@ export async function showChallengeNotifications(
       await notifee.displayNotification({
         id:    `challenge_${Date.now()}`,
         title: `${c.emoji} Challenge Complete!`,
-        body:  `"${c.title}" done — you earned ${c.coinReward} coins! 🪙`,
+        body:  c.pending
+          ? `"${c.title}" done — ${c.coinReward} coins will be added once today's steps are verified. 🪙`
+          : `"${c.title}" done — you earned ${c.coinReward} coins! 🪙`,
         android: androidConfig(CHANNEL_CHALLENGES),
         ios:     iosConfig,
       });
     } else {
       const totalCoins = completed.reduce((s, c) => s + c.coinReward, 0);
-      const lines = completed.map(c => `${c.emoji} ${c.title} (+${c.coinReward} coins)`).join('\n');
+      const anyPending = completed.some(c => c.pending);
+      const lines = completed
+        .map(c => `${c.emoji} ${c.title} (+${c.coinReward} coins${c.pending ? ', pending' : ''})`)
+        .join('\n');
       await notifee.displayNotification({
         id:    `challenges_${Date.now()}`,
         title: `🏆 ${completed.length} Challenges Complete!`,
-        body:  `You earned ${totalCoins} coins!\n${lines}`,
+        body:  anyPending
+          ? `${totalCoins} coins — step coins are added once today's steps are verified.\n${lines}`
+          : `You earned ${totalCoins} coins!\n${lines}`,
         android: androidConfig(CHANNEL_CHALLENGES),
         ios:     iosConfig,
       });
@@ -334,13 +352,22 @@ export function useSyncHealth() {
       queryClient.invalidateQueries({ queryKey: ['coin-transactions'] });
 
       // Refresh gamification if coins were awarded OR if cheat warning/block changed
-      const awardedCoins = d?.goalCoinsAwarded || d?.newlyCompleted?.length > 0;
+      const awardedCoins =
+        d?.goalCoinsAwarded || d?.goalCoinsPending > 0 || d?.newlyCompleted?.length > 0;
       if (awardedCoins || d?.coinBlocked || d?.cheatWarning) {
         queryClient.invalidateQueries({ queryKey: ['gamification'] });
       }
 
+      // Pending coins — step coins waiting for today to be verified — are read
+      // straight off every sync while the server holds them.
+      if (typeof d?.coinsPending === 'number') {
+        useGamificationStore.getState().syncWithService({ coinsPending: d.coinsPending });
+      }
+
       if (d?.goalCoinsAwarded) {
         showStepGoalNotification(d.stepGoalCoins ?? 50);
+      } else if (d?.goalCoinsPending > 0) {
+        showStepGoalNotification(d.goalCoinsPending, { pending: true });
       }
 
       if (d?.newlyCompleted?.length) {

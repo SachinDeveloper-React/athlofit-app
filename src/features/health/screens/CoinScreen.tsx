@@ -76,6 +76,7 @@ const CoinScreen = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('TRANSACTIONS');
 
   const coinsBalance    = useGamificationStore(s => s.coinsBalance);
+  const storedPending   = useGamificationStore(s => s.coinsPending);
   const setCoinsBalance = useGamificationStore(s => s.setCoinsBalance);
   const syncWithService = useGamificationStore(s => s.syncWithService);
 
@@ -111,6 +112,9 @@ const CoinScreen = () => {
   }, [data?.balance]);
 
   const balance          = coinsBalance;
+  // Step coins waiting for their day to be verified. The coin-data query is
+  // the fresher source when it has answered; the store covers the first paint.
+  const pending          = data?.coinsPending ?? storedPending ?? 0;
   const transactions     = data?.transactions ?? [];
   const claimable        = data?.claimable    ?? [];
   const totalTransactions = data?.totalTransactions ?? 0;
@@ -164,12 +168,32 @@ const CoinScreen = () => {
           <AppText variant="largeTitle" weight="bold">{balance.toFixed(2)}</AppText>
           <AppText variant="subhead" secondary style={{ marginLeft: spacing[2], marginTop: 8 }}>coins</AppText>
         </View>
+        {pending > 0 && (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: spacing[3],
+              paddingVertical: spacing[2],
+              paddingHorizontal: spacing[3],
+              borderRadius: radius.full,
+              backgroundColor: withOpacity('#F5C518', 0.12),
+            }}
+          >
+            <Icon name="Clock3" size={14} color="#B8860B" />
+            <AppText variant="footnote" weight="semiBold" style={{ marginLeft: spacing[2] }}>
+              +{pending.toFixed(2)} pending
+            </AppText>
+          </View>
+        )}
         <AppText variant="body" secondary style={{ textAlign: 'center', marginTop: spacing[2], paddingHorizontal: spacing[3] }}>
-          Track rewards, review coin activity, and unlock more benefits through challenges and goals.
+          {pending > 0
+            ? 'Step coins are added the morning after, once the day\'s steps are verified.'
+            : 'Track rewards, review coin activity, and unlock more benefits through challenges and goals.'}
         </AppText>
       </View>
     </View>
-  ), [balance, colors, spacing, radius]);
+  ), [balance, pending, colors, spacing, radius]);
 
   const renderStats = useCallback(() => (
     <View
